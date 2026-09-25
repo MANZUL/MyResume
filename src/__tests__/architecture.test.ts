@@ -97,9 +97,30 @@ describe('core features work without a network', () => {
     }
   });
 
-  it('storage is on-device SQLite', () => {
-    const kv = readFileSync(join(SRC, 'services', 'storage', 'kv.ts'), 'utf8');
-    expect(kv).toMatch(/from 'expo-sqlite\/kv-store'/);
+  it('storage is on-device SQLite behind repository ports', () => {
+    const device = readFileSync(join(SRC, 'services', 'storage', 'expo-database.ts'), 'utf8');
+    expect(device).toMatch(/from 'expo-sqlite'/);
     expect(pkg.dependencies).toHaveProperty('expo-sqlite');
+    // Only services/storage may talk to SQLite; features use the repositories.
+    for (const file of sourceFiles()) {
+      if (file.includes(`${sep}services${sep}storage${sep}`)) continue;
+      for (const spec of importsOf(readFileSync(file, 'utf8'))) {
+        expect(spec, relative(SRC, file)).not.toMatch(/^expo-sqlite|\/storage\/sqlite\//);
+      }
+    }
+  });
+});
+
+describe('export records cannot grant access', () => {
+  it('the export path only appends records and never reads them', () => {
+    for (const file of sourceFiles(join(SRC, 'services', 'export'))) {
+      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/listRecent|listForResume|export_records/);
+    }
+  });
+
+  it('no source file stores an export file path in the database', () => {
+    const schema = readFileSync(join(SRC, 'services', 'storage', 'sqlite', 'schema.ts'), 'utf8');
+    const exportTable = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS export_records'));
+    expect(exportTable.slice(0, exportTable.indexOf(')`'))).not.toMatch(/path|uri|file/i);
   });
 });

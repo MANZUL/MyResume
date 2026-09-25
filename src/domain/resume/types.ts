@@ -1,5 +1,5 @@
-// Mirrors the ResumeData contract of the web app (lib/api-spec/openapi.yaml)
-// so resumes stay portable between web and mobile.
+// Mirrors the ResumeData contract of the product specification
+// (MANZUL/Resume lib/api-spec/openapi.yaml).
 export interface Contact {
   phone: string;
   email: string;
@@ -61,6 +61,7 @@ export interface StoredResume {
   templateId: string;
   accent: string;
   data: ResumeData;
+  createdAt: number;
   updatedAt: number;
 }
 

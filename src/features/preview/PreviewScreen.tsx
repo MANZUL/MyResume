@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -7,6 +7,7 @@ import { Button, colors, Muted } from '../../ui/components';
 import { ExportLockedError, exportDocx, exportPdf } from '../../services/export/export';
 import { useEntitlement } from '../../services/entitlement/entitlement';
 import { renderResumeHtml } from '../../domain/render/render-html';
+import { useDatabase } from '../../services/storage/database-context';
 import { useResume } from '../../services/storage/resume-store';
 import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
 
@@ -14,7 +15,19 @@ const ACCENTS = ['#1B2B47', '#3B5168', '#2A6B6E', '#6B7F5C', '#A85432', '#6B2737
 
 export default function PreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { resume, update } = useResume(id);
+  const { resume, update, flush } = useResume(id);
+  const { exportRecords } = useDatabase();
+  const resumeId = resume?.id;
+
+  // Template and color changes are saved when the screen loses focus.
+  useFocusEffect(
+    useCallback(() => {
+      if (!resumeId) return undefined;
+      return () => {
+        void flush(resumeId);
+      };
+    }, [resumeId, flush]),
+  );
   const { access } = useEntitlement();
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
@@ -42,8 +55,8 @@ export default function PreviewScreen() {
     }
     setBusy(kind);
     try {
-      if (kind === 'pdf') await exportPdf(resume, access);
-      else await exportDocx(resume, access);
+      if (kind === 'pdf') await exportPdf(resume, access, exportRecords);
+      else await exportDocx(resume, access, exportRecords);
     } catch (error) {
       if (error instanceof ExportLockedError) router.push('/unlock');
       else Alert.alert('Export failed', error instanceof Error ? error.message : 'Please try again.');

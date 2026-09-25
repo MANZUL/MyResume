@@ -1,95 +1,88 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { TEMPLATES } from '../../domain/templates/templates';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 import type { ResumeData, StoredResume } from '../../domain/resume/types';
-import { kv } from './kv';
+import { newId } from '../../domain/shared/id';
+import { useDatabase } from './database-context';
+import { ResumeLibrary, type ResumePatch } from './resume-library';
 
-// All resumes live on the device. No account, no server, no network needed.
-
-const STORAGE_KEY = 'resumes.v1';
+// All resumes live on the device in SQLite. No account, no server, no network.
 
 interface StoreState {
   ready: boolean;
   resumes: StoredResume[];
+  activeId: string | null;
   create: (data: ResumeData, title?: string) => StoredResume;
-  update: (id: string, patch: Partial<Omit<StoredResume, 'id'>>) => void;
+  update: (id: string, patch: ResumePatch) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => StoredResume | null;
+  setActive: (id: string | null) => void;
+  flush: (id?: string) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreState | null>(null);
 
-const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
 export function ResumeStoreProvider({ children }: { children: ReactNode }) {
+  const { resumes: repository } = useDatabase();
+  const library = useMemo(
+    () =>
+      new ResumeLibrary(repository, {
+        newId,
+        onError: (operation, error) => {
+          if (__DEV__) console.warn(`[storage] ${operation} failed`, error);
+        },
+      }),
+    [repository],
+  );
   const [ready, setReady] = useState(false);
-  const [resumes, setResumes] = useState<StoredResume[]>([]);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    kv.getItem(STORAGE_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as unknown;
-        if (Array.isArray(parsed)) setResumes(parsed as StoredResume[]);
+    let active = true;
+    library
+      .load()
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('[storage] load failed', error);
       })
-      .catch(() => {
-        // Corrupt storage: start empty rather than crash.
-      })
-      .finally(() => setReady(true));
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      kv.setItem(STORAGE_KEY, JSON.stringify(resumes)).catch(() => undefined);
-    }, 300);
+      .finally(() => {
+        if (active) setReady(true);
+      });
     return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      active = false;
     };
-  }, [resumes, ready]);
+  }, [library]);
 
-  const create = useCallback((data: ResumeData, title?: string) => {
-    const template = TEMPLATES[0];
-    const resume: StoredResume = {
-      id: newId(),
-      title: title || data.name || 'Untitled resume',
-      templateId: template.id,
-      accent: template.defaultAccent,
-      data,
-      updatedAt: Date.now(),
+  // Leaving the foreground is the last reliable moment before the OS may end the process.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') void library.flush();
+    });
+    return () => {
+      subscription.remove();
+      void library.flush().finally(() => library.dispose());
     };
-    setResumes((current) => [resume, ...current]);
-    return resume;
-  }, []);
+  }, [library]);
 
-  const update = useCallback((id: string, patch: Partial<Omit<StoredResume, 'id'>>) => {
-    setResumes((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: Date.now() } : item)),
-    );
-  }, []);
+  const resumes = useSyncExternalStore(
+    (listener) => library.subscribe(listener),
+    () => library.getAll(),
+  );
+  const activeId = useSyncExternalStore(
+    (listener) => library.subscribe(listener),
+    () => library.getActiveId(),
+  );
 
-  const remove = useCallback((id: string) => {
-    setResumes((current) => current.filter((item) => item.id !== id));
-  }, []);
-
-  const duplicate = useCallback((id: string) => {
-    const source = resumes.find((item) => item.id === id);
-    if (!source) return null;
-    const copy: StoredResume = {
-      ...source,
-      id: newId(),
-      title: `${source.title} (copy)`,
-      data: JSON.parse(JSON.stringify(source.data)) as ResumeData,
-      updatedAt: Date.now(),
-    };
-    setResumes((current) => [copy, ...current]);
-    return copy;
-  }, [resumes]);
-
-  const value = useMemo(
-    () => ({ ready, resumes, create, update, remove, duplicate }),
-    [ready, resumes, create, update, remove, duplicate],
+  const value = useMemo<StoreState>(
+    () => ({
+      ready,
+      resumes,
+      activeId,
+      create: (data, title) => library.create(data, title),
+      update: (id, patch) => library.update(id, patch),
+      remove: (id) => void library.remove(id),
+      duplicate: (id) => library.duplicate(id),
+      setActive: (id) => void library.setActive(id),
+      flush: (id) => library.flush(id),
+    }),
+    [library, ready, resumes, activeId],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
@@ -103,5 +96,5 @@ export function useResumeStore(): StoreState {
 export function useResume(id: string | undefined) {
   const store = useResumeStore();
   const resume = store.resumes.find((item) => item.id === id) ?? null;
-  return { resume, update: store.update, ready: store.ready };
+  return { resume, update: store.update, ready: store.ready, flush: store.flush, setActive: store.setActive };
 }

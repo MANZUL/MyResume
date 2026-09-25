@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0 and 1 are done** (§19, §19.1). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0, 1 and 2 are done** (§19, §19.1, §19.2). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -298,7 +298,7 @@ ResumeData { name, contact{phone,email,location,linkedin,website}, summary{tagli
              education[]{degree,school,location,date,honors}, certifications[]{name,org,date},
              projects[]{name,description,bullets[]}, awards[] }
 
-Resume        { id(uuid), title, templateId, accent, data, schemaVersion: 1, createdAt, updatedAt, deletedAt? }
+Resume        { id, title, templateId, accent, data, createdAt, updatedAt }   // as built in step 2 (§19.2); hard delete
 LocalProfile  { id, name, email, phone, location, headline, linkedin, website, updatedAt }   // device-only, no login (§4.6)
 TargetJob     { id, resumeId, title, company, description, updatedAt }
 CoverLetter   { id, resumeId, targetJobId?, tone, body, updatedAt }
@@ -491,19 +491,20 @@ ExportService.share(handle)
 
 **Engine:** `expo-sqlite` with WAL mode and versioned migrations. AsyncStorage is not used: it holds a single blob and has size limits on Android.
 
-**Tables**
+**Tables (schema version 1, built in step 2).** Only what the MVP needs today. Later steps add tables through new migrations when their features land.
 
-| Table | Contents |
-|---|---|
-| `local_profile` | single row; device-only (§4.6) |
-| `resumes` | id, title, template_id, accent, data_json, schema_version, created/updated/deleted_at |
-| `target_jobs` | id, resume_id, title, company, description, updated_at |
-| `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at |
-| `export_records` | id, resume_id, format, paper, template_id, created_at |
-| `entitlement_cache` | status, product_id, expires_at, will_renew, last_verified_at, clock_high_water_mark |
-| `settings`, `meta` | — |
+| Table | Contents | Added in |
+|---|---|---|
+| `resumes` | id, title, template_id, accent, data_json, is_active, created_at, updated_at. A partial unique index allows at most one active resume | Step 2 ✅ |
+| `local_profile` | single row (`id = 1`): name, email, phone, location, headline, linkedin, website, updated_at | Step 2 ✅ |
+| `export_records` | id, resume_id (becomes NULL when the resume is deleted), template_id, export_type (`pdf`/`docx`), outcome (`succeeded`/`failed`/`denied`), access_reason, error_message, created_at. **No file path or file content** | Step 2 ✅ |
+| `target_jobs` | id, resume_id, title, company, description, updated_at | Step 10 (Job Match) |
+| `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at | Step 10 (Cover Letter) |
+| `entitlement_cache` | status, product_id, expires_at, will_renew, last_verified_at, clock_high_water_mark | Step 3 |
 
-**Writes.** Autosave is debounced by about 400 ms, with one transaction per resume, using functional updates.
+The schema version is kept in SQLite's `PRAGMA user_version`. There is no `meta` or `settings` table.
+
+**Writes.** Autosave is debounced (600 ms after the last edit, and at least every 3 s while typing). It writes one resume at a time, and pending edits are flushed when a screen loses focus or the app leaves the foreground (§19.2).
 
 **Files.** Exports live in an app-private export directory. It is purged on every launch, and temporary share copies are deleted after the share sheet closes.
 
@@ -669,7 +670,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 |---|---|---|
 | 0 ✅ | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets; record decisions. **Done**: prototype history imported, identity and assets set, decisions recorded | Repo builds ✅ |
 | 1 ✅ | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage. **Done** (see §19.1) | Green ✅ |
-| 2 | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile | CRUD and migration tests |
+| 2 ✅ | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile. **Done** (see §19.2) | CRUD and migration tests ✅ |
 | 3 | **Entitlement architecture:** `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume); Settings subscription section | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall |
 | 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
 | 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
@@ -766,6 +767,93 @@ Job Match, Cover Letter, Resume Score, preview and export behave exactly as befo
 | Bundle contents (source maps) | 0 modules each on iOS and Android from `react-dom`, `react-native-web`, `react-native-purchases`, `@revenuecat`, `@react-native-async-storage` |
 | Generated native projects (`expo prebuild`, then deleted) | No `BILLING`, RevenueCat or AsyncStorage anywhere. Expo modules linked: `expo-sqlite` present, no purchases module |
 | On a device | **Not run.** No simulator or device was available. Runtime of the SQLite key-value store and export is still unverified on devices |
+
+### 19.2 Step 2 record: SQLite data architecture
+
+Step 2 is the data foundation only. **No product behavior or UI changed**: the same screens, templates, parser, Job Match, Cover Letter, Resume Score, preview and export behavior.
+
+**Layering.** The domain never imports SQLite; a guard test enforces this.
+
+```
+domain/                       types + normalizers + repository interfaces (ports)
+  resume/normalize.ts         repairs malformed stored resumes (never invents content)
+  profile/local-profile.ts    LocalProfile (device-only)
+  export/export-record.ts     ExportRecord (metadata only)
+  ports/repositories.ts       ResumeRepository, LocalProfileRepository, ExportRecordRepository
+        ↓
+services/storage/sqlite/      SQL implementation, independent of Expo
+  sql.ts                      minimal SqlDatabase interface (exec/run/get/all/transaction)
+  schema.ts, migrate.ts       versioned migrations (PRAGMA user_version)
+  *-repository.ts             the three repositories
+  database.ts                 connection setup (WAL, foreign keys) + migrate + build repositories
+        ↓
+services/storage/expo-database.ts   expo-sqlite adapter (devices)
+__tests__/helpers/node-sqlite.ts    node:sqlite adapter (tests: same SQL, real SQLite engine, real files)
+```
+
+**Schema v1.** Three tables only: `resumes`, `local_profile`, `export_records` (§12).
+- **Active resume:** stored in an `is_active` column. A partial unique index makes a second active resume impossible at the database level. It is set when the editor opens a resume.
+- **Delete:** a hard delete, as in the prototype. Export history rows keep the template and type; their `resume_id` becomes NULL.
+- **Export records:** metadata only. They are written *after* the access decision and never read by the export path. This is guarded by tests. No file paths are stored.
+
+**Migrations.**
+- Each migration and its version bump run in **one exclusive transaction**, so a failure rolls back completely and the version stays unchanged.
+- Re-running is a no-op (idempotent).
+- A database from a newer app version is refused, untouched (`SchemaTooNewError`), and the app shows an "update the app" message. Nothing is deleted.
+- Migration 1 imports resumes from the Step 1 key-value store **once**:
+  - valid records are copied;
+  - malformed ones are repaired;
+  - unusable ones (no id, not an object) are skipped;
+  - the old key is removed after a successful import.
+
+**Recovery from expected storage errors.**
+- A row whose JSON can't be read is skipped and reported, **not deleted**.
+- Wrong-shaped content, unknown template ids and invalid colors are repaired on read.
+- A Local Profile with bad values is repaired.
+- If the database can't be opened, the app shows a message with "Try again" and **does not reset data**.
+
+**Autosave.** `ResumeLibrary` (plain TypeScript) plus `createAutosaver`:
+- create and duplicate are written immediately;
+- edits are debounced (600 ms after the last change, and at least every 3 s while typing);
+- writes for one resume never overlap, and the newest value wins;
+- failed writes stay pending and are retried;
+- a pending edit cannot bring a deleted resume back.
+
+Flush points:
+- **Editor or Preview screen losing focus:** that resume is flushed (`useFocusEffect`).
+- **App leaving the foreground:** everything is flushed (`AppState`).
+
+The window that can be lost if the OS kills the app mid-typing is bounded by the debounce (≤ 600 ms, ≤ 3 s while typing continuously). This is covered by a test.
+
+**Dependencies.** No new packages. The legacy key-value file is still read once through `expo-sqlite/kv-store` (renamed to `legacy-kv.ts`).
+
+**Tests added:** 48, for **79 in total**. All 31 earlier tests are unchanged and passing.
+
+| Area | What is tested |
+|---|---|
+| Schema version | explicit version 1; matches the last migration |
+| Fresh install | exactly 3 tables; version recorded; WAL mode and foreign keys on; no path/file columns |
+| Repeated migration, restart | no-op re-run; close + reopen keeps data and does not re-migrate |
+| Existing install (Step 1 data) | valid, malformed and unusable legacy records; missing, empty, non-JSON and throwing legacy store; imported only once |
+| Existing database upgrade | a test-only v2 migration applies on top of v1 with data kept; a failed v2 rolls back fully; a newer schema is refused; gaps in migration numbers are rejected |
+| Resumes | CRUD, many resumes, ordering, template and color persistence, duplicate ids, save to a missing id, restart persistence |
+| Active resume | none by default; exactly one; enforced by the database; survives restart; cleared on delete |
+| Invalid or missing data | unreadable JSON skipped, reported and kept; wrong shapes, unknown template and bad color repaired; missing records return null |
+| Local Profile | empty default; save, update and restart; single row enforced; bad values repaired |
+| Export records | append and list (recent and per resume), survive restart, kept after the resume is deleted, unknown type or outcome rejected by the database, recorded outcomes (denied without generating, succeeded, failed), a broken recorder never changes the export result |
+| Autosave | debounce coalescing, max-wait during continuous typing, flush, no overlapping writes, retry after failure, cancel |
+| Edits survive | screen navigation (flush on blur), app restart (new connection), simulated process kill after a flush, and the bounded loss of an unflushed debounce window |
+| Architecture | only `services/storage` touches SQLite; export code never reads export records; no path column |
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a real device or simulator |
+|---|---|
+| All SQL, migrations and repositories against a **real SQLite engine** (Node's `node:sqlite`, SQLite 3.51) on **real database files**, including reopen and restart | `expo-sqlite` itself on iOS and Android: opening `my-resume.db`, WAL, `withExclusiveTransactionAsync`. The Expo adapter is type-checked and bundled, but it has **never been executed** |
+| Autosave timing with a controlled clock; flush and ordering logic | Real `AppState` background flush and `useFocusEffect` flush on navigation |
+| Crash durability approximated by opening a second connection without closing the first | A real OS kill of the app process |
+| The Step 1 legacy import, from fixture JSON | Reading a real Step 1 key-value file on a device |
+| Typecheck, lint, iOS and Android bundles (the storage modules are present in both, per source maps) | The database error screen and retry on a device |
 
 ## 20. Major risks and failure modes
 

@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import {
@@ -22,7 +22,19 @@ import {
 
 export default function EditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { resume, update, ready } = useResume(id);
+  const { resume, update, ready, flush, setActive } = useResume(id);
+  const resumeId = resume?.id;
+
+  // The resume being edited is the current one; pending edits are saved when the screen loses focus.
+  useFocusEffect(
+    useCallback(() => {
+      if (!resumeId) return undefined;
+      setActive(resumeId);
+      return () => {
+        void flush(resumeId);
+      };
+    }, [resumeId, setActive, flush]),
+  );
 
   const setData = useCallback(
     (recipe: (draft: ResumeData) => ResumeData) => {
