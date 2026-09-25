@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–7 are done in code** (§19, §19.1–§19.7); device validation of steps 4–7 is still open. No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–8 are done in code** (§19, §19.1–§19.8); device validation of steps 4–8 is still open. No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -676,7 +676,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 5 ✅ | Renderer parity (rules, Letter/A4), **watermark** in the FREE preview, Boardroom/Foreman mark overlap. **Done, narrowed scope** (see §19.5). *Bundled spec fonts, thumbnails, gallery, paper picker and the custom-color UI were taken out of step 5 by the owner and move to step 12* | Layout tests in a real engine ✅: no text under a mark, preview/PDF geometry parity, watermark coverage and readability, no watermark in PREMIUM or PDF ◆ WebView and `expo-print` on devices: **still open** |
 | 6 ✅ | **Image export**: PDF → PNG via pdf.js, per page, through `ExportService`. **Done in code** (see §19.6); the view-shot fallback was not needed | End-to-end in Chromium ✅ (real renderer → PDF → bundled pdf.js → PNG) ◆ PNG on both platforms and memory on low-end Android: **still open** |
 | 7 ✅ | Editor parity; Resume Score (FREE) with jump-to-section. **Done in code** (see §19.7) | Pure-logic and guard tests ✅ ◆ Editor pass on devices: **NOT RUN** (no simulator or device in this environment) |
-| 8 | Writing Coach (PREMIUM) | Rule tests; no-fact-insertion |
+| 8 ✅ | Writing Coach (PREMIUM). **Done in code** (see §19.8) | Rule tests ✅; no-fact-insertion ✅ (property tests + grounding guard + mutation checks) ◆ Coach panel on devices: **NOT RUN** |
 | 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
 | 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
 | 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
@@ -1342,6 +1342,132 @@ The null-safety mutant has no observable behavior: `String.split` always returns
 | Section parsing, golden scores, key stability, copy parity, FREE boundary, bundles | Improve → editor → section opens → scroll lands on the header (iOS and Android) |
 | | Keyboard, focus and input state after delete or reorder with stable keys |
 | | `dismissTo` behavior when the editor is not in the stack (deep link into Tools) |
+
+### 19.8 Step 8 record: Writing Coach (PREMIUM)
+
+**Scope (plan §3, §1 #22; owner decisions).**
+- Deterministic rules with reasons and a few safe, user-triggered fixes, on the five fields that had "Improve with AI" in the web editor: tagline, experience summary, experience bullets, project description and project bullets.
+- No AI and no free-form rewriting.
+- No summary bullets, whole-resume review, spelling checker or new dependency.
+
+**Architecture: Editor → `PremiumTools` → `domain/coach`**
+
+| Part | Role |
+|---|---|
+| `domain/coach/types.ts` | Fields, categories, findings, and the fix kinds: `auto`, `preview`, and `choices` (no default). Limits: 6,000 characters of text; 300 characters of context |
+| `domain/coach/wordlists.ts` | Fixed English lists: weak openers with neutral choices, fillers, buzzwords, wordy phrases, passive participles (honours excluded), verb tenses, outcome and quantity words. `COACH_ALLOWED_WORDS` (the only words a fix may add) and `ELEVATED_CLAIM_WORDS` (never added) |
+| `domain/coach/rules.ts` | 15 rule checks covering the plan's 10 rules. Conservative: a rule fires only on listed patterns and returns nothing when unsure |
+| `domain/coach/grounding.ts` | The no-fact guard. A fix may not add a number, `% $ € £ + # @`, or any word that is neither in the source nor in `COACH_ALLOWED_WORDS`. It is stricter than the web's check (the web allowed "led" and "managed") |
+| `domain/coach/coach.ts` | `analyzeText`. `applyFix` does three things: it binds the finding to the exact text (`textKey`), requires the finding to be reproduced by a fresh analysis (so forged or altered findings are refused), and changes only the finding's span, then runs the grounding guard. Any failure means the text is not changed |
+| `services/premium/premium-tools.ts` | `writingCoach` checks `coach` before analysing, so FREE users get nothing about their text. `applyCoachFix` checks again before applying |
+| `features/coach/CoachEntry.tsx` | "Coach" (PREMIUM) or "Coach 🔒" (FREE, which opens the existing paywall and resumes afterwards) under each of the five fields. The inline panel shows findings grouped under the web's action names, with previews, neutral choices and Apply. If the text changes, it asks to refresh. It closes if premium lapses; applied text stays the user's |
+| `ui/components.tsx` | `StringListEditor` gets an optional per-row `renderAction` (as in the web editor) |
+
+The siblings context is read-only by construction: rules receive only each other bullet's first word and whether it ends with a period, and a fix returns only the chosen text.
+
+**Rules**
+
+| Plan rule | Rule id(s) | Fix | Conservative limits |
+|---|---|---|---|
+| Weak openers | `weak-opener` | choices: neutral only ("Helped with" → Supported / Contributed to / Assisted with) | bullets only; skipped when a gerund follows ("Responsible for managing…") |
+| Filler words | `filler`, `buzzword` | filler: preview (removal); buzzword: advice | not acronyms, hyphenated words, or when nothing follows |
+| Passive voice | `passive` | advice | listed participles only; honours ("was awarded", "was promoted") excluded |
+| First-person pronouns | `first-person` | preview only for "I" + a known past verb; otherwise advice | "I/O", "ME", "I'm" not flagged |
+| Bullets over 32 words | `long-bullet` | advice | bullets only |
+| No measurable result | `measurable` | **none**: only "Can you add a measurable result here?" | experience bullets that *start* with an outcome verb and contain no number, quantity word or fraction |
+| Mechanics | `spacing`, `capitalization`, `final-period`, `repeated-word`, `a-an` | auto | capitalization only for known English first words (not "npm", "iOS", "kubectl"); final period only when all other bullets agree; "that that" and names allowed; a/an skips acronyms, "one", "eu", "hour", "x-ray" and "Plan A" |
+| Tense consistency | `tense` | advice | only when every sibling's tense is certain and uniform; "Lead" (may be a noun) excluded |
+| Repeated opening verbs | `repeated-opener` | advice | third bullet with the same known verb |
+| Wordy phrases | `wordy` | preview | fixed table; replacements are function words |
+
+**Result: all 10 plan rules work (15 rule checks). None was disabled.** Three were narrowed after the corpus review:
+- **measurable:** flagged "…a loop that *reduced*…" (subordinate clause) and "by *a third*" (fraction). Now it fires only when the bullet starts with an outcome verb, and fractions count as quantities.
+- **repeated-word:** missed "Led **the the**", because the first word of each pair was consumed. Fixed with a lookahead.
+- **Grounding number parser:** read "v2.1." as a new number and refused a harmless final period. Numbers now end with a digit. The guard stays strict.
+
+**Corpus** (`__tests__/fixtures/coach-corpus.ts`)
+- **Strong:** 31 well-written texts, including the sample resume and borderline wording such as "Was awarded…", "I/O-bound", "npm package…", "an hour-long", "a unique", "an MBA", "by a third". **0 findings** (2 false positives before the fixes above).
+- **Weak:** 23 typical draft texts. **35 findings before; 11 after** applying every safe fix. The 11 left are advice only: measurable ×2, passive ×1, first-person ×2, buzzword ×3, long-bullet ×1, tense ×1, repeated-opener ×1.
+- **Before → after examples:**
+  - "Helped with the migration…" → "Supported the migration…"
+  - "I led the the migration…" → "Led the migration…"
+  - "Utilized SQL in order to build reports on a weekly basis" → "Used SQL to build reports weekly"
+  - "Due to the fact that … a large number of launches." → "Because … many launches."
+
+**No-fact invariant: proof**
+1. **Property test.** Every fix and every choice was applied to every corpus text plus 5 adversarial texts: no new number, symbol, word outside the allowlist or stronger claim, and the prefix and suffix outside the span are kept. This is checked by an independent re-statement of the invariant, not the production checker.
+2. **Word lists.** Every opener choice and wordy replacement is in `COACH_ALLOWED_WORDS`, and none is in `ELEVATED_CLAIM_WORDS`.
+3. **Forged fixes.** Forged fixes adding a number, percentage, currency, date, technology, employer, achievement or "Led"/"Managed" are refused by the guard. Through `applyFix` they are refused even earlier, because they cannot be reproduced.
+4. **Mutation checks.** Each grounding check is killed by at least one test (below).
+
+**Tests: 350** (298 before, all still passing; the old "Coach not available yet" test became a real Coach gating test, and +50 in `coach.test.ts`)
+- **Rules:** positive, negative and borderline cases for every rule.
+- **Corpus:** no false positives, every rule exercised, before/after counts.
+- **No-fact:** the property test and the word-list checks.
+- **Grounding:** attacks with forged fixes.
+- **Apply semantics:**
+  - stale text, stale context, altered finding;
+  - a stale finding is refused before analysis;
+  - choices need an explicit valid choice;
+  - advice cannot be applied;
+  - idempotent to a fixed point;
+  - deterministic.
+- **Limits:** 6,000 accepted and 6,001 refused; context 300 accepted and 301 refused; long opener, unknown field and non-string refused.
+- **Entitlement:**
+  - FREE is refused before analysis, even for text the engine would refuse.
+  - FREE cannot apply an earlier finding.
+  - One check to analyse and one to apply.
+  - Premium lost between the two: refused, and no text is returned.
+  - Paywall resume.
+- **Architecture:**
+  - `domain/coach` is pure.
+  - Only `PremiumTools` runs the engine.
+  - The Coach is on exactly the five fields.
+  - No teaser copy.
+  - No new dependency.
+
+**Mutation checks (19, each reverted; all killed)**
+
+| Mutation | Tests that fail |
+|---|---|
+| No check before analysis | 4 |
+| No check before apply | 3 |
+| Grounding: number check off | 3 |
+| Grounding: symbol check off | 1 |
+| Grounding: new-word check off | 3 |
+| Grounding: stronger-claim check off | 2 |
+| Grounding: "led" allowed | 1 |
+| Apply skips grounding | 9 |
+| Apply skips text binding | 1* |
+| Apply skips reproduction | 2 |
+| Default choice | 1 |
+| Measurable inserts "by 20%" | 4 |
+| No text limit | 1 |
+| No context limit | 1 |
+| "Led" offered for "Helped with" | 4 |
+| Long-bullet threshold 31 | 1 |
+| Passive flags honours | 2 |
+| Capitalise any first word | 2 |
+| Tense with unsure siblings | 1 |
+
+\*Text binding overlaps with reproduction. A test now pins its own effect: stale findings are refused before any analysis.
+
+**Validation:** clean install ✅, `tsc` ✅, `expo lint` ✅, 350/350 ✅. iOS and Android release bundles ✅: fake store, billing SDKs, AI SDKs, `playwright-core`, `@napi-rs`, testing libraries and spell-check dictionaries all absent. No dependency changes.
+
+**Not possible without an LLM (stated in the app: "Suggestions only…")**
+- Free rewording for clarity or a more professional tone.
+- Restructuring sentences; turning passive into active.
+- Spelling and real grammar analysis.
+- Choosing a verb that fits the context.
+
+The passive and tense checks are pattern-based and deliberately narrow, so they miss cases rather than flag wrong ones.
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator (NOT RUN) |
+|---|---|
+| Rules, corpus, no-fact invariant, grounding, gating, limits, architecture, bundles | The Coach link and panel layout under fields and bullet rows, keyboard interaction, and applying while typing (iOS and Android) |
+| | The paywall round trip from "Coach 🔒" on a device |
 
 ## 20. Major risks and failure modes
 

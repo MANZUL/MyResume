@@ -1,3 +1,5 @@
+import { analyzeText, applyFix, buildCoachContext } from '../../domain/coach/coach';
+import type { CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
 import { matchJob, type JobMatch } from '../../domain/match/job-match';
 import type { ResumeData } from '../../domain/resume/types';
@@ -26,10 +28,28 @@ export class PremiumTools {
     throw new FeatureNotAvailableYetError('Tailoring');
   }
 
-  /** Writing Coach arrives in migration step 8; the premium check is already the entry point. */
-  async writingCoach(_text: string): Promise<never> {
+  /**
+   * Writing Coach analysis (step 8). Checked before any analysis runs, so FREE users
+   * get nothing about their text. `siblings` are the entry's other bullets, read-only.
+   */
+  async writingCoach(text: string, field: CoachField, siblings: readonly string[] = []): Promise<CoachReport> {
     await this.gate.require('coach');
-    throw new FeatureNotAvailableYetError('Writing Coach');
+    return analyzeText(text, buildCoachContext(field, siblings));
+  }
+
+  /**
+   * Applies one Coach suggestion. Checked again here: if premium was lost since the
+   * analysis, nothing changes. The engine then rejects stale or ungrounded fixes.
+   */
+  async applyCoachFix(
+    text: string,
+    field: CoachField,
+    siblings: readonly string[],
+    finding: CoachFinding,
+    choice?: number,
+  ): Promise<string> {
+    await this.gate.require('coach');
+    return applyFix(text, buildCoachContext(field, siblings), finding, choice);
   }
 }
 

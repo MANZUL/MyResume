@@ -22,6 +22,7 @@ import {
   type ResumeData,
 } from '../../domain/resume/types';
 import { EDITOR_COPY as COPY } from './editor-copy';
+import { CoachEntry } from '../coach/CoachEntry';
 
 type ListKey = 'experience' | 'education' | 'certifications' | 'projects';
 const EMPTY_ITEM: { [K in ListKey]: () => ResumeData[K][number] } = {
@@ -206,6 +207,7 @@ export default function EditorScreen() {
           <View onLayout={anchor('summary')}>
             <Collapsible title={SECTION_TITLES.summary} subtitle={data.summary.tagline || 'Tagline, summary bullets, skills'} {...openProps('summary')}>
               <Field label={COPY.summary.tagline} value={data.summary.tagline} onChangeText={(v) => setSummary('tagline', v)} multiline />
+              <CoachEntry text={data.summary.tagline} field="tagline" onApply={(v) => setSummary('tagline', v)} />
               <StringListEditor label={COPY.summary.bullets} items={data.summary.bullets} onChange={(v) => setSummary('bullets', v)} placeholder={COPY.summary.bulletsPlaceholder} addLabel={COPY.summary.bulletsAdd} />
               <StringListEditor label={COPY.summary.skills} items={data.summary.skills} onChange={(v) => setSummary('skills', v)} placeholder={COPY.summary.skillsPlaceholder} addLabel={COPY.summary.skillsAdd} />
             </Collapsible>
@@ -226,7 +228,22 @@ export default function EditorScreen() {
                 </View>
               </View>
               <Field label={COPY.experience.summary} value={exp.summary} multiline onChangeText={(v) => updateItem('experience', index, { summary: v })} />
-              <StringListEditor label={COPY.experience.bullets} items={exp.bullets} onChange={(v) => updateItem('experience', index, { bullets: v })} addLabel={COPY.experience.bulletsAdd} placeholder="Start with an action verb and a result" />
+              <CoachEntry text={exp.summary} field="experienceSummary" onApply={(v) => updateItem('experience', index, { summary: v })} />
+              <StringListEditor
+                label={COPY.experience.bullets}
+                items={exp.bullets}
+                onChange={(v) => updateItem('experience', index, { bullets: v })}
+                addLabel={COPY.experience.bulletsAdd}
+                placeholder="Start with an action verb and a result"
+                renderAction={(bullet, i) => (
+                  <CoachEntry
+                    text={bullet}
+                    field="experienceBullet"
+                    siblings={exp.bullets.filter((_, j) => j !== i)}
+                    onApply={(v) => updateItem('experience', index, { bullets: exp.bullets.map((b, j) => (j === i ? v : b)) })}
+                  />
+                )}
+              />
               {itemControls('experience', index, data.experience.length)}
             </Collapsible>
           ))}
@@ -258,7 +275,22 @@ export default function EditorScreen() {
             <Collapsible key={projectKeys[index]} title={project.name || 'New project'} subtitle={project.description} initiallyOpen={!project.name} {...openProps(projectKeys[index])}>
               <Field label={COPY.projects.name} value={project.name} onChangeText={(v) => updateItem('projects', index, { name: v })} />
               <Field label={COPY.projects.description} value={project.description} onChangeText={(v) => updateItem('projects', index, { description: v })} />
-              <StringListEditor label={COPY.projects.bullets} items={project.bullets} onChange={(v) => updateItem('projects', index, { bullets: v })} placeholder={COPY.projects.bulletsPlaceholder} addLabel={COPY.projects.bulletsAdd} />
+              <CoachEntry text={project.description} field="projectDescription" onApply={(v) => updateItem('projects', index, { description: v })} />
+              <StringListEditor
+                label={COPY.projects.bullets}
+                items={project.bullets}
+                onChange={(v) => updateItem('projects', index, { bullets: v })}
+                placeholder={COPY.projects.bulletsPlaceholder}
+                addLabel={COPY.projects.bulletsAdd}
+                renderAction={(bullet, i) => (
+                  <CoachEntry
+                    text={bullet}
+                    field="projectBullet"
+                    siblings={project.bullets.filter((_, j) => j !== i)}
+                    onApply={(v) => updateItem('projects', index, { bullets: project.bullets.map((b, j) => (j === i ? v : b)) })}
+                  />
+                )}
+              />
               {itemControls('projects', index, data.projects.length)}
             </Collapsible>
           ))}

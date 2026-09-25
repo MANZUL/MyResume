@@ -229,7 +229,7 @@ describe('stable keys stay with their entry (UI only)', () => {
     const components = read('ui/components.tsx');
     expect(components).toMatch(/applyKeys\(\{ type: 'remove', index \}\);\s*onChange\(items\.filter/);
     expect(components).toMatch(/applyKeys\(\{ type: 'add' \}\);\s*onChange\(\[\.\.\.items, ''\]\)/);
-    expect(components).toContain('<View key={keys[index]} style={styles.listRow}>');
+    expect(components).toContain('<View key={keys[index]}>');
   });
 
   it('keys are UI-only: resume data has no ids, and nothing indexes lists by position', () => {

@@ -154,12 +154,15 @@ export function StringListEditor({
   onChange,
   placeholder,
   addLabel = 'Add',
+  renderAction,
 }: {
   label: string;
   items: string[];
   onChange: (items: string[]) => void;
   placeholder?: string;
   addLabel?: string;
+  /** Optional per-row action shown under the row (e.g. the Writing Coach). */
+  renderAction?: (item: string, index: number) => ReactNode;
 }) {
   // Stable row keys, so deleting a row keeps focus and input state on the right rows.
   const [keys, applyKeys] = useStableKeys(items.length);
@@ -168,7 +171,8 @@ export function StringListEditor({
       <Text style={styles.label}>{label}</Text>
       {items.length === 0 ? <Text style={styles.emptyHint}>{EMPTY_LIST_HINT}</Text> : null}
       {items.map((item, index) => (
-        <View key={keys[index]} style={styles.listRow}>
+        <View key={keys[index]}>
+          <View style={styles.listRow}>
           <TextInput
             value={item}
             multiline
@@ -190,6 +194,8 @@ export function StringListEditor({
           >
             <Text style={{ color: colors.danger, fontSize: 18 }}>×</Text>
           </Pressable>
+        </View>
+          {renderAction ? renderAction(item, index) : null}
         </View>
       ))}
       <Pressable

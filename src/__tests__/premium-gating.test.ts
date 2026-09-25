@@ -77,10 +77,14 @@ describe('feature gates (service layer)', () => {
     expect(result.matchPercent).toBeGreaterThan(0);
   });
 
-  it('Writing Coach and Tailoring: FREE refused; PREMIUM passes the gate (feature itself comes later)', async () => {
-    await expect(world(false).tools.writingCoach('Helped the team')).rejects.toBeInstanceOf(PremiumRequiredError);
+  it('Writing Coach: FREE refused before analysis; PREMIUM gets a report (step 8)', async () => {
+    await expect(world(false).tools.writingCoach('Helped with the launch', 'experienceBullet')).rejects.toEqual(new PremiumRequiredError('coach'));
+    const report = await world(true).tools.writingCoach('Helped with the launch', 'experienceBullet');
+    expect(report.findings.map((f) => f.rule)).toContain('weak-opener');
+  });
+
+  it('Tailoring: FREE refused; PREMIUM passes the gate (feature itself comes in step 10)', async () => {
     await expect(world(false).tools.tailoring(SAMPLE_RESUME, JD)).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(world(true).tools.writingCoach('Helped the team')).rejects.toBeInstanceOf(FeatureNotAvailableYetError);
     await expect(world(true).tools.tailoring(SAMPLE_RESUME, JD)).rejects.toBeInstanceOf(FeatureNotAvailableYetError);
   });
 
