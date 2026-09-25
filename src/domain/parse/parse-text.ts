@@ -6,7 +6,7 @@ import {
   emptyResume,
   type Experience,
   type ResumeData,
-} from './types';
+} from '../resume/types';
 
 // Rule-based resume parser. Runs fully on-device with no AI and no network:
 // it only copies text that is present in the source, so it can never invent facts.

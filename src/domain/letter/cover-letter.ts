@@ -1,4 +1,4 @@
-import type { ResumeData } from './types';
+import type { ResumeData } from '../resume/types';
 
 // Fill-in-the-blanks cover letter built only from the resume's own facts.
 // Bracketed placeholders are left for the user wherever the resume has no data.

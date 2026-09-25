@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveExportAccess } from '../lib/access';
+import { resolveExportAccess } from '../domain/access/access';
 
 describe('resolveExportAccess (payment verification)', () => {
   it('keeps release builds locked when purchases are not configured', () => {

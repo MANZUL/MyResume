@@ -1,12 +1,12 @@
 import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import type { ExportAccess } from './access';
-import { buildResumeDocxBase64 } from './export-docx';
-import { renderResumeHtml } from './render-html';
-import { getTemplate } from './templates';
-import { fileSafeName } from './text';
-import type { StoredResume } from './types';
+import type { ExportAccess } from '../../domain/access/access';
+import { buildResumeDocxBase64 } from '../../domain/render/export-docx';
+import { renderResumeHtml } from '../../domain/render/render-html';
+import { getTemplate } from '../../domain/templates/templates';
+import { fileSafeName } from '../../domain/shared/text';
+import type { StoredResume } from '../../domain/resume/types';
 
 // Every export path goes through assertAccess, so no screen can produce a file
 // without the verified entitlement.

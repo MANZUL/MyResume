@@ -1,6 +1,6 @@
-import { getTemplate, type TemplateConfig } from './templates';
-import { escapeHtml, isHexColor, tintHex } from './text';
-import type { ResumeData } from './types';
+import { getTemplate, type TemplateConfig } from '../templates/templates';
+import { escapeHtml, isHexColor, tintHex } from '../shared/text';
+import type { ResumeData } from '../resume/types';
 
 // One renderer feeds both the on-screen preview (WebView) and the exported PDF
 // (expo-print), so what the user sees is exactly what they get.

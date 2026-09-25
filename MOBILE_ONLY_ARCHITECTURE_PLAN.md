@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Step 0 is done** (§19). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0 and 1 are done** (§19, §19.1). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -668,7 +668,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | Step | Work | Exit criteria |
 |---|---|---|
 | 0 ✅ | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets; record decisions. **Done**: prototype history imported, identity and assets set, decisions recorded | Repo builds ✅ |
-| 1 | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage | Green |
+| 1 ✅ | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage. **Done** (see §19.1) | Green ✅ |
 | 2 | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile | CRUD and migration tests |
 | 3 | **Entitlement architecture:** `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume); Settings subscription section | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall |
 | 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
@@ -683,6 +683,89 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 13 | **(Separate approval)** EAS builds and store submission | — |
 
 ---
+
+### 19.1 Step 1 record: what was removed, what was retained, and why
+
+Step 1 was cleanup and restructuring only. **No product behavior changed.** Templates, parser,
+Job Match, Cover Letter, Resume Score, preview and export behave exactly as before.
+
+**Removed**
+
+| Item | Why |
+|---|---|
+| `react-native-purchases` (and its `@revenuecat/*` internals) | RevenueCat is out of scope; billing will come through the vendor-neutral entitlement service (§4.4) |
+| `src/lib/purchases.tsx` (the RevenueCat provider, `usePurchases`) | Replaced by `services/entitlement/entitlement.tsx` (`EntitlementProvider`, `useEntitlement`). There is no billing SDK and no network. It uses the same fail-closed policy with billing "not configured": debug builds are unlocked, release builds locked. That is the state the prototype always ran in, so behavior is unchanged |
+| `@react-native-async-storage/async-storage` | Plan §12: SQLite only. Replaced by `services/storage/kv.ts`, which uses `expo-sqlite/kv-store` (`SQLiteStorage`, database `my-resume-kv.db`) with the **same key (`resumes.v1`) and same JSON format**. Step 2 replaces it with real tables. No user data exists to migrate; the prototype was never released |
+| `react-dom`, `react-native-web` as **direct** dependencies | Added only for RevenueCat's web peer dependency; there is no web target |
+| Android `com.android.vending.BILLING` permission (`app.json`) | Re-added only when real Google Play billing lands (step 11) |
+| `.env.example` | It held only RevenueCat keys |
+| `PAYMENT_AUDIT.md` | Audit of the web app's Dodo payments. The web product is not being built; the file stays in git history |
+| Payment/RevenueCat/AsyncStorage wording in `README.md` and the `access.ts` comment | Replaced with accurate, vendor-neutral text. README is kept minimal until its planned rewrite |
+| Tooling for a web target | Already absent (no `web` script or `web` config in `app.json`); now enforced by a test |
+
+**Retained, and why**
+
+| Item | Why |
+|---|---|
+| `domain/access/access.ts` (`resolveExportAccess`) | Business logic: the fail-closed policy that rejects failed verification and unlocks only in dev. It is refactored into the premium/`isPremium()` model in step 3 |
+| `domain/render/export-docx.ts`, `render-html.ts`, `templates.ts`, `sample-data.ts`, `resume-score.ts`, `parse-text.ts`, `job-match.ts`, `cover-letter.ts`, `types.ts` | Domain logic, moved without changes. Several are later REFACTOR/REWRITE targets (§18) |
+| `services/export/export.ts` | Export behavior unchanged. It is rewritten into `ExportService` in step 4 |
+| `features/paywall/UnlockScreen.tsx` | Same screen and copy. It now reads `offer` from the entitlement service instead of RevenueCat's `exportPackage`. It is rewritten in step 3 |
+| `react-dom`, `react-native-web` inside `node_modules` (transitive) | `expo-router` depends on them for its web renderer and cannot run without them installed. **They are not in the iOS or Android bundles**: source-map check, 0 modules on both platforms |
+| `react-native-webview`, `expo-print`, `expo-sharing`, `expo-file-system`, `expo-clipboard`, `docx` | Needed by existing mobile features (preview, export, cover-letter copy) |
+| Android `INTERNET`, `VIBRATE`, `SYSTEM_ALERT_WINDOW`, legacy storage permissions (≤ API 32) | Expo / React Native template defaults. `INTERNET` is needed for the development server now and for store billing later. **Core features make no network calls** (guard test) |
+| `.replit` | The owner's workspace configuration from the repository's initial commit. It is not app runtime |
+
+**Added**
+- `expo-sqlite`, with its config plugin.
+- `services/storage/kv.ts`.
+- `services/entitlement/entitlement.tsx`, a vendor-neutral placeholder.
+- Thin route files in `src/app/`.
+- `src/__tests__/architecture.test.ts`, which enforces:
+  - no removed packages are declared or imported;
+  - no billing permission and no web configuration;
+  - `domain/` stays pure (no React, React Native, Expo, services, features or ui imports);
+  - `app/` routes stay thin;
+  - only the entitlement service owns purchase state;
+  - no network APIs or remote URLs;
+  - storage is SQLite.
+
+  I also broke the rules on purpose (re-added an AsyncStorage import and the billing permission) to
+  confirm these tests fail, then reverted.
+
+**Module moves** (made with `git mv`, so history is kept)
+
+| Before | After |
+|---|---|
+| `src/lib/types.ts`, `sample-data.ts` | `src/domain/resume/` |
+| `src/lib/templates.ts` | `src/domain/templates/` |
+| `src/lib/text.ts` | `src/domain/shared/` |
+| `src/lib/resume-score.ts` | `src/domain/check/` |
+| `src/lib/render-html.ts`, `export-docx.ts` | `src/domain/render/` |
+| `src/lib/parse-text.ts` | `src/domain/parse/` |
+| `src/lib/job-match.ts` | `src/domain/match/` |
+| `src/lib/cover-letter.ts` | `src/domain/letter/` |
+| `src/lib/access.ts` | `src/domain/access/` |
+| `src/lib/store.tsx` | `src/services/storage/resume-store.tsx` |
+| `src/lib/export.ts` | `src/services/export/export.ts` |
+| `src/lib/purchases.tsx` | `src/services/entitlement/entitlement.tsx` (content replaced) |
+| `src/components/ui.tsx` | `src/ui/components.tsx` |
+| `src/app/index.tsx`, `import.tsx`, `unlock.tsx`, `resume/[id]/{index,preview,tools}.tsx` | `src/features/{library,import,paywall,editor,preview,tools}/*Screen.tsx`; `src/app/*` re-export them |
+| Tools screen sub-components | `features/check/CheckTool.tsx`, `features/job-match/MatchTool.tsx`, `features/cover-letter/LetterTool.tsx` (code moved as-is) |
+
+**Validation**
+
+| Check | Result |
+|---|---|
+| Clean install (`npm ci` from an empty `node_modules`) | ✅ |
+| `tsc --noEmit` | ✅ |
+| `expo lint` | ✅ |
+| Tests | **31 passed** (23 existing + 8 architecture guards) |
+| iOS bundle | ✅ 2.7 MB (was 5 MB) |
+| Android bundle | ✅ 3.0 MB (was 5.3 MB) |
+| Bundle contents (source maps) | 0 modules each on iOS and Android from `react-dom`, `react-native-web`, `react-native-purchases`, `@revenuecat`, `@react-native-async-storage` |
+| Generated native projects (`expo prebuild`, then deleted) | No `BILLING`, RevenueCat or AsyncStorage anywhere. Expo modules linked: `expo-sqlite` present, no purchases module |
+| On a device | **Not run.** No simulator or device was available. Runtime of the SQLite key-value store and export is still unverified on devices |
 
 ## 20. Major risks and failure modes
 

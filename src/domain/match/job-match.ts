@@ -1,4 +1,4 @@
-import type { ResumeData } from './types';
+import type { ResumeData } from '../resume/types';
 
 // Deterministic keyword match between a resume and a job description.
 // No AI: it extracts the job's most repeated meaningful terms and checks which

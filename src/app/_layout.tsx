@@ -1,15 +1,15 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { colors } from '../components/ui';
-import { PurchasesProvider } from '../lib/purchases';
-import { ResumeStoreProvider } from '../lib/store';
+import { colors } from '../ui/components';
+import { EntitlementProvider } from '../services/entitlement/entitlement';
+import { ResumeStoreProvider } from '../services/storage/resume-store';
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ResumeStoreProvider>
-        <PurchasesProvider>
+        <EntitlementProvider>
           <StatusBar style="dark" />
           <Stack
             screenOptions={{
@@ -27,7 +27,7 @@ export default function RootLayout() {
             <Stack.Screen name="resume/[id]/tools" options={{ title: 'Tools' }} />
             <Stack.Screen name="unlock" options={{ title: 'Unlock exports', presentation: 'modal' }} />
           </Stack>
-        </PurchasesProvider>
+        </EntitlementProvider>
       </ResumeStoreProvider>
     </SafeAreaProvider>
   );

@@ -1,4 +1,4 @@
-import type { ResumeData } from './types';
+import type { ResumeData } from '../resume/types';
 
 export type ResumeScoreWarning = {
   id: string;

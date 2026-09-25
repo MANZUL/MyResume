@@ -22,9 +22,6 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": [
-        "com.android.vending.BILLING"
-      ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
@@ -41,7 +38,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#F4F2EE"
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true

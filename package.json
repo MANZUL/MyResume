@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
     "docx": "^9.7.2",
     "expo": "~57.0.25",
     "expo-clipboard": "~57.0.2",
@@ -15,15 +14,13 @@
     "expo-router": "~57.0.23",
     "expo-sharing": "~57.0.22",
     "expo-splash-screen": "~57.0.9",
+    "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-purchases": "^10.10.2",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-web": "~0.21.0",
     "react-native-webview": "13.16.1"
   },
   "devDependencies": {

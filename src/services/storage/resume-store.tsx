@@ -1,7 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { TEMPLATES } from './templates';
-import type { ResumeData, StoredResume } from './types';
+import { TEMPLATES } from '../../domain/templates/templates';
+import type { ResumeData, StoredResume } from '../../domain/resume/types';
+import { kv } from './kv';
 
 // All resumes live on the device. No account, no server, no network needed.
 
@@ -26,7 +26,7 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
+    kv.getItem(STORAGE_KEY)
       .then((raw) => {
         if (!raw) return;
         const parsed = JSON.parse(raw) as unknown;
@@ -42,7 +42,7 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
     if (!ready) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(resumes)).catch(() => undefined);
+      kv.setItem(STORAGE_KEY, JSON.stringify(resumes)).catch(() => undefined);
     }, 300);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);

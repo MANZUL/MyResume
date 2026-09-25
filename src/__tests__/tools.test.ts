@@ -1,14 +1,14 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildCoverLetter } from '../lib/cover-letter';
-import { buildResumeDocxBase64 } from '../lib/export-docx';
-import { matchJob } from '../lib/job-match';
-import { renderResumeHtml } from '../lib/render-html';
-import { scoreResume } from '../lib/resume-score';
-import { SAMPLE_RESUME } from '../lib/sample-data';
-import { TEMPLATES } from '../lib/templates';
-import { emptyResume } from '../lib/types';
+import { buildCoverLetter } from '../domain/letter/cover-letter';
+import { buildResumeDocxBase64 } from '../domain/render/export-docx';
+import { matchJob } from '../domain/match/job-match';
+import { renderResumeHtml } from '../domain/render/render-html';
+import { scoreResume } from '../domain/check/resume-score';
+import { SAMPLE_RESUME } from '../domain/resume/sample-data';
+import { TEMPLATES } from '../domain/templates/templates';
+import { emptyResume } from '../domain/resume/types';
 
 describe('matchJob', () => {
   it('reports matched and missing keywords deterministically', () => {

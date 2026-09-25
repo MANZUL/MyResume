@@ -1,10 +1,10 @@
 // Pure export-access policy, kept free of React Native imports so it is unit-tested.
 //
 // Rules (fail closed):
-// - Access comes only from an active store entitlement reported by RevenueCat,
-//   which validates the App Store / Play receipt server-side.
-// - Trusted Entitlements is enabled; a response whose signature FAILED
-//   verification (tampered / MiTM) never unlocks exports.
+// - Access comes only from an active, store-verified entitlement reported by the
+//   entitlement service's store provider (App Store / Google Play).
+// - An entitlement whose signature FAILED verification (tampered / MiTM) never
+//   unlocks exports.
 // - If purchases are not configured, a release build stays locked. Only a
 //   development build (__DEV__) unlocks, so the app is testable before store setup.
 // - There is no local "isPro" flag in storage that a user could edit.

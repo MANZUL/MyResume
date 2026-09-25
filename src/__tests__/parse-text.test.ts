@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectSection, parseResumeText } from '../lib/parse-text';
+import { detectSection, parseResumeText } from '../domain/parse/parse-text';
 
 const SAMPLE = `Jane Doe
 jane.doe@example.com | (555) 123-4567 | Austin, TX | linkedin.com/in/janedoe

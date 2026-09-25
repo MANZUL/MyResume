@@ -9,7 +9,7 @@ import {
   TabStopType,
   TextRun,
 } from 'docx';
-import type { ResumeData } from './types';
+import type { ResumeData } from '../resume/types';
 
 type ExportOptions = {
   data: ResumeData;
