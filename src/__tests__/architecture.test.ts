@@ -163,3 +163,48 @@ describe('entitlement architecture (step 3)', () => {
     }
   });
 });
+
+describe('secure export boundary (step 4)', () => {
+  // Value imports only: `import type` cannot execute anything.
+  const valueImportsOf = (source: string) =>
+    [...source.matchAll(/^import\s+(?!type\s)[^;]*?from\s+['"]([^'"]+)['"]/gms)].map((match) => match[1]);
+  const owners = (pattern: RegExp) =>
+    sourceFiles()
+      .filter((file) => valueImportsOf(readFileSync(file, 'utf8')).some((spec) => pattern.test(spec)))
+      .map((file) => relative(SRC, file))
+      .sort();
+
+  it('only the file export platform uses the DOCX generator', () => {
+    expect(owners(/domain\/render\/export-docx$/)).toEqual([join('services', 'export', 'file-export-platform.ts')]);
+  });
+
+  it('only the file export platform renders in PDF mode (screens and other services cannot)', () => {
+    const pdfModeUsers = sourceFiles()
+      .filter((file) => /mode:\s*'pdf'/.test(readFileSync(file, 'utf8')))
+      .map((file) => relative(SRC, file));
+    expect(pdfModeUsers).toEqual([join('services', 'export', 'file-export-platform.ts')]);
+    expect(owners(/domain\/render\/render-html$/)).toEqual(
+      [join('services', 'export', 'file-export-platform.ts'), join('services', 'preview', 'preview-service.ts')].sort(),
+    );
+  });
+
+  it('only the Expo export adapter touches printing, sharing files and the file system', () => {
+    const expo = join('services', 'export', 'expo-export-platform.ts');
+    expect(owners(/^expo-print$/)).toEqual([expo]);
+    expect(owners(/^expo-sharing$/)).toEqual([expo]);
+    expect(owners(/^expo-file-system/)).toEqual([expo]);
+  });
+
+  it('screens reach exports only through ExportService', () => {
+    for (const file of sourceFiles(join(SRC, 'features'))) {
+      for (const spec of importsOf(readFileSync(file, 'utf8'))) {
+        expect(spec, relative(SRC, file)).not.toMatch(/services\/export\/(file-export-platform|expo-export-platform)|domain\/render\/(export-docx|render-html)/);
+      }
+    }
+  });
+
+  it('ExportService never reads export history', () => {
+    const source = readFileSync(join(SRC, 'services', 'export', 'export-service.ts'), 'utf8');
+    expect(source).not.toMatch(/\.list(Recent|ForResume)\(/);
+  });
+});

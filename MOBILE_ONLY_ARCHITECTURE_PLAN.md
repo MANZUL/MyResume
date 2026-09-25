@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–3 are done** (§19, §19.1–§19.3). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–4 are done** (§19, §19.1–§19.4). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -672,7 +672,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 1 ✅ | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage. **Done** (see §19.1) | Green ✅ |
 | 2 ✅ | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile. **Done** (see §19.2) | CRUD and migration tests ✅ |
 | 3 ✅ | **Entitlement architecture:** **Done** (see §19.3). `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume). *The Settings subscription section was not built in step 3 (new UI); it moves to step 12 with the other settings* | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall ✅ |
-| 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
+| 4 ✅ | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume. **Done** (see §19.4) | Unit tests for the gates ✅ ◆ PDF and DOCX on both platforms: **still open** (no device yet) |
 | 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
 | 6 | **Image export**: PDF → PNG via pdf.js (fallback: view-shot), per page, through `ExportService` | ◆ PNG matches the PDF on both platforms; memory caps respected |
 | 7 | Editor parity; Resume Score (FREE) with jump-to-section | ◆ Editor pass |
@@ -983,6 +983,101 @@ The store is asked first. The cache is used only if the store cannot answer: off
 | Policy, service, gates, export gate, paywall flow and resume-after-purchase, all with the fake store and controlled clocks | The paywall screen, navigation back, and resuming the export on a real device |
 | Fake store excluded from iOS and Android release bundles; included in the dev bundle (source maps) | Real Apple/Google purchase, restore, refunds and grace periods (real billing is a later step) |
 | Clean install, typecheck, lint, all tests, iOS and Android bundles; no billing packages installed | The device cache file (`expo-sqlite/kv-store`) and the export-folder purge on launch |
+
+### 19.4 Step 4 record: secure export service (PDF, DOCX)
+
+Image export was **not** implemented (step 6). No billing, AI, backend or UI redesign. The only dependency change is `jszip` as a dev dependency, used by tests to inspect DOCX files. It is the version already installed with `docx`.
+
+**The boundary**
+
+```
+screens ──► ExportService (services/export/export-service.ts)   entitlement checks, handles, records
+              └─► ExportPlatform: file-export-platform.ts        rendering, files, cleanup (no Expo imports)
+                    └─► expo-export-platform.ts                  expo-print, expo-sharing, expo-file-system adapters
+```
+
+Enforced by guard tests:
+- only `file-export-platform.ts` imports the DOCX generator or renders in PDF mode;
+- only `expo-export-platform.ts` imports `expo-print`, `expo-sharing` or `expo-file-system`;
+- screens import neither, and never the renderer;
+- `ExportService` never reads export history.
+
+Each guard was broken on purpose to confirm it fails.
+
+**Lifecycle**
+
+| Call | What happens |
+|---|---|
+| `prepare(resume, {format, paper})` | premium check #1 → generate → returns an **opaque handle** |
+| `share(handle)` | validates the handle → premium check #2 → share → handle consumed |
+| `discard(handle)` / `discardAll()` | deletes the artifact(s) |
+| `exportPdf(resume, paper = 'letter')` / `exportDocx(resume)` | prepare + share in one call; what screens use |
+
+**Handles**
+- A handle is a frozen `{ id, format }`: **no path**.
+- It is valid only in the service instance that issued it. Validity is tracked by object identity, so a copied or forged handle with the same id is rejected.
+- It works **once**, expires after 5 minutes, and is invalid after discard or after premium is lost, even if premium comes back.
+- After an app restart, old handles are invalid and the launch purge deletes their files.
+
+**Any denial or failure deletes the artifact immediately**
+- first or second check refused;
+- handle expired;
+- app not in the foreground when sharing;
+- share failed or the share sheet is unavailable;
+- the user dismissed the share;
+- renderer or DOCX failure;
+- file-system error or a full disk (partial files included).
+
+A shared file stays in the private `exports/<artifact id>/` folder only until the next launch purge. The receiving app may still be reading it.
+
+**Also enforced**
+- **One export at a time.** A duplicate attempt gets `ExportInProgressError`.
+- **Records.** Every attempt appends metadata: `succeeded`, `failed` (including cancel and interruption) or `denied`, with the decision reason. Records are never read to authorize anything.
+- **Paywall.** A refusal at either check throws `PremiumRequiredError`, which the preview screen hands to the existing `PaywallCoordinator`. After a verified subscription the whole export runs again with fresh checks.
+
+**PDF**
+- Same renderer as the preview, in PDF mode, **never watermarked**.
+- `paper` added to the renderer:
+  - `letter`: `@page size: letter`, printed at 612×792 pt;
+  - `a4`: `@page size: A4`, printed at 595×842 pt;
+  - 0.75 in margins.
+- Checked outside the suite: headless Chromium printing the exact export HTML gives MediaBox 612×792 (Letter) and 595×842 (A4), with no watermark element.
+- **Screens currently export Letter** (the default). A paper-size picker is a UI addition and belongs with Settings (step 12). The service and tests cover both sizes.
+
+**DOCX**
+- The existing Word generator, unchanged, verified by opening the actual zip:
+  - `[Content_Types].xml`, `word/document.xml` and `docProps/core.xml` are present;
+  - the resume content is in the document;
+  - the template accent color is on the headings;
+  - the title is "<Name> — <Template name>";
+  - the creator is "My Resume";
+  - no "PREVIEW" text appears anywhere.
+- The Word generator's page size is not changed (no new document features).
+
+**Tests: 202 total** (40 new); all 162 earlier tests pass unchanged.
+
+| Area | Covered |
+|---|---|
+| Entitlement | FREE rejection before generation; PREMIUM success; two checks per export; entitlement lost between checks (refund); expiry between generate and share; export history never read as proof |
+| Paywall | refused export → existing paywall flow → verified subscription → export resumes |
+| PDF | Letter / A4 dimensions and page rule; default Letter; no watermark; template marks and accent preserved; private file path; print temp file moved, not copied; purge |
+| DOCX | valid zip; content; template/accent mapping; product metadata; no watermark |
+| Handles | opaque (no path); single use; invalid after discard; invalid after entitlement loss; lifetime expiry; forged or copied handles; other service instance; `discardAll` |
+| Failures | renderer failure; DOCX generation failure; file-system failure (temp file removed); full disk (partial file removed); share failure or unavailable; cancelled share; duplicate export; app backgrounded; app terminated (simulated: new process, old handle invalid, purge) |
+| Bypass attempts | "premium: true" arguments; premium-looking resume fields; old handle reuse; share after expiry; running the paywall's pending action without subscribing; direct renderer/DOCX/print imports from a screen (guards) |
+
+A mutation check was also run: removing the second entitlement check, or making discard do nothing, makes 9 tests fail each.
+
+**Observed, not changed (step 5 scope).** In PDF mode the Boardroom and Foreman quarter-circle mark sits at the top right of the content area and can overlap the end of the contact line. The web original placed it in the page margin. This belongs to the template-parity pass in step 5 ("do not redesign templates" in step 4).
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator |
+|---|---|
+| Export service, handles, both checks, failures and cleanup, with the real renderer and real DOCX generator over an in-memory file system and fake print/share adapters | `expo-print` output on iOS and Android (margins, fonts, page breaks) |
+| Letter and A4 page sizes of the export HTML via Chromium | `expo-file-system` folder create/delete and move; the launch purge |
+| DOCX structure and content, by unzipping the generated file | `expo-sharing` on both platforms (it cannot report completed vs. dismissed; recorded as shared) |
+| iOS and Android release bundles: export modules present, fake store and billing SDKs absent | Background interruption and app kill during a real export |
 
 ## 20. Major risks and failure modes
 

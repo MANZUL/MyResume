@@ -8,6 +8,11 @@ import { PremiumRequiredError } from '../../domain/entitlement/features';
 import { freeAccentsFor } from '../../domain/entitlement/palette';
 import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
 import { useEntitlement } from '../../services/entitlement/entitlement';
+import {
+  ExportCancelledError,
+  ExportInProgressError,
+  ExportInterruptedError,
+} from '../../services/export/export-service';
 import { useExportService } from '../../services/export/use-export-service';
 import { useResume } from '../../services/storage/resume-store';
 
@@ -58,7 +63,9 @@ export default function PreviewScreen() {
       else await exporter.exportDocx(resume);
     } catch (error) {
       if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => runExport(kind) });
-      else Alert.alert('Export failed', error instanceof Error ? error.message : 'Please try again.');
+      else if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
+        // Expected outcomes: another export is running, the app left the foreground, or the user cancelled.
+      } else Alert.alert('Export failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setBusy(null);
     }

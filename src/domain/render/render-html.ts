@@ -10,6 +10,13 @@ const SANS = "-apple-system, 'Helvetica Neue', Helvetica, Roboto, Arial, sans-se
 const MONO = "Menlo, 'Courier New', monospace";
 
 export type RenderMode = 'preview' | 'pdf';
+export type PaperSize = 'letter' | 'a4';
+
+/** Page sizes in PDF points (72 per inch). */
+export const PAPER_POINTS: Record<PaperSize, { width: number; height: number }> = {
+  letter: { width: 612, height: 792 }, // 8.5 × 11 in
+  a4: { width: 595, height: 842 }, // 210 × 297 mm
+};
 
 export interface RenderOptions {
   templateId: string;
@@ -17,6 +24,8 @@ export interface RenderOptions {
   mode: RenderMode;
   /** Adds a diagonal "PREVIEW" watermark. Used in the on-screen preview until exports are unlocked. */
   watermark?: boolean;
+  /** PDF page size. Defaults to US Letter. */
+  paper?: PaperSize;
 }
 
 const e = escapeHtml;
@@ -36,7 +45,7 @@ export function renderResumeHtml(data: ResumeData, options: RenderOptions): stri
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     html, body { margin: 0; padding: 0; background: ${options.mode === 'preview' ? '#E9E7E2' : '#fff'}; }
-    @page { size: letter; margin: 0.75in; }
+    @page { size: ${options.paper === 'a4' ? 'A4' : 'letter'}; margin: 0.75in; }
     .page {
       position: relative; overflow: hidden; background: #fff; color: #111;
       font-family: ${font(config.fontBody)}; font-size: 10pt; line-height: 1.5;
