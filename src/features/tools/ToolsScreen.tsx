@@ -3,14 +3,15 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '../../ui/components';
 import { useResume } from '../../services/storage/resume-store';
+import { AtsTool } from '../ats/AtsTool';
 import { CheckTool } from '../check/CheckTool';
 import { improveHref } from '../check/improve-link';
 import { LetterTool } from '../cover-letter/LetterTool';
 import { MatchTool } from '../job-match/MatchTool';
 
-type Tool = 'check' | 'match' | 'letter';
+type Tool = 'check' | 'ats' | 'match' | 'letter';
 
-// All three tools are deterministic and run on-device. No AI, no network.
+// All tools are deterministic and run on-device. No AI, no network.
 export default function ToolsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { resume } = useResume(id);
@@ -24,6 +25,7 @@ export default function ToolsScreen() {
         <View style={{ flexDirection: 'row', backgroundColor: '#E7E4DE', borderRadius: 12, padding: 3 }} accessibilityRole="tablist">
           {([
             ['check', 'Check'],
+            ['ats', 'ATS'],
             ['match', 'Job match'],
             ['letter', 'Cover letter'],
           ] as const).map(([key, label]) => (
@@ -47,6 +49,9 @@ export default function ToolsScreen() {
         {tool === 'check' ? (
           // "Improve" returns to the editor below this screen, opened on the warning's section.
           <CheckTool data={resume.data} onImprove={(section) => router.dismissTo(improveHref(resume.id, section, Date.now()))} />
+        ) : null}
+        {tool === 'ats' ? (
+          <AtsTool data={resume.data} templateId={resume.templateId} onImprove={(section) => router.dismissTo(improveHref(resume.id, section, Date.now()))} />
         ) : null}
         {tool === 'match' ? <MatchTool data={resume.data} /> : null}
         {tool === 'letter' ? <LetterTool data={resume.data} /> : null}

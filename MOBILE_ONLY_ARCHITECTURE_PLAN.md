@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–8 are done in code** (§19, §19.1–§19.8); device validation of steps 4–8 is still open. No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–9 are done in code** (§19, §19.1–§19.9); device validation of steps 4–9 is still open. Step 9 is the owner-approved ATS Readability Checker (scope amendment in §19.9); Import moved to step 9b. No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -677,7 +677,8 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 6 ✅ | **Image export**: PDF → PNG via pdf.js, per page, through `ExportService`. **Done in code** (see §19.6); the view-shot fallback was not needed | End-to-end in Chromium ✅ (real renderer → PDF → bundled pdf.js → PNG) ◆ PNG on both platforms and memory on low-end Android: **still open** |
 | 7 ✅ | Editor parity; Resume Score (FREE) with jump-to-section. **Done in code** (see §19.7) | Pure-logic and guard tests ✅ ◆ Editor pass on devices: **NOT RUN** (no simulator or device in this environment) |
 | 8 ✅ | Writing Coach (PREMIUM). **Done in code** (see §19.8) | Rule tests ✅; no-fact-insertion ✅ (property tests + grounding guard + mutation checks) ◆ Coach panel on devices: **NOT RUN** |
-| 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
+| 9 ✅ | **ATS Readability Checker (FREE)**: owner-approved addition (Near-Term Features #1). **Done in code** (see §19.9) | Rule corpus ✅; template claims verified against real PDF and DOCX output ✅ ◆ ATS tab on devices: **NOT RUN** |
+| 9b | Import (FREE): parser rewrite + corpus, review, DOCX, PDF. *(Was step 9; moved after the ATS checker by the owner. Not started)* | Corpus thresholds ◆ real files |
 | 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
 | 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
 | 12 | Backup, settings, error boundary, accessibility, low-end Android performance; items moved from step 5 (bundled spec fonts, thumbnails, gallery, paper picker, custom-color UI) | ◆ Release-candidate QA |
@@ -1468,6 +1469,116 @@ The passive and tense checks are pattern-based and deliberately narrow, so they 
 |---|---|
 | Rules, corpus, no-fact invariant, grounding, gating, limits, architecture, bundles | The Coach link and panel layout under fields and bullet rows, keyboard interaction, and applying while typing (iOS and Android) |
 | | The paywall round trip from "Coach 🔒" on a device |
+
+### 19.9 Step 9 record: ATS Readability Checker (FREE)
+
+**Scope amendment (owner decision).**
+- This plan did not contain an ATS checker; its step 9 was Import. The owner approved the "Near-Term Features" list as official extra scope, and its first item, the **ATS Readability Checker**, became step 9. Import is now step 9b and has not been started.
+- Constraints set by the owner:
+  - a standalone feature;
+  - **Resume Score (step 7) untouched**: no ATS category change, no scoring change, golden tests unchanged;
+  - FREE, with no paywall on the result;
+  - no score, percentage or pass/fail claim;
+  - no Import, PDF or DOCX parsing;
+  - no Keyword Match or Keyword Gap.
+
+**What it checks.** Only what can be proven from the resume's own data and from how this app exports it. Statuses: **Readable**, **Check this**, **Potential issue**. Presence: **Detected** / **Not detected**.
+
+| # | Rule | What it checks | Conservative limits |
+|---|---|---|---|
+| 1 | Contact details | Name, email (well-formed), phone (7–15 digits; digits, spaces, `+ - . / ( )`, "ext."), location, LinkedIn or website (no spaces; looks like an address) | Names with titles, suffixes, apostrophes and any script are fine; the phone is "check", not "issue" |
+| 2 | Section headings | Which sections exist (7 detections); the headings are the renderer's fixed standard names as plain text | Missing Experience = potential issue; missing Education or Skills = check; whitespace-only content does not count |
+| 3 | Template text | Letter-spaced name or headings that a PDF text layer splits into letters ("S U M M A R Y"); points to the Word export or a template without letter-spacing | Derived from the template config; **verified for all 12 templates against a real PDF** |
+| 4 | Layout | One column; contact in the main text (not a page header or footer); real, selectable text; the split header is read in order | Always Readable for the current templates; the claim is **verified** (PDF reading order and DOCX with no header, footer or table) |
+| 5 | Symbols and special characters | Emoji, icon-font (private-use), "fancy" math letters, broken "�": potential issue. Dingbats, shapes, box drawing, full-width: check | Letters of every script, accents, dashes, smart quotes, `• → ≈ © ® ™ °` are fine; one finding per field |
+| 6 | Invisible characters | Zero-width space, word joiner, BOM, soft hyphen, control characters, line or paragraph separators; line breaks in one-line fields | ZWNJ/ZWJ (part of Persian and Indic spelling), tabs and line breaks in paragraphs are fine |
+| 7 | Bullets | Manual bullet glyphs or numbering at the start (the template adds bullets), line breaks inside a bullet, repeats within one list | ">" is not a glyph ("> 99.9% uptime"); "-3%", "3.5M", "#1" are content; the same bullet in two roles is fine |
+| 8 | Dates | Recognized formats ("Mar 2020", "March 2020", "03/2020", "2020-03", "2020", "Present"; ranges; "Expected …"), missing start or end, reversed order, mixed month-name and numeric styles | Year-only is not "numeric"; optional dates (certifications, education) are only checked when present; untitled entries are left to rule 10 |
+| 9 | Formatting | `**bold**`, `# heading`, decorative repeated punctuation (`!!!`, `-----`), long all-capital prose (≥ 4 words, ≥ 20 letters) | Not names, titles or skills; "C#", "#1", "..." are fine |
+| 10 | Entries | Empty experience entries (print as a blank block), entries with no title or company, education with no degree or school, projects or certifications with no name, repeated entries | Fully empty optional entries (projects, certifications) are not reported |
+
+**Implementation**
+- `domain/ats/` is pure, and imports only `domain/resume` and `domain/templates`:
+  - `types.ts`;
+  - `fields.ts`, which lists every text field with its editor location;
+  - `dates.ts`;
+  - `template-facts.ts`;
+  - `rules.ts`;
+  - `ats.ts`: `checkAtsReadability(data, templateId)` normalizes the data first, as the renderer does.
+- **UI:** a new **ATS** tab in Tools, next to Check (no new screen). It shows:
+  - a counts line ("1 potential issue · 2 to check" or "No issues detected");
+  - a "What a parser can find" card with Detected / Not detected;
+  - one card per rule with its status, summary and findings;
+  - **Improve** on located findings, which opens the editor section (the step 7 route).
+  - The disclaimer reads: "…ATS software varies; no ATS guarantee is implied."
+- FREE: no entitlement or paywall code on its path (guarded).
+- No persistence, no schema change, no dependency.
+
+**False positives found and fixed (narrowed)**
+
+| Case | Problem | Fix |
+|---|---|---|
+| "> 99.9% uptime" | Read as a manual bullet | ">" removed from the glyphs |
+| Python "`__init__`" | Read as Markdown bold | The `__x__` pattern is **disabled** (it cannot be told apart from dunder names); `**x**` and `#` are still checked |
+| Skills such as "AWS CLOUD PRACTITIONER" | Flagged as all capitals | Skills are exempt |
+| "- Managed a team" vs "Managed a team" | Not detected as a repeat | Repeats are compared without the glyph |
+
+**Not implemented (not provable, or not ATS readability)**
+- **Font size or colour contrast:** it does not affect the text layer.
+- **A separate "Skills" heading:** the renderer puts skills under Summary. Reporting it would flag every resume, and the user cannot fix it without a template change (owner decision needed).
+- **Keyword coverage:** that is Job Match / Keyword Gap, out of scope.
+
+**Product finding for the owner.** Real PDF output shows that 9 of 12 templates export letter-spaced text:
+- the name, in the 4 upper-case-name templates;
+- the headings, in the 6 underline or small-caps heading templates.
+
+A PDF text layer splits both into single letters. The checker reports this honestly and points to the DOCX export. Changing the templates (for example, removing letter-spacing from the PDF output) is a template change, and needs an owner decision.
+
+**Corpus** (`__tests__/fixtures/ats-corpus.ts`)
+- **Strong (5):** the sample, a UK engineer with ISO dates and "C++/C#", a multilingual resume with accents, an Arabic name and location, and a resume with certification and expected dates. **0 findings** in the plain template. In letter-spaced templates, only the template-text finding, checked over all 12 templates.
+- **Weak (8):** each flags only its own rule:
+
+  | Resume | Findings | Rules flagged |
+  |---|---|---|
+  | missingContact | 4 | contact |
+  | symbols | 3 | characters |
+  | invisible | 3 | invisible |
+  | bullets | 7 | bullets |
+  | dates | 6 | dates |
+  | formatting | 4 | formatting |
+  | entries | 6 | entries + sections |
+  | noExperience | 3 | sections |
+
+- **Edge (5):**
+  - empty: 7 findings (contact + sections);
+  - long (12 roles), multiline and punctuation-heavy: 0 findings;
+  - malformed: repaired, then contact, sections and dates are reported.
+
+**Tests: 383** (350 before, all still passing; +33 in `ats.test.ts`)
+
+| Area | Covered |
+|---|---|
+| Rules | positive, negative, borderline and false-positive guards for all 10 rules; the date grammar on its own |
+| Corpus | strong × 12 templates, weak, edge |
+| Properties | 300 generated resumes from a fixed-seed generator: never throws, fixed rule order, status equals the worst finding, unique ids, locations are real editor sections |
+| Determinism | same input gives the same report; the resume is not modified |
+| No score | no score, percentage, "compatible" or "guarantee" wording |
+| Real output | DOCX for all 12 templates (headings and name are whole words; no header, footer or table); **Chromium PDF + pdf.js** for all 12 templates (letter-spacing claims hold exactly; name → phone → email → summary order; contact in the main text; bullets intact) |
+| Architecture | `domain/ats` pure; no entitlement or paywall on the ATS path; only the ATS tab uses the engine; Resume Score and Check untouched |
+
+**Mutation checks: 22, all caught.**
+- *Missed detections:* email accepts anything; no phone digit range; missing Experience not flagged; heading or name letter-spacing ignored; emoji or zero-width space missed; line breaks in one-line fields ignored; duplicates keep the glyph; any date accepted; order never checked; mixed formats ignored; duplicate or untitled entries ignored; no normalization; status ignores findings.
+- *False positives:* all non-ASCII flagged; ZWNJ flagged; ">" as a bullet; all-capitals on short text; `__x__` Markdown.
+- *Copy:* score-like wording.
+
+**Validation:** clean install ✅, `tsc` ✅, `expo lint` ✅, 383/383 ✅. iOS and Android release bundles ✅: the ATS engine is included; fake store, billing SDKs, AI SDKs, testing and spell-check libraries are absent. No dependency, schema or persistence changes.
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator (NOT RUN) |
+|---|---|
+| Rules, corpus, properties, template claims against Chromium PDF and generated DOCX | The ATS tab layout and Improve navigation on iOS and Android |
+| | Letter-spacing in `expo-print` PDFs (WebKit on iOS, Chromium-based on Android): expected the same, not confirmed |
 
 ## 20. Major risks and failure modes
 
