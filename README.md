@@ -3,7 +3,8 @@
 Standalone iOS and Android resume builder (Expo). No AI, no backend: resumes stay on the device and
 the app works offline.
 
-**Status: migration in progress.** The app is still the prototype, restructured with a real SQLite data layer (steps 1–3 of
+**Status: migration in progress.** The app is still the prototype, restructured with a real SQLite data layer, entitlement
+architecture, secure export and a watermarked FREE preview (steps 1–5 of
 [`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md)). The product specification,
 pricing (free to build, $7.99/month "premium" to export) and the remaining steps are in that plan.
 
@@ -25,7 +26,8 @@ src/
 
 ```bash
 npm install
-npm test            # unit + architecture guard tests (no AI, no network, mobile-only deps)
+npm test            # unit + architecture guard tests (no AI, no network, mobile-only deps);
+                    # layout tests run in Chromium when it is installed (CHROMIUM_PATH), else skip
 npm run typecheck
 npm run lint
 npx expo run:ios    # or: npx expo run:android (development build)

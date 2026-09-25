@@ -90,9 +90,11 @@ describe('core features work without a network', () => {
     for (const file of sourceFiles()) {
       const source = readFileSync(file, 'utf8');
       expect(source, relative(SRC, file)).not.toMatch(/\bfetch\(|XMLHttpRequest|new WebSocket|EventSource|axios/);
-      // http(s) may appear only inside regular expressions that recognize links in resume text.
+      // http(s) may appear only inside regular expressions that recognize links in resume text,
+      // or as the SVG XML namespace name (an identifier that is never fetched).
       for (const line of source.split('\n')) {
-        if (/https?:\/\//.test(line)) expect(line, relative(SRC, file)).toMatch(/https\?:\\\/\\\//);
+        const withoutSvgNamespace = line.replace("xmlns='http://www.w3.org/2000/svg'", '');
+        if (/https?:\/\//.test(withoutSvgNamespace)) expect(withoutSvgNamespace, relative(SRC, file)).toMatch(/https\?:\\\/\\\//);
       }
     }
   });

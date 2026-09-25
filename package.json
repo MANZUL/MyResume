@@ -28,6 +28,7 @@
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
     "jszip": "^3.10.2",
+    "playwright-core": "1.56.1",
     "typescript": "~6.0.3",
     "vitest": "^5.0.2"
   },

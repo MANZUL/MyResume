@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–4 are done** (§19, §19.1–§19.4). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–5 are done** (§19, §19.1–§19.5). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -673,14 +673,14 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 2 ✅ | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile. **Done** (see §19.2) | CRUD and migration tests ✅ |
 | 3 ✅ | **Entitlement architecture:** **Done** (see §19.3). `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume). *The Settings subscription section was not built in step 3 (new UI); it moves to step 12 with the other settings* | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall ✅ |
 | 4 ✅ | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume. **Done** (see §19.4) | Unit tests for the gates ✅ ◆ PDF and DOCX on both platforms: **still open** (no device yet) |
-| 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
+| 5 ✅ | Renderer parity (rules, Letter/A4), **watermark** in the FREE preview, Boardroom/Foreman mark overlap. **Done, narrowed scope** (see §19.5). *Bundled spec fonts, thumbnails, gallery, paper picker and the custom-color UI were taken out of step 5 by the owner and move to step 12* | Layout tests in a real engine ✅: no text under a mark, preview/PDF geometry parity, watermark coverage and readability, no watermark in PREMIUM or PDF ◆ WebView and `expo-print` on devices: **still open** |
 | 6 | **Image export**: PDF → PNG via pdf.js (fallback: view-shot), per page, through `ExportService` | ◆ PNG matches the PDF on both platforms; memory caps respected |
 | 7 | Editor parity; Resume Score (FREE) with jump-to-section | ◆ Editor pass |
 | 8 | Writing Coach (PREMIUM) | Rule tests; no-fact-insertion |
 | 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
 | 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
 | 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
-| 12 | Backup, settings, error boundary, accessibility, low-end Android performance | ◆ Release-candidate QA |
+| 12 | Backup, settings, error boundary, accessibility, low-end Android performance; items moved from step 5 (bundled spec fonts, thumbnails, gallery, paper picker, custom-color UI) | ◆ Release-candidate QA |
 | 13 | **(Separate approval)** EAS builds and store submission | — |
 
 ---
@@ -1078,6 +1078,75 @@ A mutation check was also run: removing the second entitlement check, or making 
 | Letter and A4 page sizes of the export HTML via Chromium | `expo-file-system` folder create/delete and move; the launch purge |
 | DOCX structure and content, by unzipping the generated file | `expo-sharing` on both platforms (it cannot report completed vs. dismissed; recorded as shared) |
 | iOS and Android release bundles: export modules present, fake store and billing SDKs absent | Background interruption and app kill during a real export |
+
+### 19.5 Step 5 record: FREE preview watermark, preview/PDF parity, mark overlap
+
+**Scope (owner, narrowed).** Only three things: the FREE preview watermark, rendering parity between the preview and the PDF, and the Boardroom/Foreman quarter-circle overlap. No image export, paper-picker UI, billing, AI, backend, template redesign or settings work.
+
+**1. Watermark (FREE preview only)**
+
+- A repeating, diagonal "PREVIEW" tile (SVG data URI, −30°, opacity 0.11, 300×190 px tile) on an overlay `div.watermark` that covers the whole sheet (`inset: 0`), sits above the content (`z-index` 5 over the content's 1) and ignores touches.
+- `PreviewService` decides it from `EntitlementService` alone (`watermark = !premium`). Screens pass only the resume, and extra arguments or premium-looking fields are ignored.
+- The renderer honours `watermark` **only in preview mode**. A PDF is never watermarked, even when asked, and DOCX has no watermark path at all.
+- The watermark is not stored in the resume. Rendering does not modify the resume, and the content block is byte-identical with and without it.
+- Text selection is disabled in the watermarked preview. Screenshots of the screen cannot be prevented (decision recorded in revision 3); the watermark is what makes them unusable.
+
+**2. One rendering path, same layout**
+
+- The output is split into three marked blocks: `content` (resume HTML), `shared` CSS (typography, colors, spacing, sections, marks) and `geometry` CSS (page framing). The first two are **byte-identical** between preview and PDF for all 12 templates and both paper sizes. Only `geometry` differs: the preview is a sheet of paper width with 0.75 in padding; the PDF uses `@page { size; margin: 0.75in }`.
+- Data is normalised before rendering, so malformed data never throws.
+- Verified in a real engine: every element inside the content has the same position and size in the preview and in print layout (Letter exact; A4 within 1 px because the A4 content box is 649.7 px).
+
+**3. Decorative marks (Boardroom, Foreman, and the top-rule templates)**
+
+- **Cause.** In PDF mode the marks were drawn inside the content box over the header, so the quarter-circle covered the end of the contact line (Boardroom) and `eleanorvance.com` (Foreman), and the Editorial rule touched the name. The web original drew them in the paper corner, but print engines do not paint in the page margins (Chromium clips there), and `expo-print` margins are set for the whole document.
+- **Fix.** The marks stay the same size, shape, color and corner, but are now drawn **inside a reserved band of the content box**, identically in the preview and the PDF.
+  - The header of a quarter-circle template keeps 104 px free on both sides (the header is centred) and is at least 96 px tall.
+  - Top-rule templates keep 24 px above the header.
+- **Visible change (intentional).** The quarter-circle now sits at the top-right of the content area instead of the paper corner. This was the only way to get the same result in the preview and in every print engine. Templates were not otherwise redesigned.
+
+**Tests: 221 in total** (202 before; +13 `render-parity.test.ts`, +6 `render-layout.test.ts`)
+
+| Area | Covered |
+|---|---|
+| Parity (strings) | content and shared CSS identical for 12 templates × 2 papers; only geometry differs; `MARGIN_PT = 0.75 × 72`; section order |
+| Parity (layout, Chromium) | element-by-element geometry equal in preview and print layout, 12 templates × Letter/A4 |
+| Overlap (layout, Chromium) | no text rectangle intersects a mark, for all 6 mark templates, preview and PDF, sample and long data; the quarter-circle keeps its 96 px size in the top-right corner |
+| Long data | long name, email, website and company names: no text outside the page and no horizontal scroll, all 12 templates |
+| Watermark | FREE on, PREMIUM off; the PDF is never watermarked; screens cannot remove it; the resume is not mutated; pixel check: the FREE screenshot differs from PREMIUM in **every** 320×210 block (full coverage), and no pixel is darkened by more than 40/255 (readability) |
+| Multi-page | a long resume prints on ≥ 2 pages, and every page is 612×792 pt (Letter) or 595×842 pt (A4) with no watermark |
+| Edge cases | malformed data, empty resume, unknown template, invalid color |
+
+The layout tests use `playwright-core` (new **dev-only** dependency, exact version 1.56.1, no browser download) with the preinstalled Chromium, and skip when Chromium is not present (`CHROMIUM_PATH` overrides the path).
+
+**Mutation checks (each reverted after the run)**
+
+| Mutation | Result |
+|---|---|
+| Remove the quarter-circle header reservation | 2 tests fail (string + real-layout overlap) |
+| Remove the top-rule header padding | 2 tests fail |
+| Let PDF mode honour `watermark` | 2 tests fail |
+| Watermark `no-repeat` | 2 tests fail (structure + pixel coverage) |
+| Watermark opacity 0.6 | 2 tests fail (opacity bound + pixel darkening) |
+| `PreviewService` never watermarks | 4 tests fail |
+
+**Architecture guard change.** The "no network URLs in source" guard now allows exactly one string, the SVG namespace `xmlns='http://www.w3.org/2000/svg'` used by the watermark tile. It is an identifier, not a request. A mutation check confirmed that any other `http(s)://` URL still fails the guard.
+
+**Validation:** clean install (`npm ci`) ✅, `tsc --noEmit` ✅, `expo lint` ✅, 221/221 tests ✅. iOS and Android release bundles ✅: fake store absent, billing SDKs absent, no AI SDKs, no `playwright-core`.
+
+**Known limits and leftovers**
+
+- The preview is one continuous sheet. It does not show where the PDF will break pages. Page breaks are verified only in the PDF (Chromium).
+- Fonts are still the system serif/sans stacks. The spec fonts are not bundled yet (moved to step 12), so the iOS, Android and Chromium glyph metrics differ slightly. Parity here means the same engine inputs, not identical pixels across platforms.
+- The paper picker UI is not built (Letter is the default; A4 is supported by the renderer and `ExportService`).
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator |
+|---|---|
+| Renderer output, parity and watermark decisions (unit tests) | The watermark in the iOS `WKWebView` and the Android WebView (SVG data-URI backgrounds, opacity) |
+| Layout, overlap, overflow, watermark coverage and multi-page PDF in Chromium | `expo-print` page breaks and mark position on iOS (WebKit) and Android |
+| Release bundles for both platforms | Pinch-zoom and scaling of the preview sheet on small and large phones |
 
 ## 20. Major risks and failure modes
 

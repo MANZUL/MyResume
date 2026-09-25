@@ -1,3 +1,4 @@
+import { normalizeResumeData } from '../resume/normalize';
 import { getTemplate, type TemplateConfig } from '../templates/templates';
 import { escapeHtml, isHexColor, tintHex } from '../shared/text';
 import type { ResumeData } from '../resume/types';
@@ -18,79 +19,82 @@ export const PAPER_POINTS: Record<PaperSize, { width: number; height: number }> 
   a4: { width: 595, height: 842 }, // 210 × 297 mm
 };
 
+/** Page margin used by both the preview (as page padding) and the PDF (as print margins). */
+export const PAGE_MARGIN_IN = 0.75;
+const PAPER_CSS: Record<PaperSize, { width: string; height: string; name: string }> = {
+  letter: { width: '8.5in', height: '11in', name: 'letter' },
+  a4: { width: '210mm', height: '297mm', name: 'A4' },
+};
+
+/** Size of the quarter-circle mark and the room kept free around it. */
+export const QUARTER_CIRCLE_PX = 96;
+const MARK_GAP_PX = 8;
+const RULE_PX = 8;
+
+/**
+ * Repeating diagonal "PREVIEW" tile for the FREE preview. It is an overlay
+ * above the content (so no screenshot crop is clean) at low opacity (so the
+ * resume stays readable). It exists only in preview mode, never in a PDF.
+ */
+const WATERMARK_TILE =
+  "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='190'>" +
+  "<text x='150' y='95' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30 150 95)' " +
+  "font-family='Helvetica, Arial, sans-serif' font-size='46' font-weight='700' letter-spacing='6' " +
+  "fill='#111111' fill-opacity='0.11'>PREVIEW</text></svg>";
+export const WATERMARK_TILE_URL = `data:image/svg+xml,${encodeURIComponent(WATERMARK_TILE)}`;
+
 export interface RenderOptions {
   templateId: string;
   accent: string;
   mode: RenderMode;
-  /** Adds a diagonal "PREVIEW" watermark. Used in the on-screen preview until exports are unlocked. */
+  /**
+   * Adds the repeating "PREVIEW" watermark. Honored only in preview mode; a PDF is
+   * never watermarked. Decided by PreviewService, not by screens.
+   */
   watermark?: boolean;
-  /** PDF page size. Defaults to US Letter. */
+  /** Page size for the preview sheet and the PDF. Defaults to US Letter. */
   paper?: PaperSize;
 }
 
 const e = escapeHtml;
 const nonEmpty = (items: string[]) => items.map((item) => item.trim()).filter(Boolean);
 
-export function renderResumeHtml(data: ResumeData, options: RenderOptions): string {
+export function renderResumeHtml(input: ResumeData, options: RenderOptions): string {
+  // Repair malformed data (missing lists, wrong types) so rendering never throws.
+  const data = normalizeResumeData(input);
   const config = getTemplate(options.templateId);
   const accent = isHexColor(options.accent) ? options.accent : config.defaultAccent;
-  const font = (kind: 'serif' | 'sans') => (kind === 'serif' ? SERIF : SANS);
+  const paper: PaperSize = options.paper === 'a4' ? 'a4' : 'letter';
+  const preview = options.mode === 'preview';
+  const watermark = preview && options.watermark === true;
 
-  const css = `
-    :root {
-      --accent: ${accent};
-      --tint: ${tintHex(accent, 0.1)};
-      --tint-strong: ${tintHex(accent, 0.15)};
-    }
-    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-    html, body { margin: 0; padding: 0; background: ${options.mode === 'preview' ? '#E9E7E2' : '#fff'}; }
-    @page { size: ${options.paper === 'a4' ? 'A4' : 'letter'}; margin: 0.75in; }
-    .page {
-      position: relative; overflow: hidden; background: #fff; color: #111;
-      font-family: ${font(config.fontBody)}; font-size: 10pt; line-height: 1.5;
-      ${options.mode === 'preview' ? 'width: 8.5in; min-height: 11in; padding: 0.75in; margin: 0 auto; box-shadow: 0 6px 24px rgba(0,0,0,.18);' : ''}
-    }
-    .stack { display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; }
-    .mark-qc { position: absolute; top: 0; right: 0; width: 96px; height: 96px; background: var(--accent); border-bottom-left-radius: 100%; }
-    .mark-rule { position: absolute; top: 0; left: 0; right: 0; height: 8px; background: var(--accent); }
-    h1 { margin: 0 0 4px; font-size: 28pt; font-weight: 700; line-height: 1.15; font-family: ${font(config.fontName)}; }
-    h2 { margin: 0 0 10px; font-size: 11pt; font-family: ${font(config.fontHeadings)}; color: var(--accent); }
-    .h-banner { padding: 3px 8px; font-weight: 700; background: var(--tint); letter-spacing: .06em; }
-    .h-underline { padding-bottom: 3px; font-weight: 700; border-bottom: ${config.headerRuleVariant === 'thick' ? 2 : 1}px solid var(--accent); letter-spacing: .12em; }
-    .h-small-caps { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; }
-    .h-small-caps-rule { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; border-bottom: ${config.headerRuleVariant === 'hairline' ? 0.5 : 1}px solid var(--accent); }
-    .h-plain { font-weight: 700; font-size: 12pt; letter-spacing: .04em; }
-    .upper { text-transform: uppercase; }
-    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-    .date { font-size: 9.5pt; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .muted { color: #444; }
-    .soft { color: #666; }
-    .italic { font-style: italic; }
-    .small { font-size: 9.5pt; }
-    ul { margin: 4px 0 0; padding-left: 18px; }
-    li { margin: 0 0 2px; font-size: 9.5pt; }
-    p { margin: 0 0 4px; }
-    section { break-inside: avoid-page; page-break-inside: avoid; }
-    .entry { display: flex; flex-direction: column; break-inside: avoid; page-break-inside: avoid; }
-    .entries { display: flex; flex-direction: column; gap: 12px; }
-    .pill { display: inline-block; font-size: 8.5pt; padding: 1px 8px; border-radius: 999px; background: var(--tint-strong); color: var(--accent); margin: 0 4px 4px 0; }
-    .watermark {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      pointer-events: none; z-index: 5; font: 700 96pt ${SANS}; color: rgba(0,0,0,.07);
-      transform: rotate(-30deg); letter-spacing: .1em;
-    }
-  `;
+  const css = [
+    `/*shared*/${sharedCss(config, accent)}/*/shared*/`,
+    `/*geometry*/${geometryCss(options.mode, paper)}/*/geometry*/`,
+    watermark ? `/*watermark*/${WATERMARK_CSS}/*/watermark*/` : '',
+  ].join('\n');
 
+  // Preview: a fixed-width viewport (page + gutter) makes iOS and Android WebViews
+  // scale the page to fit the screen width, with pinch-zoom for detail.
+  const viewport = preview ? '<meta name="viewport" content="width=848, maximum-scale=4">' : '';
+  const overlay = watermark ? '<div class="watermark" aria-hidden="true"></div>' : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${viewport}<title>${e(data.name || 'Resume')}</title><style>${css}</style></head><body${
+    preview ? ' style="padding:16px"' : ''
+  }><div class="page"><!--content-->${renderContent(data, config)}<!--/content-->${overlay}</div></body></html>`;
+}
+
+/** Everything inside the page margins. Identical in the preview and the PDF. */
+export function renderContent(data: ResumeData, config: TemplateConfig): string {
   const parts: string[] = [];
-
-  if (config.decorativeMark === 'quarter-circle') parts.push('<div class="mark-qc"></div>');
-  if (config.decorativeMark === 'rule') parts.push('<div class="mark-rule"></div>');
-  if (options.watermark) parts.push('<div class="watermark">PREVIEW</div>');
+  const markClass =
+    config.decorativeMark === 'quarter-circle' ? ' has-qc' : config.decorativeMark === 'rule' ? ' has-rule' : '';
+  parts.push(`<div class="content${markClass}${config.nameAlign === 'center' ? ' centered' : ''}">`);
+  if (config.decorativeMark === 'quarter-circle') parts.push('<div class="mark-qc" aria-hidden="true"></div>');
+  if (config.decorativeMark === 'rule') parts.push('<div class="mark-rule" aria-hidden="true"></div>');
 
   parts.push('<div class="stack">');
   parts.push(renderHeader(data, config));
-
   const summaryBullets = nonEmpty(data.summary.bullets);
   const skills = nonEmpty(data.summary.skills);
   if (data.summary.tagline.trim() || summaryBullets.length || skills.length) {
@@ -160,17 +164,84 @@ export function renderResumeHtml(data: ResumeData, options: RenderOptions): stri
   if (awards.length) parts.push(section('Awards', config, list(awards)));
 
   parts.push('</div>');
-
-  // Preview: a fixed-width viewport (page + gutter) makes iOS and Android WebViews
-  // scale the letter-size page to fit the screen width, with pinch-zoom for detail.
-  const viewport = options.mode === 'preview'
-    ? '<meta name="viewport" content="width=848, maximum-scale=4">'
-    : '';
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">${viewport}<title>${e(data.name || 'Resume')}</title><style>${css}</style></head><body${
-    options.mode === 'preview' ? ' style="padding:16px"' : ''
-  }><div class="page">${parts.join('')}</div></body></html>`;
+  parts.push('</div>');
+  return parts.join('');
 }
+
+function sharedCss(config: TemplateConfig, accent: string): string {
+  const font = (kind: 'serif' | 'sans') => (kind === 'serif' ? SERIF : SANS);
+  const qcRoom = QUARTER_CIRCLE_PX + MARK_GAP_PX;
+  return `
+    :root {
+      --accent: ${accent};
+      --tint: ${tintHex(accent, 0.1)};
+      --tint-strong: ${tintHex(accent, 0.15)};
+    }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .stack { display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; }
+    h1 { margin: 0 0 4px; font-size: 28pt; font-weight: 700; line-height: 1.15; font-family: ${font(config.fontName)}; }
+    h2 { margin: 0 0 10px; font-size: 11pt; font-family: ${font(config.fontHeadings)}; color: var(--accent); }
+    .h-banner { padding: 3px 8px; font-weight: 700; background: var(--tint); letter-spacing: .06em; }
+    .h-underline { padding-bottom: 3px; font-weight: 700; border-bottom: ${config.headerRuleVariant === 'thick' ? 2 : 1}px solid var(--accent); letter-spacing: .12em; }
+    .h-small-caps { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; }
+    .h-small-caps-rule { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; border-bottom: ${config.headerRuleVariant === 'hairline' ? 0.5 : 1}px solid var(--accent); }
+    .h-plain { font-weight: 700; font-size: 12pt; letter-spacing: .04em; }
+    .upper { text-transform: uppercase; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .date { font-size: 9.5pt; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .muted { color: #444; }
+    .soft { color: #666; }
+    .italic { font-style: italic; }
+    .small { font-size: 9.5pt; }
+    ul { margin: 4px 0 0; padding-left: 18px; }
+    li { margin: 0 0 2px; font-size: 9.5pt; }
+    p { margin: 0 0 4px; }
+    section { break-inside: avoid-page; page-break-inside: avoid; }
+    .entry { display: flex; flex-direction: column; break-inside: avoid; page-break-inside: avoid; }
+    .entries { display: flex; flex-direction: column; gap: 12px; }
+    .pill { display: inline-block; font-size: 8.5pt; padding: 1px 8px; border-radius: 999px; background: var(--tint-strong); color: var(--accent); margin: 0 4px 4px 0; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    .content {
+      position: relative; color: #111;
+      font-family: ${font(config.fontBody)}; font-size: 10pt; line-height: 1.5;
+      overflow-wrap: anywhere; word-break: normal;
+    }
+    .row > :first-child { min-width: 0; }
+    /* Decorative marks sit in a reserved band inside the content box, so they never
+       overlap text and render the same in the preview and in every print engine. */
+    .mark-qc { position: absolute; top: 0; right: 0; width: ${QUARTER_CIRCLE_PX}px; height: ${QUARTER_CIRCLE_PX}px; background: var(--accent); border-bottom-left-radius: 100%; }
+    .has-qc header { padding-right: ${qcRoom}px; min-height: ${QUARTER_CIRCLE_PX}px; }
+    .has-qc.centered header { padding-left: ${qcRoom}px; }
+    .mark-rule { position: absolute; top: 0; left: 0; right: 0; height: ${RULE_PX}px; background: var(--accent); }
+    .has-rule header { padding-top: ${RULE_PX + MARK_GAP_PX * 2}px; }
+  `;
+}
+
+/** The only part that differs between preview and PDF: how the page frames the content. */
+function geometryCss(mode: RenderMode, paper: PaperSize): string {
+  const size = PAPER_CSS[paper];
+  const margin = `${PAGE_MARGIN_IN}in`;
+  if (mode === 'preview') {
+    return `
+    html, body { margin: 0; padding: 0; background: #E9E7E2; }
+    @page { size: ${size.name}; margin: ${margin}; }
+    .page { position: relative; overflow: hidden; background: #fff; width: ${size.width}; min-height: ${size.height}; padding: ${margin}; margin: 0 auto; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+  `;
+  }
+  return `
+    html, body { margin: 0; padding: 0; background: #fff; }
+    @page { size: ${size.name}; margin: ${margin}; }
+    .page { position: relative; background: #fff; }
+  `;
+}
+
+const WATERMARK_CSS = `
+    .watermark {
+      position: absolute; inset: 0; z-index: 5; pointer-events: none;
+      background-image: url("${WATERMARK_TILE_URL}"); background-repeat: repeat; background-size: 300px 190px;
+    }
+    .content { -webkit-user-select: none; user-select: none; }
+  `;
 
 function renderHeader(data: ResumeData, config: TemplateConfig): string {
   const contact = contactParts(data);
