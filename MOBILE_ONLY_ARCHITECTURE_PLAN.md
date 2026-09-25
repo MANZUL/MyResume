@@ -1,85 +1,90 @@
 # My Resume — mobile-only architecture plan
 
-**Status: plan only.** Nothing here has been implemented. No billing SDK, no AI, no EAS builds.
-**Revision 2:** pricing changed from $5 per template to one **$7.99/month "premium" subscription**.
+**Status: plan only.** Nothing is implemented yet: no billing SDK, no AI, no EAS builds.
 
-**Product decisions (owner):**
+**Revision 3: "Free to build, paid to export."**
+- FREE users can build, edit, save and preview resumes.
+- PREMIUM ($7.99/month, entitlement `premium`) is needed to take the resume *out* of the app (PDF, DOCX, image, share, clean output), and for the premium tools.
+- Revision 2's FREE/PREMIUM split is withdrawn.
+
+**Product decisions (owner)**
 
 | Decision | Value |
 |---|---|
-| Product | **My Resume**, a standalone iOS + Android app. No website, no web product |
+| Product | **My Resume**: standalone iOS + Android app. No website, no web product |
 | Repository | `MANZUL/MyResume` |
 | iOS bundle ID / Android package | `com.manzul.myresume` |
 | Language | English only in V1 |
-| AI | None, anywhere. Every feature is deterministic and on-device |
-| Backend | None for normal use. The only online operations are store purchase, restore, refresh and subscription management |
-| Pricing | **$7.99/month auto-renewing subscription**, one entitlement: **`premium`**. No per-template purchases, no template entitlements |
-| Free forever | **Cover Letter**, plus the core FREE tier defined in §4.2 |
-| Payment providers (later) | Apple App Store subscriptions (iOS), Google Play subscriptions (Android). No Dodo |
+| AI | None anywhere. Every feature is deterministic and on-device |
+| Backend | None for normal use. Online only for store purchase, restore, refresh and subscription management |
+| Product model | **FREE: Build + Edit + Preview. PREMIUM ($7.99/month): Export + premium tools** |
+| Entitlement | One: **`premium`**. No per-template products or entitlements |
+| Cover Letter | Always FREE |
+| Payment providers (later) | Apple App Store subscription (iOS) and Google Play subscription (Android). No Dodo |
 
-**Sources:**
-- The web repo `MANZUL/Resume` (commit `8e04af0`) is the **product specification** only.
-- The prototype `resume-mobile/` is **not** a source of truth. §18 classifies it module by module.
-- This document supersedes the option-C "shared web/mobile core" recommendation in `MOBILE_PARITY_AUDIT.md`.
-  That audit's inventory and evidence remain valid.
+**Sources**
+- The web repo `MANZUL/Resume` at `8e04af0` is the **product specification** only.
+- The prototype in `resume-mobile/` is **not** a source of truth; §18 classifies it.
+- This plan supersedes option C in `MOBILE_PARITY_AUDIT.md`.
 - `PAYMENT_AUDIT.md` covers the web product and is not relevant to this app.
 
-The types below are **design notation**, not code to paste in.
+Types below are **design notation**, not code to paste in.
 
 ---
 
-## 1. Complete feature inventory (the specification)
+## 1. Complete feature inventory (specification) and tier
 
-These features were extracted from the web code. The prompts in `attached_assets/` were used only to understand intent. "Tier" is the V1 decision; items marked † are my proposal and need confirmation (see the end of this document).
+The inventory was extracted from the web code. Items marked ◇ are **new for mobile**; they are not in the spec but the owner requires them. Items marked † are my proposals and need confirmation (see the end of this document).
 
-| # | Spec feature | Where in spec | Mobile approach | Tier |
+| # | Feature | Spec source | Mobile approach | Tier |
 |---|---|---|---|---|
-| 1 | Home value props (Upload → Improve → Apply; Improve / Tailor / Check / Export). The spec's "$5 once / No subscription" copy is **replaced** by the subscription offer | `home.tsx:298-506` | Native home screen | Free |
-| 2 | Live sample preview on home | `home.tsx:331-341` | Pre-rendered template image | Free |
-| 3 | Template gallery: 12 templates, "All + 6 categories", thumbnails, descriptions | `TemplateGallery.tsx`, `templates.ts` | Native gallery (browse all 12) | Free to browse |
-| 4 | Start from a template (loads the sample in that template) | `home.tsx:202-212` | Same | Free† |
-| 5 | Brand: logo mark and colors | `home.tsx:282-287` | App name **My Resume**; icon and splash derived from the logo mark | — |
-| 6 | Upload PDF/DOCX (8 MB; extension + MIME + magic-byte checks) | `resume-upload.ts` | On-device import (§8) | Free |
-| 7 | Paste resume / LinkedIn / notes → draft | `resume-parser.ts` (AI) | Deterministic parser + review (§8) | Free |
-| 8 | Parse failure → blank editor + message; upload failure → suggest paste | `home.tsx:144-147,165-171` | Same | Free |
-| 9 | Create from scratch | `startBlank` | Same | Free |
-| 10 | Sample resume (Eleanor Vance) | `sample-data.ts` | Same content | Free |
-| 11 | Autosave working draft (resume, template, accent, target JD) | `home.tsx:89-113` | SQLite autosave for every resume + its target job | Free |
-| 12 | Save / list / reopen drafts | `/resumes` API | Local library | Free |
-| 13 | Close editor | `handleClose` | Back navigation; nothing discarded | Free |
-| 14–20 | Editor sections: personal, summary (tagline/bullets/skills), experience, education, certifications, projects, awards | `ResumeEditor.tsx` | Native forms, same fields | Free |
-| 21 | Empty-list hint copy | `ResumeEditor.tsx:361-365` | Same | Free |
-| 22 | Improve with AI (6 actions on 5 field types) | `ResumeEditor.tsx:408-466`, `resume-ai.ts` | **Writing Coach**, deterministic (§3) | **Premium** |
-| 23 | Job Match: JD, keywords, matched/missing, %, title, honesty note | `ResumeTools.tsx`, `resume-ai.ts:104-180` | Local engine (§9) | **Premium** |
-| 24 | Tailoring suggestions: Accept / Reject / Review section | `ResumeTools.tsx:187-218` | Deterministic, fact-preserving (§9) | **Premium** |
-| 25 | Resume Check: score, categories, strengths, warnings, jump-to-section, "No ATS guarantee" disclaimer | `resume-score.ts`, `ResumeTools.tsx:283-326` | Same rules and copy | Free† |
-| 26 | Cover letter from resume + JD; editable, copy, regenerate | `resume-ai.ts:182-219` | Deterministic, JD-aware (§10) | **Free (owner decision)** |
-| 27 | 12 templates with exact styling | `templates.ts`, `TemplateRenderer.tsx` | One data-driven renderer (§7) | Preview free; clean output premium |
-| 28 | Template picker (category + description). Changing the template resets the accent | `home.tsx:578-616,607` | Same | Free to select† |
-| 29 | Accent presets (template default + 8 spec colors) | `home.tsx:623` | Same palette | **Premium**† (free = template default accent) |
-| 30 | Custom accent color | `home.tsx:634-643` | Native picker | **Premium** |
-| 31 | Live preview | right panel | Preview screen | Free (watermarked for FREE users) |
-| 32 | PDF export | `window.print()` | Local PDF, Letter/A4 (§11) | **Premium** |
-| 33 | Word export | `export-docx.ts` | Same generator (§11) | **Premium** |
-| 34 | Paywall ("Template access · $5") | `ExportBar.tsx` | **Replaced** by a single premium subscription paywall (§4) | — |
-| 35 | Entitlement per visitor + template | `payments.ts:25-33` | **Replaced** by one `premium` entitlement bound to the store account | — |
-| 36 | Error boundary | `error-boundary.tsx` | Root boundary with a "your data is saved" message | Free |
+| 1 | Home value props (Upload → Improve → Apply). The spec's "$5 once / No subscription" copy is **replaced** with "Free to build, subscribe to export" | `home.tsx:298-506` | Native home | FREE |
+| 2 | Live sample preview on home | `home.tsx:331-341` | Pre-rendered template image | FREE |
+| 3 | Template gallery: 12 templates, categories, thumbnails, descriptions | `TemplateGallery.tsx` | Native gallery | FREE |
+| 4 | Start from a template | `home.tsx:202-212` | Same | FREE |
+| 5 | Brand | `home.tsx:282-287` | App name "My Resume"; icon and splash from the logo mark | — |
+| ◇ | **Create an account** | not in spec | **Open decision; conflicts with "no backend".** V1 proposal: local profile, no sign-in (§4.6) | FREE |
+| 6 | Upload PDF/DOCX | `resume-upload.ts` | On-device import (§8) | FREE |
+| 7 | Paste resume / LinkedIn / notes → draft | `resume-parser.ts` (AI) | Deterministic parser + review (§8) | FREE |
+| 8 | Parse / upload failure paths | `home.tsx:144-171` | Same | FREE |
+| 9 | Create from scratch | `startBlank` | Same | FREE |
+| 10 | Sample resume | `sample-data.ts` | Same content | FREE |
+| 11 | Autosave (resume, template, accent, target JD) | `home.tsx:89-113` | SQLite autosave | FREE |
+| 12 | Save / list / reopen resumes | `/resumes` API | Local library | FREE |
+| 13 | Close editor | `handleClose` | Back navigation | FREE |
+| 14–20 | Editor sections (personal, summary, experience, education, certifications, projects, awards) | `ResumeEditor.tsx` | Native forms | FREE |
+| 21 | Empty-list hint copy | `ResumeEditor.tsx:361-365` | Same | FREE |
+| 22 | Improve with AI (6 actions) | `ResumeEditor.tsx:408-466` | **Writing Coach**, deterministic (§3) | **PREMIUM** |
+| 23 | Job Match | `ResumeTools.tsx`, `resume-ai.ts:104-180` | Local engine (§9) | **PREMIUM** |
+| 24 | Tailoring suggestions | `ResumeTools.tsx:187-218` | Deterministic (§9) | **PREMIUM** |
+| 25 | Resume Score / Check (score, warnings, jump-to-section, disclaimer) | `resume-score.ts` | Same rules | **FREE** |
+| 26 | Cover Letter (generate, edit, copy) | `resume-ai.ts:182-219` | Deterministic, JD-aware (§10) | **FREE** |
+| 27 | Use all 12 templates | `templates.ts`, `TemplateRenderer.tsx` | One data-driven renderer (§7) | **FREE** |
+| 28 | Template picker; changing the template resets the accent | `home.tsx:578-616` | Same | FREE |
+| 29 | Default customization: template default accent + the spec's 8 preset colors | `home.tsx:623` | Same palette | **FREE**† |
+| 30 | Custom accent color (free hex/color picker) | `home.tsx:634-643` | Native picker | **PREMIUM**† ("premium customization") |
+| 31 | In-app preview of the full resume | right panel | Preview screen, full resume, every page | **FREE** (with "PREVIEW" watermark) |
+| 32 | PDF export | `window.print()` | Local PDF, Letter/A4 (§11) | **PREMIUM** |
+| 33 | DOCX export | `export-docx.ts` | Spec generator (§11) | **PREMIUM** |
+| ◇ | **Image export** (PNG per page) | not in spec | Rendered from the export PDF (§11) | **PREMIUM** |
+| ◇ | **Share exported files/images** | spec: browser download | OS share sheet, called only by the export service | **PREMIUM** |
+| ◇ | **Clean, unwatermarked output** (exports + preview) | — | The watermark exists only in the FREE preview | **PREMIUM** |
+| 34 | Paywall | `ExportBar.tsx` | **Replaced**: one Premium subscription paywall (§4) | — |
+| 35 | Entitlement per visitor + template | `payments.ts:25-33` | **Replaced**: one `premium` entitlement on the store account | — |
+| 36 | Error boundary | `error-boundary.tsx` | Root boundary | FREE |
 
-**Validation rules carried over from the spec:**
+**Spec validation rules carried over**
+- Pasted text: 50,000 characters max.
+- Uploads: 8 MB max; PDF or DOCX; extension, MIME type and magic bytes must agree.
+- Improve input: 6,000 characters max; context 300 max.
+- Job description: 25,000 characters max.
+- Analysis JSON: 60,000 characters max.
+- Accent color must be a `#RRGGBB` hex value.
+- Grounding: no number or specialized term may appear in output unless it is in the source.
 
-| Input | Rule |
-|---|---|
-| Pasted text | ≤ 50,000 characters |
-| Uploaded file | ≤ 8 MB; PDF or DOCX; extension, MIME type and magic bytes must agree |
-| Improve input | ≤ 6,000 characters; context ≤ 300 |
-| Job description | ≤ 25,000 characters |
-| Resume JSON used for analysis | ≤ 60,000 characters |
-| Accent color | Must be `#RRGGBB` |
-| Grounding | Numbers and specialized terms in any output must already appear in the source |
+**Invariant for every deterministic feature:** it never inserts a fact, number, skill, employer or date that is not already in the user's own text.
 
-**Grounding invariant for all deterministic features:** never insert a fact, number, skill, employer or date that is not already in the user's own text.
-
-**Not carried over:** health indicator, SEO/OG meta, 404 page, visitor cookie, Dodo, rate limiting, `mockup-sandbox`.
+**Not carried over from the web app:** health indicator, SEO/OG, 404 page, visitor cookie, Dodo, rate limiting, `mockup-sandbox`.
 
 ---
 
@@ -87,41 +92,36 @@ These features were extracted from the web code. The prompts in `attached_assets
 
 ```
 src/
-  app/                 Expo Router screens only (thin)
-  features/            library/ editor/ templates/ preview/ export/ import/
-                       job-match/ cover-letter/ coach/ check/ paywall/ settings/
-  domain/              pure TypeScript, no React / React Native / Expo imports, fully unit-tested
-    resume/            model, schema version, validation, migrations, sample
-    templates/         catalog (12 configs + fonts), palettes
-    render/            resume → HTML (preview + PDF), resume → DOCX model
-    parse/  match/  letter/  coach/  check/
-    access/            FeatureKey catalog + policy: canUse(feature, AccessSnapshot)
-  services/            side effects behind interfaces (injected, fakeable)
-    storage/           SQLite repositories + migrations
-    subscription/      SubscriptionService + StoreProvider implementations
-    export/            PDF / DOCX / file / share
-    import/            document picker, DOCX/PDF text extraction
-  ui/                  design system
+  app/            Expo Router screens (thin)
+  features/       library/ editor/ templates/ preview/ export/ import/
+                  job-match/ cover-letter/ coach/ check/ paywall/ settings/ profile/
+  domain/         pure TypeScript: no React, React Native or Expo imports; unit-tested
+    resume/ templates/ render/ parse/ match/ letter/ coach/ check/
+    access/       PremiumFeature catalog + policy: requiresPremium(feature)
+  services/       side effects behind injected interfaces
+    storage/      SQLite repositories + migrations
+    entitlement/  EntitlementService + StoreProvider implementations
+    export/       ExportService: the only code that produces PDF/DOCX/PNG or calls share
+    import/       picker + DOCX/PDF text extraction
+  ui/             design system
 ```
 
-**Rules:**
+**Rules**
 - `domain/` never imports `services/`.
-- No module outside `services/subscription/providers/` may import a billing SDK.
-- No network code exists outside that folder. The existing no-AI/no-network test is extended to enforce this.
-- **Premium checks live in the feature services and the export service** (`canUse(...)`), not only in the UI.
+- Only `services/entitlement/providers/` may import a billing SDK.
+- Network code is allowed nowhere else. A CI test enforces this, along with no AI.
+- **Only `ExportService` may call `expo-print`, the DOCX packer, the image renderer, or `expo-sharing` for resume output.** A lint rule and test enforce this (§13).
 
-**Screens:**
-
-| Screen | Spec source |
-|---|---|
-| Home (library + value props + start actions) | Landing + saved drafts |
-| Template gallery | Gallery + curated cards |
-| Import (file / paste) → Review import | Upload + paste |
-| Editor (sections, Coach entry points for premium users) | Left panel |
-| Preview + template/customize | Right panel + picker bar |
-| Tools: Check, Job Match, Cover Letter | Editor tools tabs |
-| **Premium paywall** (one plan) | Replaces ExportBar/checkout |
-| Settings: subscription status, Manage subscription, Restore purchases, backup/restore data, paper size, Terms, Privacy | Mobile-specific |
+**Screens**
+- Home (library + value props + start actions)
+- Template gallery
+- Import → Review
+- Editor (Coach entry points)
+- Preview + template picker and customization (FREE: watermark)
+- Export sheet (PDF / DOCX / Image; Letter or A4)
+- Tools: Check (FREE), Cover Letter (FREE), Job Match (PREMIUM)
+- Premium paywall (one plan)
+- Settings: profile, subscription status, Manage subscription, Restore, backup, paper size, Terms, Privacy
 
 ---
 
@@ -129,359 +129,421 @@ src/
 
 | Spec AI feature | Deterministic replacement | Parity | Stated limitation | Tier |
 |---|---|---|---|---|
-| Parse pasted text | Rule-based parser (§8): heading dictionary, date grammar, layout-aware lines, LinkedIn mode, per-field confidence, **unassigned-lines bucket**, mandatory review step | Close for resumes with headings | "Check each section; lines we couldn't place are listed at the bottom." | Free |
-| Upload + parse | DOCX and text-PDF extraction on device, then the same parser | Good for text-based files | **No OCR for scanned PDFs**; the app suggests pasting instead | Free |
-| Improve / concise / professional / impact / grammar | **Writing Coach** rules (below): a reason for each finding, plus a one-tap fix where it is safe | Suggestions instead of rewrites | Free-form stylistic rewriting is an accepted non-AI limitation | Premium |
-| Improve: measurable | If a bullet has no number, ask "Can you add a measurable result here?" This is the spec's own no-number behavior (`resume-ai.ts:12,76`) | Same | — | Premium |
-| Job Match keywords + job title | Bundled skills taxonomy + JD section weights + phrase extraction + alias normalization (§9) | Close for common roles | Finite taxonomy | Premium |
-| Tailoring suggestions | Fact-preserving structural suggestions (§9) | Partial | "Suggestions only reuse what's already in your resume." | Premium |
-| Cover letter (+ verification pass) | JD-aware template generator (§10) | Close in structure | "Review and personalize before sending." | **Free** |
+| Parse pasted text | Rule-based parser + unassigned-lines bucket + review (§8) | Close for resumes that have headings | "Check each section; unplaced lines are listed." | FREE |
+| Upload + parse | Text extraction on device from DOCX and text-based PDFs, then the same parser | Good for text-based files | No OCR for scanned PDFs | FREE |
+| Improve / concise / professional / impact / grammar | **Writing Coach** rules with reasons and safe one-tap fixes | Suggestions, not rewrites | No free-form stylistic rewriting (non-AI limitation) | PREMIUM |
+| Improve: measurable | "Can you add a measurable result here?" when a bullet has no number (the spec's own fallback) | Same | — | PREMIUM |
+| Job Match keywords + title | Taxonomy + section weights + phrases + aliases (§9) | Close for common roles | Finite taxonomy | PREMIUM |
+| Tailoring suggestions | Fact-preserving structural suggestions (§9) | Partial | Only reuses the user's own text | PREMIUM |
+| Cover letter | JD-aware template generator (§10) | Close in structure | "Review and personalize." | FREE |
 
-### Writing Coach rules
-
-- **Weak openers** ("responsible for", "helped", "worked on", "duties included", "tasked with"): suggests 3–5 strong verbs. The user picks one; nothing is replaced automatically.
-- **Filler words** ("results-driven", "team player", "passionate", "various", "etc."): suggests removing them.
-- **Passive voice.** Flagged, no automatic fix.
-- **First-person pronouns** in bullets. Flagged, no automatic fix.
-- **Bullets longer than 32 words** (the spec's threshold): suggests splitting.
-- **Achievement bullet with no number:** asks the "measurable" question.
-- **Mechanics, with automatic fix:** double spaces, missing initial capital, inconsistent final periods, repeated words, a/an.
-- **Tense:** current role in present tense, past roles in past tense.
-- **Repetition:** the same opening verb on 3 or more bullets.
-- **Concise table** ("in order to" → "to", "utilize" → "use"): the change is shown as a preview before it is applied.
-
-The Coach runs on the same 5 field types that have "Improve with AI" in the spec.
+**Writing Coach rules**
+- Weak openers, with strong-verb choices the user picks from.
+- Filler words.
+- Passive voice.
+- First-person pronouns.
+- Bullets longer than 32 words.
+- Bullets with no measurable result.
+- Mechanics, auto-fixable: spacing, capitalization, final periods, repeated words, a/an.
+- Tense consistency.
+- Repeated opening verbs.
+- Wordy-phrase table, shown as a preview.
 
 ---
 
-## 4. Payment / product architecture (single `premium` subscription)
+## 4. Payment / product architecture
 
 ### 4.1 Commercial model
-- **One auto-renewing subscription: $7.99 per month.** One entitlement: `premium`.
-- The stores localize the price in other countries. $7.99 is a standard price point on both stores, so it can be set exactly.
-- No per-template products, no template entitlements, no one-time purchases in V1.
-- If the subscription is cancelled, premium stays active until the end of the paid period.
+- **One auto-renewing subscription at $7.99/month**, entitlement `premium`. The store localizes the price in other countries.
+- No one-time purchases, no per-template products, no bundles in V1.
+- When the user cancels, premium stays active until the end of the paid period.
 
 ### 4.2 FREE vs PREMIUM
 
 | Capability | FREE | PREMIUM |
 |---|---|---|
-| Create, edit, store, delete, duplicate resumes | ✓ | ✓ |
+| Create, edit, save, duplicate and delete resumes | ✓ | ✓ |
 | Import (paste, DOCX, PDF) + review | ✓ | ✓ |
-| Browse the gallery; select any of the 12 templates; preview | ✓ preview carries a "PREVIEW" watermark† | ✓ clean preview |
-| Accent color | template default only† | spec presets + custom color |
-| Paper size (Letter/A4) | ✓ (setting only) | ✓ |
-| Resume Check (score, warnings, jump-to-section) | ✓† | ✓ |
-| **Cover Letter** (generate, edit, copy, share) | ✓ **(always free)** | ✓ |
-| Writing Coach | — (entry points shown with a premium badge) | ✓ |
-| Job Match | — | ✓ |
-| Tailoring suggestions | — | ✓ |
-| PDF export, DOCX export | — | ✓ |
-| Backup export/import of own data | ✓ (user data is never paywalled) | ✓ |
+| Browse and **use all 12 templates** | ✓ | ✓ |
+| Default customization (template default accent + spec presets)† | ✓ | ✓ |
+| Premium customization (custom accent color)† | — | ✓ |
+| **In-app preview of the complete resume** | ✓ with a visible "PREVIEW" watermark | ✓ **no watermark** |
+| Resume Score / Check | ✓ | ✓ |
+| **Cover Letter** (generate, edit, copy) | ✓ | ✓ |
+| Writing Coach, Job Match, Tailoring Suggestions | — (shown with a Premium badge; tapping opens the paywall) | ✓ |
+| **PDF export** | — | ✓ |
+| **DOCX export** | — | ✓ |
+| **Image export (PNG)** | — | ✓ |
+| **Share exported files/images** | — | ✓ |
+| Backup of own data (raw JSON, not a rendered resume) | ✓ (data is never held hostage) | ✓ |
 
-**Principles:**
-- A user's data is never held hostage. When premium lapses, every resume stays readable and editable. Premium styling already saved on a resume (such as a custom accent) is kept and still shown in the preview, which falls back to the watermark. Edits the user already accepted from tailoring remain, because they are the user's text.
-- Engines run locally no matter what the user pays for. For example, the Cover Letter (free) uses the Job Match engine internally to pick evidence. **Gating applies to the features, not the engines.**
+**Principles**
+- There is no requirement to subscribe in order to create or edit.
+- A lapsed subscription never locks user data. Every resume stays editable and previewable, with the watermark.
+- A custom accent color that was already saved is kept. The preview still shows it.
+- Tailoring edits the user already accepted remain, because they are now the user's text.
+- **The engines always run locally.** Gating applies to features, not engines. For example, the free Cover Letter uses the Job Match engine internally.
 
 ### 4.3 Product configuration (IDs configured later)
 ```
-BillingConfig {                       // app config; the only place store IDs live
+BillingConfig {
   entitlementId: 'premium'
-  ios:     { subscriptionGroup: 'My Resume Premium', productIds: ['<configure>'] }   // e.g. com.manzul.myresume.premium.monthly
-  android: { subscriptionId: '<configure>', basePlanIds: ['<configure>'] }           // e.g. premium / monthly
-  displayFallback: { price: '$7.99', period: 'month' }   // UI shows this only if the store offer can't be loaded; the store's localized price wins
+  ios:     { subscriptionGroup: 'My Resume Premium', productIds: ['<configure>'] }
+  android: { subscriptionId: '<configure>', basePlanIds: ['<configure>'] }
+  displayFallback: { price: '$7.99', period: 'month' }   // UI fallback only; the store price wins
 }
 ```
-All product IDs map to exactly **one** entitlement, `premium`. Adding an annual plan later means adding a product ID, not changing the code.
+All product IDs map to the one `premium` entitlement.
 
-### 4.4 Access abstraction (vendor-neutral)
+### 4.4 Entitlement abstraction (vendor-neutral)
+
 ```
-AccessTier = 'FREE' | 'PREMIUM'
-
 PremiumStatus =
-  | 'active'            // paid, auto-renew on or off, before expiry
-  | 'grace_period'      // billing problem, store still grants access → PREMIUM
-  | 'billing_retry'     // iOS retry without grace / Android account hold → FREE
-  | 'paused'            // Android pause → FREE
-  | 'pending'           // Ask to Buy / deferred payment → FREE until confirmed
-  | 'expired' | 'revoked' | 'never_subscribed'
-  | 'unknown'           // no verified data yet
+  | 'active' | 'grace_period'                                   // → premium
+  | 'billing_retry' | 'paused' | 'pending'
+  | 'expired' | 'revoked' | 'never_subscribed' | 'unknown'      // → not premium
 
-AccessSnapshot {
-  tier: AccessTier
+EntitlementSnapshot {
+  premium: boolean                 // derived by the policy below, never stored as a free-standing flag
   status: PremiumStatus
   expiresAt?: epochMs
   willRenew?: boolean
   source: 'store' | 'cache' | 'none'
-  lastVerifiedAt?: epochMs          // last time the store confirmed this state
+  lastVerifiedAt?: epochMs
 }
 
-domain/access.canUse(feature: FeatureKey, snapshot) → { allowed, reason }
-  FeatureKey = 'export.pdf' | 'export.docx' | 'coach' | 'jobMatch' | 'tailoring'
-             | 'customize.accentPresets' | 'customize.customAccent' | 'preview.clean'
-  (cover letter, check, import, editing are not FeatureKeys: they are always allowed)
-
-SubscriptionService {                // app-facing
-  snapshot(): AccessSnapshot         // synchronous, from memory
+EntitlementService {
+  isPremium(): Promise<boolean>     // THE gate. Evaluates the policy at call time (§4.5); never returns a stale boolean
+  snapshot(): EntitlementSnapshot   // for UI only (badges, watermark, paywall), never used to authorize an export
   subscribe(listener): Unsubscribe
-  refresh(): Promise<AccessSnapshot> // silent; never shows a store sign-in
-  getOffer(): Promise<Offer | Unavailable>              // localized price, period, intro offer if any
+  refresh(): Promise<EntitlementSnapshot>   // silent; never prompts sign-in
+  getOffer(): Promise<Offer | Unavailable>
   purchase(): Promise<'subscribed' | 'pending' | 'cancelled' | 'failed'>
-  restore(): Promise<AccessSnapshot> // may show a store sign-in
-  manageSubscription(): Promise<void> // opens the store's subscription management
+  restore(): Promise<EntitlementSnapshot>
+  manageSubscription(): Promise<void>
 }
 
-StoreProvider {                      // one implementation per platform or vendor
-  currentEntitlements(): Promise<VerifiedSubscription[]>  // store-verified state only
+StoreProvider {                     // Apple / Google / (optional vendor) implementations
+  currentEntitlements(): Promise<VerifiedSubscription[]>
   fetchOffers(config): Promise<Offer[]>
   buy(productId): Promise<VerifiedSubscription | Pending | Cancelled>
-  sync(): Promise<VerifiedSubscription[]>                  // explicit restore
-  onUpdate(listener)                  // renewals, expiry, refunds, grace, Ask-to-Buy approvals
-  finish(tx): Promise<void>           // iOS finish / Android acknowledge
+  sync(): Promise<VerifiedSubscription[]>
+  onUpdate(listener)
+  finish(tx): Promise<void>         // iOS finish / Android acknowledge
   openManagement(): Promise<void>
 }
+
+domain/access: PremiumFeature =
+  'export.pdf' | 'export.docx' | 'export.image' | 'export.share'
+  | 'coach' | 'jobMatch' | 'tailoring' | 'customize.customAccent' | 'preview.clean'
 ```
 
-**Providers:**
-- `FakeStoreProvider` now, for development and tests. It can script: subscribe, cancel-at-period-end, renew, expire, grace, billing retry, pause, refund, pending, offline and clock changes.
-- A real provider comes later, after separate approval. See §13 for how each candidate establishes "verified".
+`FakeStoreProvider` handles development and tests. It is scriptable for every status, offline behavior and clock changes. Real providers come later, after separate approval.
 
-### 4.5 Trust rule (requirement: not trusted from local storage alone)
-- **Only a `StoreProvider` result that the store has verified may set `PREMIUM`.**
-  - iOS: StoreKit 2 transactions and entitlements whose JWS signature StoreKit has verified.
-  - Android: subscriptions returned by Play Billing (`queryPurchasesAsync`) for this account, in state `PURCHASED`, with a valid signature.
-- The local cache is a **UX cache**: it lets the app start in the right state and stay usable offline. It cannot grant anything by itself beyond the offline-trust window in §13. Editing the cache does not bypass the store: the next refresh overwrites it.
-- **No "isPremium" flag anywhere that user-editable storage alone can turn on.**
+### 4.5 Trust and offline policy (owner-approved)
+
+- **Only a store-verified result can make the user premium.**
+  - iOS: StoreKit 2 transactions verified by StoreKit.
+  - Android: Play Billing purchases with state `PURCHASED` and a valid signature.
+- Local storage caches that result **for UX only**. There is no user-editable flag that grants premium.
+- **Effective cached premium deadline = `MIN(subscriptionExpiry, lastVerifiedAt + 7 days)`.**
+  - Offline, cached premium is honored only until this deadline.
+  - **No extra days after expiry.** A subscription that expires on day 3 of an offline period ends on day 3.
+  - After the deadline, `isPremium()` returns false until a store refresh succeeds. The UI says "Connect to verify your subscription".
+- **Clock guard.** A `clock_high_water_mark` is stored. If the device clock reads earlier than it, the cache counts as unverified and `isPremium()` is false until a refresh succeeds.
+- `isPremium()` is true only when all of these hold:
+  - status is `active` or `grace_period`;
+  - the verified source is the store (live), or the cache within its deadline;
+  - the clock guard passes.
+
+### 4.6 Account ("Create an account") — open decision, no backend added
+
+The owner listed "Create an account" as FREE. An account that exists off the device needs an authentication backend, which conflicts with "no backend for normal usage". Adding third-party login would also, on iOS, bring in the Sign in with Apple requirement (App Review 4.8).
+
+The plan does **not** add a backend. Options:
+
+| Option | What it is | Backend | Effect |
+|---|---|---|---|
+| **A (proposed for V1)** | **Local profile**: name, email and phone stored on the device and used to prefill new resumes. No sign-in. | None | Meets "free to create an account" in the product sense. The subscription is tied to the Apple ID / Google account, and resumes stay on the device |
+| B | Sign in with Apple / Google, used only for identity (no sync) | Needs token verification if the identity is used for anything | Little benefit without sync |
+| C | Real accounts with cloud sync | Needs auth + storage backend | Contradicts the current constraints; post-V1 |
+
+Subscriptions **do not need an app account**. The store account is the purchase identity, and Restore works through it.
 
 ---
 
 ## 5. Offline data architecture
 
-- **SQLite on the device is the source of truth for user data.** There is no sync.
-- Everything goes through repositories. Screens never touch SQL directly.
-- **Derived data is recomputed, not stored:** score, match results, Coach findings.
-- **User-edited generated text is stored:** cover letters.
-- **Access state:** `subscription_cache` holds only store-derived facts plus `lastVerifiedAt`. `SubscriptionService` owns it, and nothing else writes to it.
-- **Network use** is limited to the subscription provider: offers, purchase, restore, refresh and management.
+- SQLite is the source of truth for user data. There is no sync.
+- Everything goes through repositories.
+- **Derived data** (score, match results, Coach findings) is recomputed, not stored.
+- **Edited cover letters** are stored.
+- `entitlement_cache` holds store-derived facts, `lastVerifiedAt` and the clock mark. Only `EntitlementService` writes to it.
+- The entitlement provider is the only network user.
 
 ---
 
 ## 6. Resume domain model
 
-The content model is **identical to the spec's `ResumeData`**, from `openapi.yaml`.
+The content model is **identical to the spec's `ResumeData`** (`openapi.yaml`).
 
 ```
-ResumeData {
-  name
-  contact { phone, email, location, linkedin, website }
-  summary { tagline, bullets[], skills[] }
-  experience[] { title, company, location, start, end, summary, bullets[] }
-  education[] { degree, school, location, date, honors }
-  certifications[] { name, org, date }
-  projects[] { name, description, bullets[] }
-  awards[]
-}
+ResumeData { name, contact{phone,email,location,linkedin,website}, summary{tagline,bullets[],skills[]},
+             experience[]{title,company,location,start,end,summary,bullets[]},
+             education[]{degree,school,location,date,honors}, certifications[]{name,org,date},
+             projects[]{name,description,bullets[]}, awards[] }
 
-Resume {
-  id: uuid
-  title
-  templateId
-  accent: '#RRGGBB'
-  data: ResumeData
-  schemaVersion: 1
-  createdAt
-  updatedAt
-  deletedAt?            // "Recently deleted", kept for 30 days
-}
-
+Resume        { id(uuid), title, templateId, accent, data, schemaVersion: 1, createdAt, updatedAt, deletedAt? }
+Profile       { id, name, email, phone, location, createdAt, updatedAt }   // local "account" (§4.6, option A)
 TargetJob     { id, resumeId, title, company, description, updatedAt }
 CoverLetter   { id, resumeId, targetJobId?, tone, body, updatedAt }
-ImportSession { id, sourceKind: 'paste' | 'docx' | 'pdf', rawText, draft, unassigned[], confidence }   // transient
+ImportSession { id, sourceKind, rawText, draft, unassigned[], confidence }  // transient
+ExportRecord  { id, resumeId, format: 'pdf'|'docx'|'png', paper, templateId, createdAt }  // local history (no file retained)
 ```
 
-- **No tier information is stored on any resume.** Tier is always computed at runtime from `AccessSnapshot`.
-- **Validation:** the spec limits from §1, a hex-only accent, and list-size guards.
-- **Migrations:** pure functions per `schemaVersion`, tested against fixture data.
+- No resume stores tier information. Tier is always evaluated at runtime.
+- Validation follows the §1 limits.
+- Migrations are pure functions per schema version, with tests.
 
 ---
 
 ## 7. Template architecture
 
-- **Templates are data.** The 12 `TemplateConfig` entries are copied verbatim from the spec.
-  - Premium unlocks clean use of all 12.
-  - There is no per-template product mapping.
-- **One renderer** produces a self-contained HTML string. The same string drives the preview (a WebView with JavaScript and navigation disabled) and the PDF.
-  - The parity target is the spec's `TemplateRenderer.tsx`, matched rule by rule.
-- **Fonts** are the spec's own: Playfair Display (serif) and Plus Jakarta Sans (sans), both OFL-licensed, embedded for offline use.
-  - The prototype currently uses Georgia. That is a parity bug to fix.
-- **Thumbnails:** 12 images of the sample resume, pre-rendered at build time from the same renderer.
-- **Customization:**
-  - Changing the template resets the accent to that template's default.
-  - Presets and the custom color are premium.
-  - Paper size (Letter/A4) is a setting.
-- **Preview by tier:**
-  - FREE: a diagonal "PREVIEW" watermark and non-selectable text.
-  - PREMIUM: clean.
-  - The watermark never appears in an exported file, because FREE users cannot export.
-- **DOCX** follows the spec's generator: a single Word style with accent-colored headings.
+- **Templates are data.** The 12 configs are copied verbatim from the spec. **All 12 are fully usable for FREE users.**
+- **One renderer.** A self-contained HTML string drives three outputs:
+  - the preview (a WebView with JavaScript off and navigation blocked);
+  - the PDF;
+  - the image export, which is rasterized from the PDF (§11).
+- The parity target is the spec's `TemplateRenderer.tsx`.
+- **Fonts:** Playfair Display and Plus Jakarta Sans (OFL), embedded so they work offline. The prototype's Georgia is a bug.
+- **Thumbnails** are pre-rendered at build time.
+- **Customization**
+  - Changing the template resets the accent to its default.
+  - FREE users get the template default plus the 8 spec presets†.
+  - PREMIUM users also get a custom color†.
+  - Paper size (Letter or A4) is a setting.
+- **Watermark**
+  - The FREE preview shows a large, diagonal "PREVIEW" watermark on **every page**, repeated so that no crop of a single page is clean.
+  - Text in the preview is not selectable.
+  - PREMIUM users see a clean preview.
+  - The watermark is a render option (`watermark: boolean`). Only the preview path passes `true`; the export path never renders a watermark.
+- **Screenshots:** the app **cannot prevent OS-level screenshots** on iOS or Android, and it does not try to.
+  - The watermark makes a FREE screenshot visibly different from, and lower quality than, the official Premium export (vector PDF, DOCX, full-resolution PNG).
+  - Android's `FLAG_SECURE` is not used. It works on Android only, blocks legitimate use, and would not match iOS behavior.
+- **DOCX** follows the spec's generator.
 
 ---
 
-## 8. Import architecture (free)
+## 8. Import architecture (FREE)
 
 ```
-[Pick file | Paste] → extract text → normalize → parse → Review → create Resume
+[Pick file | Paste] → extract → normalize → parse → Review → Resume
 ```
 
-| Step | Design |
-|---|---|
-| Pick | `expo-document-picker` for PDF, DOCX and TXT, with the spec limits (8 MB; extension, MIME and magic bytes) |
-| DOCX → text | Unzip on device (JSZip, already a dependency of `docx`), then read `word/document.xml`: paragraphs, numbering → bullets, tabs, table rows |
-| PDF → text | pdf.js from a bundled asset, running in a hidden WebView with no network. Rebuild lines from glyph positions, keep columns apart, turn large horizontal gaps into separators |
-| Scanned PDF | Show an explanation and offer paste instead. **No OCR** |
-| Normalize | Unify bullets, dashes and spacing; strip page numbers and repeated headers/footers |
-| Parse | Heading dictionary + ALL-CAPS/short-line heuristics; date grammar (ignoring durations like "3 years 6 months"); entry grouping; LinkedIn-profile mode |
-| Confidence / unassigned | Every field gets a confidence level. Every line that isn't placed is listed on the review screen, so nothing is lost silently |
-| Review | Confirm section by section. Low-confidence fields are highlighted. A one-tap action moves a line into a section |
-| Guarantee | Parsed values are verbatim substrings of the source. This invariant is unit-tested |
-| Failure | Open a blank editor with a message; the raw text stays available to copy |
+**Picking a file**
+- `expo-document-picker` for PDF, DOCX and TXT.
+- The spec limits apply: 8 MB max; extension, MIME type and magic bytes must agree.
 
-**Parser test corpus** (all English):
-- clean ATS resume
-- `pdftotext -layout`-style layout
-- LinkedIn copy (the failure case from the parity audit)
-- notes only
-- two-column PDF
+**Extracting text**
+- **DOCX:** JSZip unzips the file on the device; the text comes from `word/document.xml`, including paragraphs, numbering, tabs and tables.
+- **PDF:** pdf.js runs offline in a hidden WebView. It rebuilds lines from glyph positions and keeps columns separate.
+- **Scanned PDF:** there is no OCR. The app explains this and offers paste instead.
+
+**Parsing**
+- Heading dictionary and heuristics.
+- Date grammar that ignores duration phrases.
+- Grouping lines into entries.
+- A LinkedIn-profile mode.
+- A confidence value for each field.
+- An **unassigned-lines bucket**: every line that could not be placed is kept.
+
+**Review**
+- The user confirms section by section.
+- Low-confidence fields are highlighted.
+- Any line can be moved to another section with one tap.
+
+**Guarantees and failure**
+- Every parsed value is a verbatim substring of the source. A test enforces this.
+- If parsing fails, the app opens a blank editor and keeps the raw text available.
+- The parser is tested against a corpus: a clean ATS resume, layout-heavy text, LinkedIn copy, notes, and two-column PDFs (English).
 
 ---
 
-## 9. Job Match architecture (premium)
+## 9. Job Match architecture (PREMIUM)
 
 ```
 JD → segment → extract → normalize → weight → evidence → score + gaps + suggestions
 ```
 
-- **Segment** the JD into: title, responsibilities, required, preferred ("nice to have", "bonus"), and about-the-company.
-- **Extract** terms in two ways:
-  - **Taxonomy match:** a bundled, versioned skills taxonomy with aliases (for example `JS` → JavaScript, `k8s` → Kubernetes, "A/B testing").
-  - **Phrase candidates:** 2–3-word noun phrases from requirement lines, after expanded stopword and generic-term filters (dropping words like "nice", "team", "experience", "5+").
-- **Weight** each term as section weight × frequency × type. Section weights: required 1.0, responsibilities 0.7, preferred 0.5, other 0.3. Keep the top 12–20 terms.
-- **Evidence:** match terms against the resume using normalization, aliases and light stemming. Record **where** each match was found.
-- **Output:**
-  - fields: `jobTitle`, weighted `matchPercent`, `matched[]` with evidence, and `missing[]` tagged required or preferred;
-  - the spec's honesty copy about missing terms.
-- **Tailoring suggestions** (premium) are deterministic and never invent anything. Each shows current → suggested, a reason, and Accept / Reject / Review section:
-  1. A skill already proven in a bullet but not listed in Skills → add it to Skills.
-  2. Reorder Skills so JD-matched skills come first.
-  3. The resume uses an alias and the JD uses the canonical name → use the JD's name.
-  4. The JD's title term appears in the user's experience but not in the tagline → suggest it for the tagline.
-- **Persistence:** the JD is stored as a `TargetJob` per resume. Results are recomputed.
-- **Regression pairs**, including the parity-audit case:
-  - must find `SQL`, `A/B testing` and `stakeholder management`;
-  - must not emit `nice` or `5+`;
-  - must match `user research`.
+**Segment.** The job description is split into: title, responsibilities, required, preferred, and about the company.
+
+**Extract**
+- Terms that match a bundled, versioned skills taxonomy, including aliases.
+- 2–3 word phrases from requirement lines, after stopword and generic-term filters that drop terms like "nice", "team", "experience" and "5+".
+
+**Weight.** Each term's weight = section weight × frequency × type. Section weights: required 1.0, responsibilities 0.7, preferred 0.5, other 0.3. The top 12–20 terms are kept.
+
+**Evidence.** Terms are matched against the resume after normalization, alias lookup and light stemming. Each match records where in the resume it was found.
+
+**Output**
+- The job title.
+- A weighted match percentage.
+- `matched[]`, each with its evidence.
+- `missing[]`, marked required or preferred.
+- The spec's honesty copy.
+
+**Tailoring suggestions (PREMIUM).** Each shows current → suggested with a reason, and offers Accept / Reject / Review. Four kinds:
+1. A skill proven in a bullet but not in Skills → add it to Skills.
+2. Reorder Skills so matched ones come first.
+3. The resume uses an alias the JD spells differently → use the JD's name.
+4. A term from the JD's title that appears in the user's experience → suggest it for the tagline.
+
+**Persistence and regression.** Each resume stores a `TargetJob`. Regression pairs must:
+- find SQL, A/B testing and stakeholder management;
+- never emit "nice" or "5+";
+- match "user research".
 
 ---
 
 ## 10. Cover Letter architecture (FREE)
 
-- **Inputs:** the resume, its `TargetJob`, and the output of the Job Match *engine*. The engine runs locally even for FREE users; only the Job Match *screen* is premium.
-  - Optional overrides: hiring manager, company, role.
-- **Extracting details from the JD:**
-  - Company, from patterns like "About X", "at X", "X is hiring" or "Company:".
-  - Role, from the first line, "Title:" or "Position:".
-  - Anything missing becomes a visible `[Company]` or `[Role]` placeholder.
-- **Evidence:** the 2–3 of the user's bullets that overlap most with the JD, quoted **verbatim**. Skills come only from `matched[]`.
-- **Composition:**
-  - Three tones: formal, concise, warm.
-  - Four paragraph templates: opening, fit, evidence, close.
-  - Sentence variants are seeded deterministically, and "Regenerate" cycles through them.
-- **Guarantee:** any text that is not fixed template wording comes from the resume or from the JD's company and role fields. This is unit-tested.
-- **Output:** editable, saved, copy and share. **Always free.** No paywalled export of the letter in V1; the spec only offered copy.
+**Inputs**
+- The resume.
+- Its `TargetJob`.
+- The Job Match *engine* output. The engine runs locally even for FREE users.
+- Optional overrides for manager, company and role.
+
+**Extraction from the job description**
+- Company and role are found with pattern rules.
+- Anything that can't be found becomes a visible `[Company]` or `[Role]` placeholder.
+
+**Evidence**
+- The user's 2–3 best-overlapping bullets, quoted verbatim.
+- Skills come only from `matched[]`.
+
+**Composition**
+- 3 tones × 4 paragraph templates.
+- Wording variants are seeded deterministically, and "Regenerate" cycles through them.
+
+**Guarantee.** Everything that is not fixed template text comes from the resume or the JD's company/role fields. A test enforces this.
+
+**Output**
+- The letter is editable and saved.
+- **Copy to clipboard is FREE.**
+- Sharing the letter *text* through the system text share is FREE†.
+- There is no letter PDF/DOCX/image in V1. If one is added later, it goes through `ExportService` like any other export.
 
 ---
 
-## 11. PDF / DOCX export architecture (premium)
+## 11. Export architecture (PREMIUM): PDF, DOCX, image, share
+
+**Security boundary: `ExportService`, not the UI.** Every public method follows this sequence:
 
 ```
-ExportService.export(resumeId, format, paper)
-  1. canUse('export.pdf' | 'export.docx', subscription.snapshot())
-       → denied → open the Premium paywall; after subscribing, continue automatically
-  2. load + validate the Resume
-  3. PDF:  render(resume, template, {mode: 'pdf', paper}) → expo-print printToFileAsync
-     DOCX: buildDocx(resume)                              → write the file
-  4. file name "<Name>_<Template>.pdf|docx" in the cache dir
-  5. share sheet; clean up stale export files on the next launch
+ExportService.exportPdf | exportDocx | exportImages (resumeId, options)
+  1. if (!(await entitlement.isPremium()))  → throw PremiumRequired      // gate 1: before any generation
+  2. load + validate Resume
+  3. generate:
+       PDF   → renderHtml(resume, {mode:'pdf', paper, watermark:false}) → expo-print printToFileAsync
+       DOCX  → buildDocx(resume) → base64 → file
+       IMAGE → PDF (as above) → rasterize each page to PNG (see below)
+  4. write to an app-private export dir with a random file name; record ExportRecord
+  5. return ExportHandle { id, format, pageCount }   // an opaque handle, NOT a file URI
+
+ExportService.share(handle)
+  1. if (!(await entitlement.isPremium()))  → throw PremiumRequired      // gate 2: before share
+  2. resolve the handle → file; copy to a share-named file ("<Name>_<Template>.pdf|docx|png")
+  3. expo-sharing shareAsync / (images) share or save
+  4. delete the temp share copy after the share sheet closes; purge the export dir on launch
 ```
 
-- **Fully offline** once the snapshot says PREMIUM, including a PREMIUM state served from the cache within the trust window (§13).
-- **PDF:**
-  - Letter (612×792 pt) or A4 (595×842 pt).
-  - 0.75 in margins: the iOS `margins` option, and `@page` on Android.
-  - Embedded fonts and selectable text; entries never split across pages (`break-inside: avoid`).
-  - Each platform must be verified separately.
-- **DOCX:** the spec's generator, with base64 output.
+**Rules**
+- `isPremium()` runs **twice**: before generation and before share. This closes the window where a subscription expires or a refund lands between the two steps.
+- Checking the UI button state is never enough on its own.
+- The paywall catches `PremiumRequired`. After a successful subscription, the original request runs again automatically.
+- **Only `ExportService` imports** `expo-print`, the DOCX packer, the rasterizer or `expo-sharing` (for resume output). Lint and tests enforce this.
+- Files are never exposed to features: they get handles, not paths. Exports left from an earlier premium period can't be re-shared once premium lapses, because `share()` checks again.
+- Files the user has already shared outside the app are beyond the app's control. This is accepted.
+- **Fully offline** while `isPremium()` is true, including from the cache within its deadline.
+
+**Formats**
+- **PDF**
+  - Letter (612×792 pt) or A4 (595×842 pt), with 0.75 in margins.
+  - Embedded fonts; text stays selectable.
+  - Entries are never split across pages (`break-inside: avoid`).
+  - Output must be verified on each platform.
+- **DOCX:** the spec's generator.
+- **Image (PNG)**
+  - Each page is rasterized from **the same export PDF**, so the image matches the PDF exactly.
+  - Primary method: the bundled pdf.js in an offline hidden WebView renders each page to a canvas at 2×–3× scale and returns PNG data.
+  - Fallback: `react-native-view-shot` (bundled with SDK 57) capturing an offscreen, clean render.
+  - Multi-page resumes produce one PNG per page, shared together.
+  - Caps: resolution and page count are limited to bound memory use.
 
 ---
 
 ## 12. Storage architecture
 
-**Engine:** `expo-sqlite` (bundled with SDK 57), with WAL mode and versioned migrations. AsyncStorage is not used: the prototype keeps everything in one JSON blob, and Android enforces size limits.
+**Engine:** `expo-sqlite` with WAL mode and versioned migrations. AsyncStorage is not used: it holds a single blob and has size limits on Android.
+
+**Tables**
 
 | Table | Contents |
 |---|---|
-| `resumes` | id, title, template_id, accent, data_json, schema_version, created_at, updated_at, deleted_at |
+| `profile` | local "account" (§4.6 A) |
+| `resumes` | id, title, template_id, accent, data_json, schema_version, created/updated/deleted_at |
 | `target_jobs` | id, resume_id, title, company, description, updated_at |
 | `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at |
-| `subscription_cache` | single row: status, tier, product_id, expires_at, will_renew, last_verified_at, clock_high_water_mark |
-| `settings` | key, value |
-| `meta` | db_version |
+| `export_records` | id, resume_id, format, paper, template_id, created_at |
+| `entitlement_cache` | status, product_id, expires_at, will_renew, last_verified_at, clock_high_water_mark |
+| `settings`, `meta` | — |
 
-- **Autosave:** debounced by about 400 ms, one transaction per resume, applied as functional updates.
-- **User backup:** "Export all data" writes versioned JSON (resumes, jobs, letters). **Subscription state is never included.** "Import backup" merges by id. Backup is **free**.
-- **OS backup:**
-  - iOS device backups include the app container.
-  - Android Auto Backup is on by default in Expo (`allowBackup: true`). It restores up to 25 MB of app data on reinstall when the user has backup enabled.
-  - Exclude the export cache and `subscription_cache` from backups. The store is re-queried after a restore.
+**Writes.** Autosave is debounced by about 400 ms, with one transaction per resume, using functional updates.
+
+**Files.** Exports live in an app-private export directory. It is purged on every launch, and temporary share copies are deleted after the share sheet closes.
+
+**User backup**
+- The backup is raw data (JSON of profile, resumes, jobs and letters) and is **FREE**.
+- It is not a rendered resume. It never includes the entitlement cache.
+- Import merges records by id.
+
+**OS backup**
+- iOS: included in device backups.
+- Android: Auto Backup is on (`allowBackup` defaults to true), up to 25 MB.
+- Excluded from OS backups: the export directory and `entitlement_cache`. The store is re-queried after a restore.
 
 ---
 
 ## 13. Security model
 
-**Assets:**
-- the user's resume data (personal information);
-- the `premium` entitlement.
+**Assets:** the user's resume data, and the `premium` entitlement (export + tools).
 
 ### 13.1 How "verified" is established (decided when the provider is chosen)
 
 | Option | iOS | Android | Backend? |
 |---|---|---|---|
-| A. Store client APIs on device | StoreKit 2 `Transaction.currentEntitlements` / `updates`; StoreKit verifies the JWS | Play Billing `queryPurchasesAsync(SUBS)`, signature check, purchase state; returns active subscriptions from the Play Store client | None |
-| B. RevenueCat | Server-validated receipts + Trusted Entitlements signature | Same | Third-party (not ours) |
-| C. Own verifier | App Store Server API | Play Developer API `subscriptionsv2` | A minimal verifier, used only for purchase and refresh |
+| **A (proposed for V1)** | StoreKit 2 `currentEntitlements` / `updates`, with StoreKit verifying the JWS | Play Billing `queryPurchasesAsync(SUBS)`, `PURCHASED`, signature | None |
+| B | RevenueCat (Trusted Entitlements) | same | Third-party |
+| C | App Store Server API | Play Developer API `subscriptionsv2` | Minimal verifier, used only for purchase and refresh |
 
-All three satisfy "verified store state, not local storage". The `StoreProvider` interface fits all three.
-
-**Trade-off:**
-- A adds no dependency, but a rooted or jailbroken device can hook it.
-- B and C resist tampering better and give server-side renewal and refund data. C conflicts least with "no backend for normal usage" only if it is limited to purchase and refresh.
-
-**Recommendation for V1: A**, keeping B as a drop-in upgrade.
+The `StoreProvider` interface fits all three options.
 
 ### 13.2 Threats
 
 | Threat | Control | Residual risk |
 |---|---|---|
-| FREE user tries to export or use premium features | `canUse` inside the feature and export services. The preview is watermarked and non-selectable, with JS off and no print path | Screenshot of a watermarked preview (accepted) |
-| Edited local cache or storage | Cache is UX only. A refresh overwrites it. No user-editable grant flag | Rooted devices can patch the app (accepted; mitigated by option B/C) |
-| Fake or replayed purchase / modified store response | Grants only from store-verified transactions (§4.5, §13.1) | Depends on provider option |
-| **Clock rollback to extend a cached subscription** | Store `clock_high_water_mark`. If the device clock is earlier than the mark, treat the cache as stale and require a store refresh before granting | — |
-| **Staying offline forever to keep premium** | **Offline trust window.** Cached PREMIUM is honored until `min(expiresAt, lastVerifiedAt + 7 days)`†, then the app drops to FREE until a refresh succeeds. The user sees "Connect to verify your subscription" | 7-day window† |
-| Expired, refunded or revoked subscription | Store update listener + refresh on launch and foreground → FREE. Files already exported remain | Accepted |
-| Billing retry / account hold / pause / pending | Status mapping in §4.4. Only `active` and `grace_period` grant premium | — |
-| Resume privacy | No network except billing. No analytics, no AI. Data stays in the sandbox. Export cache is cleaned. The backup file is labeled as containing personal data | The user controls sharing |
-| Injection through resume content | HTML escaping everywhere; hex-only accent; WebView with JS off and navigation blocked; input size limits | — |
-| AI or network creep | CI test fails on any AI SDK, `fetch`, or network code outside `services/subscription/providers` | — |
+| FREE user calls export directly (patched UI, deep link, dev menu) | `isPremium()` inside `ExportService` before generation **and** before share. The UI is not the boundary | Only a patched binary on a rooted or jailbroken device (accepted; options B/C harden this) |
+| Other code produces output without going through the service | Only `ExportService` may import print, DOCX, rasterizer or share for resume output (lint + test) | — |
+| **OS screenshot or screen recording of the preview** | **Cannot be prevented, and the app does not claim to.** The FREE preview is watermarked on every page with non-selectable text. The official image export is PREMIUM and clean | The user gets a watermarked, screen-resolution image (accepted by design) |
+| Re-sharing old exports after premium lapses | Handles instead of paths; `share()` re-checks; the export directory is purged on launch | Files already shared outside the app (accepted) |
+| Edited local cache or storage | The cache is UX only, and a refresh overwrites it. No grant flag exists | Rooted devices can tamper (accepted / B, C) |
+| Fake, replayed or modified purchase data | Grants come only from store-verified data (§4.5, §13.1) | Depends on the option chosen |
+| Staying offline to keep premium | Deadline `MIN(expiry, lastVerifiedAt + 7d)`. No extension past expiry | Up to 7 days after a refund if the device stays offline |
+| Clock rollback | High-water-mark guard | — |
+| Expiry, refund, revocation, billing retry, account hold, pause, pending | Status mapping (§4.4), update listener, refresh on launch and foreground | — |
+| Resume privacy | No network except billing. No analytics, no AI. Sandbox storage; purged exports; the backup file is labeled as personal data | The user controls what they share |
+| Injection through resume content | HTML escaping; hex-only accent; WebView with JS off and no navigation (preview). The rasterizer WebView loads only bundled pdf.js and local data | — |
+| AI or network creep | CI guard | — |
 
 ---
 
@@ -489,134 +551,132 @@ All three satisfy "verified store state, not local storage". The `StoreProvider`
 
 | Capability | Offline behavior |
 |---|---|
-| Create, edit, store, delete, import (paste/DOCX/text PDF), gallery, preview, Resume Check, **Cover Letter**, backup | Work fully, for every user |
-| Premium features (Coach, Job Match, tailoring, customization, clean preview, PDF/DOCX export) | Work if the cached snapshot is PREMIUM and still inside the trust window (§13). Otherwise locked, with "Connect to the internet to verify your subscription" |
-| Subscribe, restore, manage subscription | Unavailable, with a clear message. The cache is not changed |
-| Paywall price | Uses the cached store offer if one exists. Otherwise shows the `$7.99/month` fallback text, and the Subscribe button is disabled until the device is online |
+| Create, edit, save, delete; import (paste, DOCX, text PDF); all 12 templates; default customization; **watermarked full preview**; Resume Score; **Cover Letter** (incl. copy); local profile; backup | **Works for everyone** |
+| Premium: PDF / DOCX / image export, share, clean preview, Coach, Job Match, Tailoring, custom accent | Works only while `isPremium()` is true: status active or grace, before `MIN(expiry, lastVerifiedAt + 7d)`, clock guard OK. Otherwise locked with "Connect to verify your subscription" |
+| Subscribe, restore, manage | Unavailable, with a message. The cache is unchanged |
+| Paywall price | Cached store offer if one exists; otherwise `$7.99/month` fallback text, and the Subscribe button is disabled until online |
 
 ---
 
 ## 15. What happens after reinstall
 
 1. **User data**
-   - iOS deletes it on uninstall unless the whole device is restored from a backup.
+   - iOS deletes it on uninstall unless the device is restored from a backup.
    - Android may restore it through Auto Backup.
-   - If neither applies, the library starts empty and **Import backup** is offered.
+   - Otherwise the library and local profile start empty, and the app offers **Import backup**.
 2. **Subscription**
-   - On first launch, `refresh()` silently reads the store's current entitlements. This does not prompt for sign-in.
-   - An active subscription on the same store account unlocks PREMIUM automatically when the device is online.
-   - Offline on first launch: FREE (the cache is empty or excluded from backup) until the first successful refresh.
-   - **Restore purchases** is always available in the paywall and in Settings (Apple requires this).
-3. **Messaging:** the empty library explains the backup option. A "Back up your resumes" reminder appears after the third resume or the first export.
+   - A silent `refresh()` on first launch reads the store's current entitlements, without a sign-in prompt.
+   - An active subscription unlocks export when the device is online.
+   - Offline on first launch → not premium, because the cache is excluded from backups. This lasts until the first successful refresh.
+   - **Restore purchases** is always available in the paywall and in Settings.
+3. **Messaging.** The empty state explains the backup option. The app shows a backup reminder after the third resume or the first export.
 
 ---
 
 ## 16. What happens after a purchase (subscribe)
 
-1. The paywall opens from a premium entry point, such as Export, Coach, Job Match, Tailor or Customize. It remembers which action triggered it.
-2. The paywall shows everything Apple guideline 3.1.2 and Google policy require:
-   - plan name and localized price per month, and that it auto-renews;
+1. **Opening the paywall.** It opens from a premium entry point (Export, Share, Image, Coach, Job Match, Tailor, custom color) and remembers the pending request.
+2. **Paywall content.** It shows the disclosures required by Apple 3.1.2 and Google policy:
+   - "My Resume Premium, $7.99/month (localized), auto-renews";
+   - what is unlocked: export + tools;
    - how to cancel;
    - intro-offer terms, if any†;
-   - links to Terms of Use and Privacy Policy;
+   - Terms and Privacy links;
    - Restore and Not now.
-3. `purchase()` opens the store sheet. Possible outcomes:
-   - **Subscribed:**
-     1. The provider receives the verified transaction and calls `finish`. On Android it **acknowledges** the purchase; Play refunds unacknowledged purchases after 3 days.
-     2. The snapshot becomes `active`/PREMIUM, `subscription_cache` is written, and a PREMIUM snapshot is emitted.
-     3. The watermark disappears and premium surfaces unlock.
-     4. **The triggering action continues automatically**, for example the export.
-   - **Pending** (Ask to Buy, deferred payment): the app shows "We'll unlock Premium when the purchase is approved". The update listener finalizes it later, even after a restart.
-   - **Cancelled:** no change, no error.
-   - **Failed:** a readable error with retry. Nothing is granted.
-   - **Already subscribed** on this store account: the purchase is treated as a restore.
-4. **Crash mid-purchase:** the unfinished transaction is delivered on the next launch and processed the same way.
-5. **Later lifecycle events** arrive through the listener or refresh:
-   - renewal extends `expiresAt`;
-   - cancel-at-period-end sets `willRenew=false` and access stays until expiry, with a notice in Settings;
-   - expiry or refund moves the user to FREE, and their data stays intact (§4.2).
+3. **Purchase.** `purchase()` opens the store sheet. Possible outcomes:
+   - **Subscribed**
+     1. The provider verifies the purchase and finishes or **acknowledges** it. Play auto-refunds purchases not acknowledged within 3 days.
+     2. The cache is written and a premium snapshot is emitted.
+     3. The watermark disappears.
+     4. **The pending request runs again through `ExportService`**, which checks `isPremium()` again, then generates and shares.
+   - **Pending** (Ask to Buy or deferred payment): "We'll unlock Premium when the purchase is approved." The update listener completes it later.
+   - **Cancelled:** no change.
+   - **Failed:** an error with a retry option. Nothing is granted.
+   - **Already subscribed** on this store account: handled as a restore.
+4. **Crash mid-purchase.** The unfinished transaction is delivered on the next launch.
+5. **Later lifecycle**
+   - A renewal extends `expiresAt`.
+   - Cancel-at-period-end keeps access until expiry, with a notice in Settings.
+   - Expiry or refund returns the user to FREE. Their data stays intact, and the preview becomes watermarked again.
 
 ---
 
 ## 17. What happens when a purchase is restored
 
-1. The user taps **Restore purchases** in the paywall or in Settings. This needs a connection.
-2. `restore()` calls `sync()`, which may show the store sign-in, and returns the verified subscription state for this store account.
-3. The result maps to `premium`:
-   - an active or grace-period subscription → PREMIUM, with the `expiresAt` refreshed;
-   - otherwise → FREE, with a message such as "No active subscription for this account" or "Your subscription expired on <date>".
-4. The cache is **replaced** with the store's answer.
-   - A single failed call never downgrades the user. The downgrade happens only after a successful store answer, or when the trust window runs out.
-5. **Offline or error:** the app shows a message and leaves the cache untouched.
-6. **Store account switching:** refreshing on launch and foreground picks up the new account's state. Resumes stay on the device whatever account is signed in.
+1. The user taps **Restore purchases** in the paywall or in Settings. This needs a network connection.
+2. `restore()` calls `sync()`, which may show the store's sign-in. It returns the verified subscription state.
+3. The result maps to the entitlement:
+   - active or grace → premium; `expiresAt` and `lastVerifiedAt` are refreshed;
+   - otherwise → FREE, with a message: "No active subscription for this account" or "Expired on <date>".
+4. **The cache is replaced** with the store's answer. A failed call never downgrades the user; a downgrade needs a successful store answer or the deadline passing.
+5. **Offline or error:** the app shows a message and leaves the cache unchanged.
+6. **Store account switch:** the refresh on launch and foreground picks up the new account's state. Resumes and the local profile stay on the device.
 
 ---
 
-## 18. Classification of the current `resume-mobile` prototype
+## 18. KEEP / REFACTOR / REWRITE / DELETE: current `resume-mobile`
 
 | Module | Verdict | Reason |
 |---|---|---|
-| `src/lib/types.ts` | **REFACTOR** | `ResumeData` shape is correct. Add `schemaVersion`, `TargetJob`, `CoverLetter` and uuids, and move to `domain/resume` |
-| `src/lib/sample-data.ts` | **KEEP** | Spec content, verbatim |
-| `src/lib/templates.ts` | **REFACTOR** | The 12 configs are verbatim. Add font metadata. **No product IDs**: premium is not per template |
-| `src/lib/text.ts` | **KEEP** | Escaping, hex check and file names are correct |
-| `src/lib/resume-score.ts` | **KEEP** | Spec rules (Resume Check, FREE†); move to `domain/check` |
-| `src/lib/render-html.ts` | **REFACTOR** | The single-renderer approach, escaping and watermark are right. Wrong fonts, no A4. Needs a parity pass against the spec renderer |
-| `src/lib/export-docx.ts` | **KEEP** | Spec generator; verify under Hermes on a device |
-| `src/lib/export.ts` | **REFACTOR** | Gate through `canUse` with `SubscriptionService`; add paper size and cleanup |
-| `src/lib/parse-text.ts` | **REWRITE** | Fails on LinkedIn-style text and keeps layout spacing. No confidence levels, no unassigned bucket |
-| `src/lib/job-match.ts` | **REWRITE** | Frequency-only: emits noise and misses core skills |
+| `src/lib/types.ts` | **REFACTOR** | Correct `ResumeData`. Add `schemaVersion`, `Profile`, `TargetJob`, `CoverLetter`, `ExportRecord` and uuids |
+| `src/lib/sample-data.ts` | **KEEP** | Spec content |
+| `src/lib/templates.ts` | **REFACTOR** | 12 configs verbatim. Add font metadata; no product IDs |
+| `src/lib/text.ts` | **KEEP** | Escaping, hex validation, file names |
+| `src/lib/resume-score.ts` | **KEEP** | Spec rules (FREE) |
+| `src/lib/render-html.ts` | **REFACTOR** | Right approach, and its `watermark` option already fits. Wrong fonts, no A4, one watermark per document (needs one per page); parity pass needed |
+| `src/lib/export-docx.ts` | **KEEP** | Spec generator; still has to be verified on a device |
+| `src/lib/export.ts` | **REWRITE** | Must become `ExportService`: `isPremium()` at both gates, handles instead of paths, image export, share with its own gate, export directory and purge. The current version takes an `access` argument from the caller, so **the UI is effectively the boundary** |
+| `src/lib/parse-text.ts` | **REWRITE** | Fails on LinkedIn-style text; no confidence scores; no unassigned bucket |
+| `src/lib/job-match.ts` | **REWRITE** | Frequency-only, noisy |
 | `src/lib/cover-letter.ts` | **REWRITE** | Ignores the job description |
-| `src/lib/access.ts` | **REFACTOR** | The concept now fits: one entitlement, fail-closed, unlocked only in dev builds. Needs the subscription states, expiry, trust window, clock guard and FeatureKey policy; becomes `domain/access` |
-| `src/lib/purchases.tsx` | **DELETE** | Couples RevenueCat directly to the UI with a one-time-purchase model. Billing SDKs are out of scope for now |
-| `src/lib/store.tsx` | **REWRITE** | AsyncStorage blob with a stale-closure update pattern → SQLite repositories |
-| `src/components/ui.tsx` | **REFACTOR** | Move into `ui/`; keep the look |
-| `src/app/_layout.tsx` | **REFACTOR** | New providers (DB, subscription) plus an error boundary |
-| `src/app/index.tsx` | **REFACTOR** | Keep the library. Add spec home content and the subscription offer, not the "$5 once" copy |
-| `src/app/import.tsx` | **REWRITE** | Becomes the file + paste → review flow |
-| `src/app/resume/[id]/index.tsx` | **REFACTOR** | Keep the section forms. Add stable keys, jump-to-section, Coach hooks and repository updates |
-| `src/app/resume/[id]/preview.tsx` | **REFACTOR** | Keep the hardened WebView. Use the spec palette plus custom color, gated premium. Add the category picker, tier watermark and paper size |
-| `src/app/resume/[id]/tools.tsx` | **REWRITE** | Persist the JD, add suggestions and jump-to-section, correct the cover-letter inputs, add per-tool gating (Cover Letter free) |
-| `src/app/unlock.tsx` | **REWRITE** | One-time-purchase copy ("no subscription") backed by RevenueCat. Becomes the Premium subscription paywall with 3.1.2 disclosures |
-| `src/__tests__/access.test.ts` | **REFACTOR** | Keep the fail-closed and dev-only cases. Add subscription states, trust window and clock rollback |
-| `src/__tests__/parse-text.test.ts` | **REWRITE** | Replaced by the corpus suite |
-| `src/__tests__/tools.test.ts` | **REFACTOR** | Keep the escaping, accent-injection, DOCX-validity and no-AI/no-network guards. Replace the match and letter tests |
-| `app.json` | **REFACTOR** | Name "My Resume", `com.manzul.myresume`, real icons. Remove the `BILLING` permission until billing lands |
+| `src/lib/access.ts` | **REFACTOR** | The single-entitlement, fail-closed, dev-only idea fits. Add the statuses, `MIN(expiry, lastVerifiedAt + 7d)`, the clock guard and the `PremiumFeature` policy |
+| `src/lib/purchases.tsx` | **DELETE** | RevenueCat wired straight into the UI; one-time-purchase model |
+| `src/lib/store.tsx` | **REWRITE** | AsyncStorage blob → SQLite repositories |
+| `src/components/ui.tsx` | **REFACTOR** | Move into `ui/` |
+| `src/app/_layout.tsx` | **REFACTOR** | New providers; error boundary |
+| `src/app/index.tsx` | **REFACTOR** | Keep the library. Add "free to build" home content |
+| `src/app/import.tsx` | **REWRITE** | File + paste → review |
+| `src/app/resume/[id]/index.tsx` | **REFACTOR** | Keep the forms. Add stable keys, jump-to-section, Coach badges and hooks |
+| `src/app/resume/[id]/preview.tsx` | **REFACTOR** | Keep the WebView. The watermark follows the tier. Export buttons call `ExportService` and handle `PremiumRequired`. Add the spec palette, the custom color (premium) and the category picker |
+| `src/app/resume/[id]/tools.tsx` | **REWRITE** | Check and Cover Letter FREE, Job Match PREMIUM; persist the job description; suggestions |
+| `src/app/unlock.tsx` | **REWRITE** | Premium subscription paywall with 3.1.2 disclosures and pending-request resume |
+| `src/__tests__/access.test.ts` | **REFACTOR** | Add statuses, the deadline formula (including "no extension past expiry") and the clock guard |
+| `src/__tests__/parse-text.test.ts` | **REWRITE** | Corpus suite |
+| `src/__tests__/tools.test.ts` | **REFACTOR** | Keep the escaping, injection, DOCX and no-AI/network guards. Add the "only ExportService produces output" guard |
+| `app.json` | **REFACTOR** | "My Resume", `com.manzul.myresume`, icons; `BILLING` only when billing lands |
 | `assets/*.png` | **DELETE** | Expo placeholders |
-| `eas.json` | **KEEP** | Standard profiles; no builds now |
-| Tooling: `eslint.config.js`, `vitest.config.mts`, `tsconfig.json`, `AGENTS.md`, `CLAUDE.md` | **KEEP** | — |
-| Deps `react-native-purchases`, `react-dom`, `react-native-web` | **DELETE** | RevenueCat and its web peer deps; there is no web target |
-| Dep `@react-native-async-storage/async-storage` | **DELETE** | Replaced by `expo-sqlite` |
+| `eas.json`, tooling, `AGENTS.md`, `CLAUDE.md` | **KEEP** | — |
+| Deps `react-native-purchases`, `react-dom`, `react-native-web` | **DELETE** | RevenueCat and its web peer dependencies |
+| Dep `@react-native-async-storage/async-storage` | **DELETE** | Replaced by SQLite |
 | `README.md` | **REWRITE** | Describes the prototype's one-time unlock |
-| `PAYMENT_AUDIT.md` | **DELETE** (or archive) | About the web product |
-| `MOBILE_PARITY_AUDIT.md` | **KEEP** (history) | Evidence still valid; its option-C decision is superseded |
-| Location `Cal-/resume-mobile` | **MOVE** | New home is `MANZUL/MyResume` (migration step 0) |
+| `PAYMENT_AUDIT.md` | **DELETE** (or archive) | Covers the web product |
+| `MOBILE_PARITY_AUDIT.md` | **KEEP** (history) | Its evidence still holds |
+| Location `Cal-/resume-mobile` | **MOVE** | To `MANZUL/MyResume` |
 
-**Tally:** KEEP 7 · REFACTOR 13 · REWRITE 9 · DELETE 5, plus 1 move.
-
-**Keep** the spec data and the renderer approach. **Rewrite** the intelligence (parse, match, letter), storage and the paywall. **Refactor** the access policy into the subscription model.
+**Tally:** KEEP 7 (counting `eas.json` and tooling separately) · REFACTOR 12 · REWRITE 10 · DELETE 5, plus 1 move. The only change from revision 2 is that `export.ts` moved from REFACTOR to REWRITE.
 
 ---
 
 ## 19. Migration order
 
-Every step ends with typecheck, lint, unit tests and the no-AI/no-network guard passing. Steps marked ◆ also need a device QA gate.
+Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. Steps marked ◆ also need a device QA gate.
 
 | Step | Work | Exit criteria |
 |---|---|---|
-| 0 | Create `MANZUL/MyResume`; move the prototype with its history; set name "My Resume" and bundle/package `com.manzul.myresume`; brand assets. Open decisions (end of document) answered | Repo builds under the new identity |
-| 1 | Restructure into `domain/ services/ features/ ui/`. Move the KEEP modules. Delete `purchases.tsx` and the RevenueCat, web and async-storage dependencies | Builds; tests pass |
-| 2 | Domain model v1, validation and migrations; SQLite repositories; library on SQLite | CRUD and migration tests |
-| 3 | **Access and subscription architecture:** FeatureKey catalog + `canUse`; `AccessSnapshot` with all `PremiumStatus` states; `SubscriptionService` over `FakeStoreProvider`; `subscription_cache` with trust window and clock guard; FREE/PREMIUM gating wired into preview (watermark), customization and tools; one Premium paywall screen (fake offer, 3.1.2 layout); Settings subscription section | Scripted tests: subscribe, pending, cancel-at-period-end, renew, expire, grace, retry, pause, refund, offline within and beyond the window, clock rollback, reinstall-empty-cache |
-| 4 | Renderer parity (fonts, rules, Letter/A4); pre-rendered thumbnails; gallery; picker; spec palette + custom color (premium-gated) | ◆ Visual parity on iOS and Android |
-| 5 | Export service (PDF/DOCX, share, cleanup) behind `canUse`, continuing after subscribe | ◆ Multi-page PDF and DOCX on both platforms |
-| 6 | Editor parity; Resume Check (FREE†) with jump-to-section | ◆ Editor pass |
-| 7 | Writing Coach (premium) | Rule tests; no-fact-insertion invariant |
-| 8 | Import: parser rewrite + corpus, review screen, DOCX, PDF (pdf.js), errors | Corpus thresholds ◆ real files |
-| 9 | Job Match engine + taxonomy + persistence + tailoring (premium); then Cover Letter (FREE), reusing the engine | Regression pairs; letter grounding test; gating test (letter works when FREE) |
-| 10 | **(Separate approval)** Real `StoreProvider`s for the chosen §13.1 option. App Store Connect subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms/Privacy URLs; sandbox and license testing for the full lifecycle (subscribe, renew, cancel, expire, grace, retry/hold, pause, refund, Ask to Buy, restore, reinstall, account switch) | ◆ Full matrix on both stores |
-| 11 | Backup export/import, settings, error boundary, accessibility, performance on low-end Android | ◆ Release-candidate QA |
-| 12 | **(Separate approval)** EAS builds and store submission | — |
+| 0 | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets. Answer the open decisions, **especially the account question (§4.6)** | Repo builds |
+| 1 | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage | Green |
+| 2 | Domain model v1 (including `Profile`, `ExportRecord`); SQLite repositories and migrations; library; local profile | CRUD and migration tests |
+| 3 | **Entitlement architecture:** `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume); Settings subscription section | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall |
+| 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
+| 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
+| 6 | **Image export**: PDF → PNG via pdf.js (fallback: view-shot), per page, through `ExportService` | ◆ PNG matches the PDF on both platforms; memory caps respected |
+| 7 | Editor parity; Resume Score (FREE) with jump-to-section | ◆ Editor pass |
+| 8 | Writing Coach (PREMIUM) | Rule tests; no-fact-insertion |
+| 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
+| 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
+| 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
+| 12 | Backup, settings, error boundary, accessibility, low-end Android performance | ◆ Release-candidate QA |
+| 13 | **(Separate approval)** EAS builds and store submission | — |
 
 ---
 
@@ -624,44 +684,41 @@ Every step ends with typecheck, lint, unit tests and the no-AI/no-network guard 
 
 | # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| 1 | **App Review 3.1.2: auto-renewing subscriptions must give ongoing value.** A resume builder can be seen as a one-time need | Rejection | Position ongoing value (Job Match and tailoring per application, Coach, unlimited exports and edits); full 3.1.2 disclosures on the paywall; clear review notes |
-| 2 | Subscribe → export → cancel churn | Lower revenue | Commercial risk (owner's model). Track retention once live; data and cover letters stay free, so goodwill is kept |
-| 3 | **On-device verification (option A)** can be hooked on rooted devices | Revenue leakage | Accept for V1 or move to option B/C; the interface allows either |
-| 4 | Subscription lifecycle edge cases (grace, hold, pause, refunds, Ask to Buy, family sharing†) | Wrong tier | Explicit states, a listener and refresh on launch/foreground, the step-10 test matrix |
-| 5 | Play acknowledgement missed | Automatic refund after 3 days | Acknowledge inside the provider; unfinished purchases processed on next launch |
-| 6 | Offline trust window too strict or too loose | Paying users locked out offline, or longer free use after cancelling | 7-day default†, clear message, re-verify immediately when back online |
-| 7 | Device clock manipulation | Extends cached premium | High-water-mark clock guard (§13) |
-| 8 | **Data loss** (reinstall, device change) with no server | Users lose resumes | Free backup export/import; OS backup on; reminders |
-| 9 | iOS vs Android print differences | PDF differs from the preview | Embedded fonts; per-platform golden files |
-| 10 | Parser accuracy on real resumes | Poor first impression | Review step, unassigned bucket, corpus, paste fallback |
-| 11 | pdf.js WebView memory and speed; no OCR | Failed imports | Size, page and time caps; clear fallback |
-| 12 | Taxonomy coverage (English only in V1) | Weak matches in niche fields | Versioned taxonomy with phrase fallback; stated limitation |
-| 13 | Non-AI experience feels weaker than the spec's AI | Lower perceived quality | Honest copy; safe one-tap fixes; never claim AI |
-| 14 | Legal pages required (Terms, Privacy) for subscriptions and stores | Submission blocked | Static hosted pages. This is not an app backend and is not needed at runtime |
-| 15 | Keeping prototype code because its tests pass | Hidden drift from the spec | §18 classification plus a parity checklist at each step |
+| 1 | **"Free to build" makes screenshots a substitute for export** | Lower conversion | Per-page watermark, non-selectable text, screen-resolution only. The paid output is vector PDF, editable DOCX and a clean high-resolution PNG. No false claim of screenshot prevention |
+| 2 | App Review 3.1.2: auto-renewing subscriptions must provide ongoing value | Rejection | Ongoing tools (Job Match and tailoring per application, Coach, unlimited exports); full disclosures; review notes |
+| 3 | Subscribe → export → cancel churn | Revenue | Owner's commercial model; watch retention after launch |
+| 4 | **"Create an account" vs no backend** | Scope creep, or a missed expectation | §4.6 decision before step 0 completes; V1 proposal is a local profile |
+| 5 | On-device verification (option A) can be tampered with on rooted devices | Revenue leakage | Accept for V1, or move to B/C (same interface) |
+| 6 | Refund while the device stays offline | Up to 7 days of continued premium | Accepted consequence of the approved policy; never extends past expiry |
+| 7 | Subscription lifecycle edge cases | Wrong tier | Status mapping, listener, refresh, step-11 matrix |
+| 8 | Play acknowledgement missed | Automatic refund | Acknowledge inside the provider; process on next launch |
+| 9 | Image export memory and quality (pdf.js rasterization on low-end Android) | Crashes or blurry images | Scale caps, page caps, fallback renderer, device QA |
+| 10 | iOS vs Android print differences | PDF differs from the preview | Embedded fonts; golden files |
+| 11 | **Data loss** without a server | Lost resumes | Free backup; OS backup; reminders |
+| 12 | Parser accuracy / no OCR | Poor first impression | Review step, unassigned bucket, paste fallback |
+| 13 | Taxonomy coverage (English only) | Weak matches | Versioned taxonomy with phrase fallback |
+| 14 | Non-AI experience feels weaker than the spec's AI | Perceived quality | Honest copy; never claim AI |
+| 15 | Legal pages required (Terms, Privacy) | Submission blocked | Static hosted pages, not an app backend |
+| 16 | Keeping prototype code because tests pass | Drift from the spec | §18 classification plus a parity checklist |
 
 ---
 
 ## Decisions
 
-**Resolved:**
-- Mobile-only product, no AI, offline-first.
-- Repository `MANZUL/MyResume`; name My Resume; `com.manzul.myresume`.
-- English only in V1.
-- **$7.99/month `premium` subscription**, no per-template products.
-- Cover Letter free.
-- No Dodo; no backend for normal use.
+**Resolved**
+- Mobile-only; no AI; offline-first; no backend for normal use.
+- `MANZUL/MyResume`; "My Resume"; `com.manzul.myresume`; English only in V1.
+- **Free to build, paid to export.** $7.99/month `premium` subscription; no template products.
+- Cover Letter FREE; Resume Score FREE; all 12 templates FREE to use and preview.
+- Offline premium deadline = `MIN(subscriptionExpiry, lastVerifiedAt + 7 days)`.
+- Enforcement lives in `ExportService` through `EntitlementService.isPremium()`.
+- No claim of screenshot prevention.
 
-**Open (marked † above), needed before step 3. My proposal is in brackets:**
-1. Can FREE users select every template and preview it with a watermark? [yes]
-2. Is Resume Check free? [yes — it is the spec's free "CHECK" value and drives conversion]
-3. Do FREE users get only the template default accent, with presets and custom color premium? [yes]
-4. Can FREE users start from a template in the gallery? [yes]
-5. Free trial or introductory offer? [none in V1 unless you decide otherwise]
-6. Family Sharing for the subscription? [off]
-7. Length of the offline trust window? [7 days]
+**Open (marked † above). Proposals in brackets:**
+1. **"Create an account"**: local profile, sync, or no backend? [Option A: local profile, no sign-in, no backend]
+2. Split between default and premium customization. [FREE: template default + the 8 spec presets. PREMIUM: custom color]
+3. Share Cover Letter *text* through the system share sheet: FREE? [yes; copy is already free; there is no letter file export in V1]
+4. Free trial or intro offer? [none in V1]
+5. Family Sharing? [off]
 
-**Can wait until step 10:**
-- Verification option A, B or C. [A for V1]
-- Product IDs.
-- Terms and Privacy URLs.
+**Deferred to step 11:** verification option [A]; product IDs; Terms and Privacy URLs.
