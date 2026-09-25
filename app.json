@@ -43,6 +43,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "owner": "snln",
+    "extra": {
+      "eas": {
+        "projectId": "b6228382-fccd-4ffb-a501-0d1da73af85f"
+      }
     }
   }
 }
