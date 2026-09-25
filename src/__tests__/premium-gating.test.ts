@@ -74,7 +74,7 @@ describe('feature gates (service layer)', () => {
   it('Job Match: FREE refused before running, PREMIUM gets results', async () => {
     await expect(world(false).tools.jobMatch(SAMPLE_RESUME, JD)).rejects.toBeInstanceOf(PremiumRequiredError);
     const result = await world(true).tools.jobMatch(SAMPLE_RESUME, JD);
-    expect(result.matchPercent).toBeGreaterThan(0);
+    expect(result.counts.inJob).toBeGreaterThan(0);
   });
 
   it('Writing Coach: FREE refused before analysis; PREMIUM gets a report (step 8)', async () => {

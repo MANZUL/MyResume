@@ -1,4 +1,5 @@
 import type { ExportRecord, NewExportRecord } from '../export/export-record';
+import type { TargetJob } from '../job-match/target-job';
 import type { LocalProfile } from '../profile/local-profile';
 import type { StoredResume } from '../resume/types';
 
@@ -30,6 +31,13 @@ export interface ExportRecordRepository {
   add(record: NewExportRecord): Promise<ExportRecord>;
   listRecent(limit: number): Promise<ExportRecord[]>;
   listForResume(resumeId: string): Promise<ExportRecord[]>;
+}
+
+export interface TargetJobRepository {
+  /** The saved job description for a resume, or null. */
+  get(resumeId: string): Promise<TargetJob | null>;
+  /** Saves (or replaces) the resume's job description. Returns false if the resume no longer exists. */
+  save(job: TargetJob): Promise<boolean>;
 }
 
 export interface StorageIssue {

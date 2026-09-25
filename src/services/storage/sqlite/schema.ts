@@ -98,6 +98,18 @@ const V2_EXPORT_RECORDS = [
   `CREATE INDEX IF NOT EXISTS export_records_resume ON export_records (resume_id)`,
 ];
 
+// v3 (step 10): the job description a resume is compared with (plan §6 TargetJob). One
+// row per resume, removed with the resume. Analysis results are never stored.
+const V3_TARGET_JOBS = [
+  `CREATE TABLE IF NOT EXISTS target_jobs (
+     resume_id    TEXT    PRIMARY KEY NOT NULL REFERENCES resumes (id) ON DELETE CASCADE,
+     title        TEXT    NOT NULL DEFAULT '',
+     company      TEXT    NOT NULL DEFAULT '',
+     description  TEXT    NOT NULL DEFAULT '' CHECK (length(description) <= 25000),
+     updated_at   INTEGER NOT NULL
+   )`,
+];
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -112,6 +124,13 @@ export const MIGRATIONS: readonly Migration[] = [
     name: "export_records: allow export_type 'png' (image export)",
     async up(tx) {
       for (const statement of V2_EXPORT_RECORDS) await tx.exec(statement);
+    },
+  },
+  {
+    version: 3,
+    name: 'target_jobs: job description per resume (job match)',
+    async up(tx) {
+      for (const statement of V3_TARGET_JOBS) await tx.exec(statement);
     },
   },
 ];

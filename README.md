@@ -5,7 +5,7 @@ the app works offline.
 
 **Status: migration in progress.** The app is still the prototype, restructured with a real SQLite data layer, entitlement
 architecture, secure export (PDF, Word, PNG images), a watermarked FREE preview, editor parity
-with Resume Check jump-to-section, a deterministic Writing Coach and an ATS Readability Checker (steps 1–9 of
+with Resume Check jump-to-section, a deterministic Writing Coach, an ATS Readability Checker and a keyword-based Job Match (steps 1–10 of
 [`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md)). The product specification,
 pricing (free to build, $7.99/month "premium" to export) and the remaining steps are in that plan.
 

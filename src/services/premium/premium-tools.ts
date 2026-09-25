@@ -1,7 +1,8 @@
 import { analyzeText, applyFix, buildCoachContext } from '../../domain/coach/coach';
 import type { CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
-import { matchJob, type JobMatch } from '../../domain/match/job-match';
+import { analyzeJobMatch } from '../../domain/job-match/job-match';
+import type { JobMatchReport } from '../../domain/job-match/types';
 import type { ResumeData } from '../../domain/resume/types';
 import type { PremiumGate } from '../entitlement/premium-gate';
 
@@ -17,9 +18,13 @@ export class FeatureNotAvailableYetError extends Error {
 export class PremiumTools {
   constructor(private readonly gate: PremiumGate) {}
 
-  async jobMatch(data: ResumeData, jobDescription: string): Promise<JobMatch> {
+  /**
+   * Job description → resume match (step 10). Checked before any analysis runs, so FREE
+   * users get nothing about the posting or their resume.
+   */
+  async jobMatch(data: ResumeData, jobDescription: string): Promise<JobMatchReport> {
     await this.gate.require('jobMatch');
-    return matchJob(data, jobDescription);
+    return analyzeJobMatch(data, jobDescription);
   }
 
   /** Tailoring suggestions arrive in migration step 10; the premium check is already the entry point. */

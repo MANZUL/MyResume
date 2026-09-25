@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–9 are done in code** (§19, §19.1–§19.9); device validation of steps 4–9 is still open. Step 9 is the owner-approved ATS Readability Checker (scope amendment in §19.9); Import moved to step 9b. No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–9a and 10 (Job Match only) are done in code** (§19, §19.1–§19.10); device validation of steps 4–10 is still open. Step 9 is the owner-approved ATS Readability Checker (scope amendment in §19.9); Import moved to step 9b. No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -680,7 +680,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 9 ✅ | **ATS Readability Checker (FREE)**: owner-approved addition (Near-Term Features #1). **Done in code** (see §19.9) | Rule corpus ✅; template claims verified against real PDF and DOCX output ✅ ◆ ATS tab on devices: **NOT RUN** |
 | 9a ✅ | **PDF typography / ATS extraction fix** (owner-approved): heading and upper-case-name letter-spacing set to 0.08em. **Done** (see §19.9a) | 12/12 PDFs extract whole words (pdf.js + pdfminer.six) ✅; no layout change ✅ ◆ `expo-print` on devices: **NOT RUN** |
 | 9b | Import (FREE): parser rewrite + corpus, review, DOCX, PDF. *(Was step 9; moved after the ATS checker by the owner. Not started)* | Corpus thresholds ◆ real files |
-| 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
+| 10 ✅ (narrowed) | **Job Match (PREMIUM)**, done in code (see §19.10). Owner narrowed the scope: counts only (no percentage), taxonomy-only extraction, no tailoring, no Keyword Gap, Cover Letter unchanged. *Tailoring and the Cover Letter engine are not started.* | Corpus + regression pairs + properties ✅; mutations 22/22 ✅ ◆ Match tab on devices: **NOT RUN** |
 | 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
 | 12 | Backup, settings, error boundary, accessibility, low-end Android performance; items moved from step 5 (bundled spec fonts, thumbnails, gallery, paper picker, custom-color UI) | ◆ Release-candidate QA |
 | 13 | **(Separate approval)** EAS builds and store submission | — |
@@ -1628,6 +1628,33 @@ A PDF text layer splits both into single letters. The checker reported this hone
   - Android prints through the Chromium-based WebView, so the same result is expected.
   - iOS prints through WebKit and CoreGraphics, so it needs confirmation.
 - To check without EAS: a local `npx expo run:ios|android` build (or an Expo Go probe that calls `Print.printToFileAsync`), then the same pdf.js + pdfminer.six extraction on the exported files.
+
+### 19.10 Step 10 record: Job Match (PREMIUM)
+
+**Scope (owner, narrower than §9).** Job description → resume match only. Not built: a match percentage or any score (§9's weighted percentage is withdrawn), free 2–3 word phrase extraction, tailoring, resume rewriting, Keyword Gap as a separate feature, Cover Letter changes, job-board integration, application tracking, AI. The Step 7 Resume Score is unchanged.
+
+**Engine: `src/domain/job-match/` (pure, deterministic).**
+- `taxonomy.ts`: `TAXONOMY_VERSION = 1`, about 150 terms (skills, tools, certifications, qualifications). A term is found only if it is in the taxonomy; there is no free phrase extraction, so companies, places, people and generic words cannot become "skills".
+- `matcher.ts`: case-insensitive, whitespace/hyphen-normalized, boundary-aware regexes (Java ≠ JavaScript, C ≠ C++/C#, SQL ≠ MySQL, Node ≠ Node.js prefix); the longest overlapping match wins. Gates for ambiguous spellings:
+  - `listContext` (R, Go, C) counts only next to another confirmed language with only separators between them, or as a whole Skills entry;
+  - `notSentenceStart` (Excel, Swift, Rust, Ruby) is not counted as the first word of a sentence;
+  - `caseSensitive` (REST, Rails, Excel).
+- `segment.ts`: headings and line-start labels split the job description into required / responsibilities / general / preferred / about. Terms seen only under "about" (the company) are dropped. The role title comes from a labelled line or a short first line, with levels (Senior, II…) stripped.
+- `job-match.ts`: each term is counted once per line; resume evidence comes from the ATS text fields, excluding name and contact. The report has counts only: `inJob` and `alsoInResume`.
+- Wording: "Mentioned in job description", "Detected in resume", "Not detected". It never says the user is qualified, will pass ATS, or will get an interview.
+
+**Gating.** `PremiumTools.jobMatch` calls `PremiumGate.require('jobMatch')` before any analysis. FREE users see the locked button and the paywall. The UI hides a result if the entitlement is no longer premium or the text changed.
+
+**Persistence.** Schema v3 adds `target_jobs` (one per resume, `ON DELETE CASCADE`, description ≤ 25,000 characters by CHECK constraint) as §9 requires. The description is autosaved; results are not stored.
+
+**Known limits.**
+- Negation is not understood ("no Java needed" is still a mention).
+- Longest match hides contained names ("GitHub Actions" is not also GitHub).
+- A section label follows the nearest heading.
+- English only, and the taxonomy is finite.
+- Some tools share a company name (Salesforce, HubSpot, Snowflake).
+
+**Validation.** Clean install ✅, `tsc` ✅, `expo lint` ✅, 422/422 tests ✅ (384 before; +35 job match, +3 storage), 22/22 mutations caught ✅, iOS and Android release bundles ✅, no new dependencies. Match tab on devices: **NOT RUN**.
 
 ## 20. Major risks and failure modes
 

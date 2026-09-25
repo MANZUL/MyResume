@@ -157,7 +157,7 @@ describe('entitlement architecture (step 3)', () => {
           /domain\/render\/render-html|services\/export\/expo-export-platform|services\/storage\/resume-library|services\/entitlement\/(fake-store|store-factory|entitlement-service)|domain\/entitlement\/policy/,
         );
       }
-      expect(source, where).not.toMatch(/\bmatchJob\(/);
+      expect(source, where).not.toMatch(/\b(matchJob|analyzeJobMatch)\(/);
     }
   });
 

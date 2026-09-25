@@ -3,11 +3,13 @@ import type {
   LocalProfileRepository,
   ResumeRepository,
   StorageIssue,
+  TargetJobRepository,
 } from '../../../domain/ports/repositories';
 import { SqliteExportRecordRepository } from './export-record-repository';
 import { migrate, type MigrationResult } from './migrate';
 import { SqliteLocalProfileRepository } from './profile-repository';
 import { SqliteResumeRepository } from './resume-repository';
+import { SqliteTargetJobRepository } from './target-job-repository';
 import { MIGRATIONS, type Migration } from './schema';
 import type { SqlDatabase } from './sql';
 
@@ -17,6 +19,7 @@ export interface AppDatabase {
   resumes: ResumeRepository;
   profile: LocalProfileRepository;
   exportRecords: ExportRecordRepository;
+  targetJobs: TargetJobRepository;
 }
 
 export interface OpenOptions {
@@ -53,5 +56,6 @@ export async function initializeDatabase(db: SqlDatabase, options: OpenOptions):
     resumes: new SqliteResumeRepository(db, onIssue, now),
     profile: new SqliteLocalProfileRepository(db),
     exportRecords: new SqliteExportRecordRepository(db, options.newId, now, onIssue),
+    targetJobs: new SqliteTargetJobRepository(db, now),
   };
 }

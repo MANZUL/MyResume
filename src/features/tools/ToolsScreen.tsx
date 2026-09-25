@@ -53,7 +53,7 @@ export default function ToolsScreen() {
         {tool === 'ats' ? (
           <AtsTool data={resume.data} templateId={resume.templateId} onImprove={(section) => router.dismissTo(improveHref(resume.id, section, Date.now()))} />
         ) : null}
-        {tool === 'match' ? <MatchTool data={resume.data} /> : null}
+        {tool === 'match' ? <MatchTool resumeId={resume.id} data={resume.data} /> : null}
         {tool === 'letter' ? <LetterTool data={resume.data} /> : null}
       </ScrollView>
     </KeyboardAvoidingView>

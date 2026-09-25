@@ -3,20 +3,20 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildCoverLetter } from '../domain/letter/cover-letter';
 import { buildResumeDocxBase64 } from '../domain/render/export-docx';
-import { matchJob } from '../domain/match/job-match';
+import { analyzeJobMatch } from '../domain/job-match/job-match';
 import { renderResumeHtml } from '../domain/render/render-html';
 import { scoreResume } from '../domain/check/resume-score';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { TEMPLATES } from '../domain/templates/templates';
 import { emptyResume } from '../domain/resume/types';
 
-describe('matchJob', () => {
-  it('reports matched and missing keywords deterministically', () => {
+describe('job match', () => {
+  it('reports terms detected and not detected in the resume, deterministically', () => {
     const jd = 'We need a product strategy leader. Product strategy and user research are core. Kubernetes a plus. Kubernetes experience helps.';
-    const result = matchJob(SAMPLE_RESUME, jd);
-    expect(result.matched).toContain('product strategy');
-    expect(result.missing).toContain('kubernetes');
-    expect(result).toEqual(matchJob(SAMPLE_RESUME, jd));
+    const result = analyzeJobMatch(SAMPLE_RESUME, jd);
+    const status = Object.fromEntries(result.terms.map((t) => [t.label, t.resume.length > 0]));
+    expect(status).toEqual({ 'Product strategy': true, 'User research': true, Kubernetes: false });
+    expect(result).toEqual(analyzeJobMatch(SAMPLE_RESUME, jd));
   });
 });
 
