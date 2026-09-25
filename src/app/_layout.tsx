@@ -1,17 +1,24 @@
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
 import { EntitlementProvider } from '../services/entitlement/entitlement';
+import { purgeExportArtifacts } from '../services/export/expo-export-platform';
 import { DatabaseProvider } from '../services/storage/database-context';
 import { ResumeStoreProvider } from '../services/storage/resume-store';
 
 export default function RootLayout() {
+  // Export files are transient: clear any left from the previous session.
+  useEffect(() => {
+    purgeExportArtifacts();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <DatabaseProvider>
-        <ResumeStoreProvider>
-          <EntitlementProvider>
+        <EntitlementProvider>
+          <ResumeStoreProvider>
             <StatusBar style="dark" />
             <Stack
               screenOptions={{
@@ -27,10 +34,10 @@ export default function RootLayout() {
               <Stack.Screen name="resume/[id]/index" options={{ title: 'Edit' }} />
               <Stack.Screen name="resume/[id]/preview" options={{ title: 'Preview' }} />
               <Stack.Screen name="resume/[id]/tools" options={{ title: 'Tools' }} />
-              <Stack.Screen name="unlock" options={{ title: 'Unlock exports', presentation: 'modal' }} />
+              <Stack.Screen name="unlock" options={{ title: 'Premium', presentation: 'modal' }} />
             </Stack>
-          </EntitlementProvider>
-        </ResumeStoreProvider>
+          </ResumeStoreProvider>
+        </EntitlementProvider>
       </DatabaseProvider>
     </SafeAreaProvider>
   );

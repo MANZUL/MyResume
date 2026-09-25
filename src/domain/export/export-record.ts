@@ -1,5 +1,3 @@
-import type { AccessReason } from '../access/access';
-
 // Export history metadata for diagnostics. It records what happened; it is
 // never read to decide whether an export is allowed, and it never stores a
 // file path or file contents (plan §11, §13).
@@ -17,8 +15,8 @@ export interface ExportRecord {
   templateId: string;
   exportType: ExportType;
   outcome: ExportOutcome;
-  /** The entitlement decision at the time of the request. */
-  accessReason: AccessReason;
+  /** The entitlement decision reason at the time of the request (e.g. verified, cached, not_premium). */
+  accessReason: string;
   /** Short, non-personal error summary for failed exports. */
   errorMessage: string | null;
   createdAt: number;

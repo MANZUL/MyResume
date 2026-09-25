@@ -1,11 +1,24 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { matchJob, type JobMatch } from '../../domain/match/job-match';
+import { PremiumRequiredError } from '../../domain/entitlement/features';
+import type { JobMatch } from '../../domain/match/job-match';
+import type { ResumeData } from '../../domain/resume/types';
+import { useEntitlement } from '../../services/entitlement/entitlement';
 import { Button, Card, colors, Field, Muted, styles } from '../../ui/components';
 
-export function MatchTool({ data }: { data: Parameters<typeof matchJob>[0] }) {
+export function MatchTool({ data }: { data: ResumeData }) {
   const [jd, setJd] = useState('');
   const [result, setResult] = useState<JobMatch | null>(null);
+  const { tools, paywall } = useEntitlement();
+
+  // Job Match is premium: the tools service checks the entitlement before running.
+  const compare = async (): Promise<void> => {
+    try {
+      setResult(await tools.jobMatch(data, jd));
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: compare });
+    }
+  };
   return (
     <>
       <Field
@@ -16,7 +29,7 @@ export function MatchTool({ data }: { data: Parameters<typeof matchJob>[0] }) {
         placeholder="Paste the job posting here"
         style={{ minHeight: 180 }}
       />
-      <Button title="Compare keywords" onPress={() => setResult(matchJob(data, jd))} disabled={jd.trim().length < 30} />
+      <Button title="Compare keywords" onPress={() => void compare()} disabled={jd.trim().length < 30} />
       {result ? (
         <>
           <Card style={{ alignItems: 'center' }}>

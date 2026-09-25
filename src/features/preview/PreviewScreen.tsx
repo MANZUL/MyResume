@@ -1,22 +1,21 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Button, colors, Muted } from '../../ui/components';
-import { ExportLockedError, exportDocx, exportPdf } from '../../services/export/export';
-import { useEntitlement } from '../../services/entitlement/entitlement';
-import { renderResumeHtml } from '../../domain/render/render-html';
-import { useDatabase } from '../../services/storage/database-context';
-import { useResume } from '../../services/storage/resume-store';
+import { PremiumRequiredError } from '../../domain/entitlement/features';
+import { freeAccentsFor } from '../../domain/entitlement/palette';
 import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
-
-const ACCENTS = ['#1B2B47', '#3B5168', '#2A6B6E', '#6B7F5C', '#A85432', '#6B2737', '#2D2D2D', '#5B3F8C'];
+import { useEntitlement } from '../../services/entitlement/entitlement';
+import { useExportService } from '../../services/export/use-export-service';
+import { useResume } from '../../services/storage/resume-store';
 
 export default function PreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { resume, update, flush } = useResume(id);
-  const { exportRecords } = useDatabase();
+  const { resume, setTemplate, setAccent, flush } = useResume(id);
+  const { decision, entitlements, paywall, preview } = useEntitlement();
+  const exporter = useExportService();
   const resumeId = resume?.id;
 
   // Template and color changes are saved when the screen loses focus.
@@ -28,40 +27,48 @@ export default function PreviewScreen() {
       };
     }, [resumeId, flush]),
   );
-  const { access } = useEntitlement();
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
+  const [html, setHtml] = useState('');
 
-  const html = useMemo(
-    () =>
-      resume
-        ? renderResumeHtml(resume.data, {
-            templateId: resume.templateId,
-            accent: resume.accent,
-            mode: 'preview',
-            watermark: !access.unlocked,
-          })
-        : '',
-    [resume, access.unlocked],
-  );
+  // The preview service decides the watermark from the entitlement (FREE: watermarked).
+  useEffect(() => {
+    if (!resume) return undefined;
+    let active = true;
+    preview
+      .render(resume)
+      .then((result) => {
+        if (active) setHtml(result.html);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [resume, preview, decision.premium]);
 
   if (!resume) return null;
   const template = getTemplate(resume.templateId);
 
-  const runExport = async (kind: 'pdf' | 'docx') => {
-    if (!access.unlocked) {
-      router.push('/unlock');
-      return;
-    }
+  // Every export goes to the ExportService, which checks premium itself. When it
+  // refuses, the paywall remembers this export and runs it again after subscribing.
+  const runExport = async (kind: 'pdf' | 'docx'): Promise<void> => {
     setBusy(kind);
     try {
-      if (kind === 'pdf') await exportPdf(resume, access, exportRecords);
-      else await exportDocx(resume, access, exportRecords);
+      if (kind === 'pdf') await exporter.exportPdf(resume);
+      else await exporter.exportDocx(resume);
     } catch (error) {
-      if (error instanceof ExportLockedError) router.push('/unlock');
+      if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => runExport(kind) });
       else Alert.alert('Export failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setBusy(null);
+    }
+  };
+
+  const chooseAccent = async (color: string): Promise<void> => {
+    try {
+      await setAccent(resume.id, color);
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => chooseAccent(color) });
     }
   };
 
@@ -98,7 +105,7 @@ export default function PreviewScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 accessibilityLabel={`${t.name} template, ${t.category}`}
-                onPress={() => update(resume.id, { templateId: t.id, accent: t.defaultAccent })}
+                onPress={() => setTemplate(resume.id, t.id)}
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 8,
@@ -115,13 +122,13 @@ export default function PreviewScreen() {
         </ScrollView>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}>
           <Text style={{ color: colors.muted, fontSize: 13 }}>{template.category} · Accent</Text>
-          {ACCENTS.map((color) => (
+          {freeAccentsFor(resume.templateId).map((color) => (
             <Pressable
               key={color}
               accessibilityRole="button"
               accessibilityLabel={`Accent color ${color}`}
               accessibilityState={{ selected: resume.accent === color }}
-              onPress={() => update(resume.id, { accent: color })}
+              onPress={() => void chooseAccent(color)}
               hitSlop={6}
               style={{
                 width: 28,
@@ -138,12 +145,12 @@ export default function PreviewScreen() {
           ))}
         </ScrollView>
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
-          <Button title={access.unlocked ? 'Export PDF' : 'PDF 🔒'} loading={busy === 'pdf'} onPress={() => runExport('pdf')} style={{ flex: 1 }} />
-          <Button title={access.unlocked ? 'Export Word' : 'Word 🔒'} variant="secondary" loading={busy === 'docx'} onPress={() => runExport('docx')} style={{ flex: 1 }} />
+          <Button title={decision.premium ? 'Export PDF' : 'PDF 🔒'} loading={busy === 'pdf'} onPress={() => runExport('pdf')} style={{ flex: 1 }} />
+          <Button title={decision.premium ? 'Export Word' : 'Word 🔒'} variant="secondary" loading={busy === 'docx'} onPress={() => runExport('docx')} style={{ flex: 1 }} />
         </View>
-        {access.reason === 'dev-unconfigured' ? (
+        {entitlements.providerId === 'fake' ? (
           <View style={{ paddingHorizontal: 16 }}>
-            <Muted>Development build: exports unlocked because in-app purchases are not configured.</Muted>
+            <Muted>Development build: purchases use a simulated store.</Muted>
           </View>
         ) : null}
       </View>

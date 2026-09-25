@@ -1,4 +1,3 @@
-import type { AccessReason } from '../../../domain/access/access';
 import {
   EXPORT_OUTCOMES,
   EXPORT_TYPES,
@@ -43,7 +42,7 @@ export class SqliteExportRecordRepository implements ExportRecordRepository {
       templateId: row.template_id,
       exportType,
       outcome,
-      accessReason: row.access_reason as AccessReason,
+      accessReason: row.access_reason,
       errorMessage: row.error_message,
       createdAt: row.created_at,
     };

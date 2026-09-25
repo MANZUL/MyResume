@@ -124,3 +124,42 @@ describe('export records cannot grant access', () => {
     expect(exportTable.slice(0, exportTable.indexOf(')`'))).not.toMatch(/path|uri|file/i);
   });
 });
+
+describe('entitlement architecture (step 3)', () => {
+  const BILLING_SDKS = /^(react-native-purchases|@revenuecat\/|react-native-iap|expo-iap|expo-in-app-purchases|react-native-billing|@react-native-google-play|react-native-google-play-billing|dodopayments|dodo-payments|@dodopayments\/|stripe|@stripe\/)/;
+
+  it('no real billing SDK is declared or imported', () => {
+    for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) expect(name).not.toMatch(BILLING_SDKS);
+    for (const file of sourceFiles()) {
+      for (const spec of importsOf(readFileSync(file, 'utf8'))) expect(spec, relative(SRC, file)).not.toMatch(BILLING_SDKS);
+    }
+  });
+
+  it('the fake store is only reachable through the development branch of the store factory', () => {
+    for (const file of sourceFiles()) {
+      const source = readFileSync(file, 'utf8');
+      if (!/fake-store/.test(source)) continue;
+      expect(relative(SRC, file)).toBe(join('services', 'entitlement', 'store-factory.ts'));
+      expect(source).toMatch(/if \(__DEV__\) \{[\s\S]*require\('\.\/fake-store'\)/);
+    }
+  });
+
+  it('screens cannot bypass the premium services', () => {
+    for (const file of sourceFiles(join(SRC, 'features'))) {
+      const source = readFileSync(file, 'utf8');
+      const where = relative(SRC, file);
+      for (const spec of importsOf(source)) {
+        expect(spec, where).not.toMatch(
+          /domain\/render\/render-html|services\/export\/expo-export-platform|services\/storage\/resume-library|services\/entitlement\/(fake-store|store-factory|entitlement-service)|domain\/entitlement\/policy/,
+        );
+      }
+      expect(source, where).not.toMatch(/\bmatchJob\(/);
+    }
+  });
+
+  it('nothing persists a premium boolean', () => {
+    for (const file of sourceFiles()) {
+      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/(is_premium|isPremium)\s*[:=]\s*true/);
+    }
+  });
+});

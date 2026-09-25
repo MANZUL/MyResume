@@ -1,9 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { ResumeData, StoredResume } from '../../domain/resume/types';
+import { getTemplate } from '../../domain/templates/templates';
+import { useEntitlement } from '../entitlement/entitlement';
+import { CustomizationService } from '../premium/customization';
 import { newId } from '../../domain/shared/id';
 import { useDatabase } from './database-context';
-import { ResumeLibrary, type ResumePatch } from './resume-library';
+import { ResumeLibrary } from './resume-library';
 
 // All resumes live on the device in SQLite. No account, no server, no network.
 
@@ -12,7 +15,12 @@ interface StoreState {
   resumes: StoredResume[];
   activeId: string | null;
   create: (data: ResumeData, title?: string) => StoredResume;
-  update: (id: string, patch: ResumePatch) => void;
+  /** Content edits. Colors go through setAccent, which enforces the premium rules. */
+  update: (id: string, patch: Partial<Pick<StoredResume, 'title' | 'data'>>) => void;
+  /** Switches template and resets the accent to its default (FREE). */
+  setTemplate: (id: string, templateId: string) => void;
+  /** Default and preset colors are FREE; custom colors throw PremiumRequiredError for FREE users. */
+  setAccent: (id: string, accent: string) => Promise<void>;
   remove: (id: string) => void;
   duplicate: (id: string) => StoredResume | null;
   setActive: (id: string | null) => void;
@@ -23,6 +31,7 @@ const StoreContext = createContext<StoreState | null>(null);
 
 export function ResumeStoreProvider({ children }: { children: ReactNode }) {
   const { resumes: repository } = useDatabase();
+  const { gate } = useEntitlement();
   const library = useMemo(
     () =>
       new ResumeLibrary(repository, {
@@ -33,6 +42,7 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       }),
     [repository],
   );
+  const customization = useMemo(() => new CustomizationService(gate, library), [gate, library]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -76,13 +86,28 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       resumes,
       activeId,
       create: (data, title) => library.create(data, title),
-      update: (id, patch) => library.update(id, patch),
+      update: (id, patch) => {
+        // Only content fields are accepted here; accent/template have their own rules.
+        const content: { title?: string; data?: ResumeData } = {};
+        if (patch.title !== undefined) content.title = patch.title;
+        if (patch.data !== undefined) content.data = patch.data;
+        library.update(id, content);
+      },
+      setTemplate: (id, templateId) => {
+        const template = getTemplate(templateId);
+        library.update(id, { templateId: template.id, accent: template.defaultAccent });
+      },
+      setAccent: async (id, accent) => {
+        const resume = library.get(id);
+        if (!resume) return;
+        await customization.setAccent(id, resume.templateId, accent);
+      },
       remove: (id) => void library.remove(id),
       duplicate: (id) => library.duplicate(id),
       setActive: (id) => void library.setActive(id),
       flush: (id) => library.flush(id),
     }),
-    [library, ready, resumes, activeId],
+    [library, customization, ready, resumes, activeId],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
@@ -96,5 +121,13 @@ export function useResumeStore(): StoreState {
 export function useResume(id: string | undefined) {
   const store = useResumeStore();
   const resume = store.resumes.find((item) => item.id === id) ?? null;
-  return { resume, update: store.update, ready: store.ready, flush: store.flush, setActive: store.setActive };
+  return {
+    resume,
+    update: store.update,
+    setTemplate: store.setTemplate,
+    setAccent: store.setAccent,
+    ready: store.ready,
+    flush: store.flush,
+    setActive: store.setActive,
+  };
 }

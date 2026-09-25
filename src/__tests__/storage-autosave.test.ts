@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ExportAccess } from '../domain/access/access';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyResume } from '../domain/resume/types';
 import { createAutosaver } from '../services/storage/autosave';
 import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase, type AppDatabase } from '../services/storage/sqlite/database';
-import { ExportLockedError, runRecordedExport } from '../services/export/record-export';
+import { PremiumRequiredError } from '../domain/entitlement/features';
+import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
+import { EntitlementService } from '../services/entitlement/entitlement-service';
+import { FakeStoreProvider } from '../services/entitlement/fake-store';
+import { PremiumGate } from '../services/entitlement/premium-gate';
+import { ExportService, type ExportPlatform } from '../services/export/export-service';
 import { ManualTimers, openTestDatabase, settle, tempDir, testId, type TestDatabase } from './helpers/node-sqlite';
 
 describe('autosaver (debounced, bounded, ordered)', () => {
@@ -217,9 +221,24 @@ describe('resume library on SQLite (edits survive navigation, restart, terminati
 });
 
 describe('export records are written after the access decision, never used for it', () => {
+  // Ported from Step 2: the old runRecordedExport(…, access, …) took a caller-supplied
+  // decision; the ExportService now asks EntitlementService itself (Step 3).
   const resumeRecord = { id: 'r1', title: 'T', templateId: 'tech-builder', accent: '#000000', data: emptyResume(), createdAt: 1, updatedAt: 1 };
-  const locked: ExportAccess = { unlocked: false, reason: 'not-configured' };
-  const unlocked: ExportAccess = { unlocked: true, reason: 'dev-unconfigured' };
+  const NOW = 1_700_000_000_000;
+
+  const exporter = (premium: boolean, platform: Partial<ExportPlatform>, records: unknown) => {
+    const store = new FakeStoreProvider({ storeNow: () => NOW });
+    if (premium) store.setSubscription('active', NOW + 86_400_000);
+    const gate = new PremiumGate(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => NOW));
+    const full: ExportPlatform = {
+      generatePdf: async () => ({ id: 'a1' }),
+      generateDocx: async () => ({ id: 'a1' }),
+      share: async () => undefined,
+      discard: async () => undefined,
+      ...platform,
+    };
+    return new ExportService(gate, full, records as never);
+  };
 
   const recorder = () => {
     const added: unknown[] = [];
@@ -243,27 +262,24 @@ describe('export records are written after the access decision, never used for i
   it('denied: throws before generating anything and records the denial', async () => {
     const { added, repo } = recorder();
     let generated = false;
-    await expect(runRecordedExport(resumeRecord, 'pdf', locked, async () => void (generated = true), repo)).rejects.toBeInstanceOf(
-      ExportLockedError,
-    );
+    const service = exporter(false, { generatePdf: async () => ((generated = true), { id: 'x' }) }, repo);
+    await expect(service.exportPdf(resumeRecord)).rejects.toBeInstanceOf(PremiumRequiredError);
     expect(generated).toBe(false);
     expect(added).toEqual([
-      { resumeId: 'r1', templateId: 'tech-builder', exportType: 'pdf', outcome: 'denied', accessReason: 'not-configured', errorMessage: null },
+      { resumeId: 'r1', templateId: 'tech-builder', exportType: 'pdf', outcome: 'denied', accessReason: 'not_premium', errorMessage: null },
     ]);
   });
 
   it('succeeded and failed outcomes are recorded; a broken recorder never changes the result', async () => {
     const { added, repo } = recorder();
-    await runRecordedExport(resumeRecord, 'docx', unlocked, async () => undefined, repo);
+    await exporter(true, {}, repo).exportDocx(resumeRecord);
     await expect(
-      runRecordedExport(resumeRecord, 'pdf', unlocked, async () => {
-        throw new Error('printer crashed');
-      }, repo),
+      exporter(true, { generatePdf: async () => { throw new Error('printer crashed'); } }, repo).exportPdf(resumeRecord),
     ).rejects.toThrow('printer crashed');
     expect(added.map((r) => (r as { outcome: string }).outcome)).toEqual(['succeeded', 'failed']);
     expect((added[1] as { errorMessage: string }).errorMessage).toBe('Error: printer crashed');
 
     const broken = { ...repo, add: async () => Promise.reject(new Error('db locked')) };
-    await expect(runRecordedExport(resumeRecord, 'pdf', unlocked, async () => undefined, broken)).resolves.toBeUndefined();
+    await expect(exporter(true, {}, broken).exportPdf(resumeRecord)).resolves.toBeUndefined();
   });
 });

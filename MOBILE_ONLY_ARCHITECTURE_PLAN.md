@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0, 1 and 2 are done** (§19, §19.1, §19.2). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–3 are done** (§19, §19.1–§19.3). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -500,7 +500,7 @@ ExportService.share(handle)
 | `export_records` | id, resume_id (becomes NULL when the resume is deleted), template_id, export_type (`pdf`/`docx`), outcome (`succeeded`/`failed`/`denied`), access_reason, error_message, created_at. **No file path or file content** | Step 2 ✅ |
 | `target_jobs` | id, resume_id, title, company, description, updated_at | Step 10 (Job Match) |
 | `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at | Step 10 (Cover Letter) |
-| `entitlement_cache` | status, product_id, expires_at, will_renew, last_verified_at, clock_high_water_mark | Step 3 |
+| ~~`entitlement_cache`~~ | **Not a table.** Step 3 stores the offline entitlement cache in its own key-value file, `my-resume-entitlement.db`, separate from the resume database (see §19.3) | Step 3 ✅ |
 
 The schema version is kept in SQLite's `PRAGMA user_version`. There is no `meta` or `settings` table.
 
@@ -671,7 +671,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 0 ✅ | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets; record decisions. **Done**: prototype history imported, identity and assets set, decisions recorded | Repo builds ✅ |
 | 1 ✅ | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage. **Done** (see §19.1) | Green ✅ |
 | 2 ✅ | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile. **Done** (see §19.2) | CRUD and migration tests ✅ |
-| 3 | **Entitlement architecture:** `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume); Settings subscription section | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall |
+| 3 ✅ | **Entitlement architecture:** **Done** (see §19.3). `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume). *The Settings subscription section was not built in step 3 (new UI); it moves to step 12 with the other settings* | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall ✅ |
 | 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
 | 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
 | 6 | **Image export**: PDF → PNG via pdf.js (fallback: view-shot), per page, through `ExportService` | ◆ PNG matches the PDF on both platforms; memory caps respected |
@@ -854,6 +854,135 @@ The window that can be lost if the OS kills the app mid-typing is bounded by the
 | Crash durability approximated by opening a second connection without closing the first | A real OS kill of the app process |
 | The Step 1 legacy import, from fixture JSON | Reading a real Step 1 key-value file on a device |
 | Typecheck, lint, iOS and Android bundles (the storage modules are present in both, per source maps) | The database error screen and retry on a device |
+
+### 19.3 Step 3 record: entitlement architecture and premium gating
+
+No real billing was added: no StoreKit, no Google Play Billing, no RevenueCat, no Dodo, no backend, no new dependencies.
+
+**One entitlement, one authority**
+
+```
+domain/entitlement/            pure: no React, Expo or billing types
+  subscription.ts              "premium", $7.99/month, 10 subscription states, VerifiedSubscription, EntitlementCache
+  policy.ts                    the only PREMIUM/FREE decision (store answer or offline cache)
+  features.ts                  PremiumFeature list + PremiumRequiredError
+  palette.ts                   FREE colors: template default + the spec's 8 presets
+  cache-codec.ts               strict cache parsing (malformed → no cache)
+services/entitlement/
+  store-provider.ts            StoreProvider interface + UnavailableStoreProvider (release builds)
+  fake-store.ts                development/test only (see "Fake store" below)
+  store-factory.ts             __DEV__ → fake store; release → unavailable (every user FREE)
+  entitlement-service.ts       EntitlementService: the only entitlement authority
+  premium-gate.ts              PremiumGate.require(feature): the check every premium service calls
+  paywall.ts                   PaywallCoordinator: remembers the refused action, resumes it after subscribing
+  entitlement.tsx              React provider (display snapshot, paywall routing, refresh on launch/foreground)
+services/premium/              PremiumTools (Job Match; Writing Coach and Tailoring entry points), CustomizationService
+services/preview/              PreviewService (decides the watermark)
+services/export/               ExportService (the only export/share boundary) + expo platform
+services/storage/entitlement-cache-kv.ts   device cache file
+```
+
+**Subscription states**
+
+| Grants premium | Never grants premium |
+|---|---|
+| `active`, `grace_period`, but only before their expiry | `billing_retry`, `account_hold`, `paused`, `pending` (Ask to Buy), `expired`, `refunded`, `none`, `unknown` |
+
+A premium state that has no expiry, or whose expiry has passed, is FREE.
+
+**Decision rule** (`policy.ts`)
+
+The store is asked first. The cache is used only if the store cannot answer: offline, no store in this build, or a verification error. Cached premium counts only when **all** of these hold:
+- the cache came from the current provider;
+- the cached state is `active` or `grace_period`;
+- the device clock has not moved backwards;
+- now < **MIN(subscriptionExpiry, lastVerifiedAt + 7 days)**.
+
+**The cache is a cache, not a grant**
+- It stores provider, product, state, expiry, `lastVerifiedAt` (store time) and a clock high-water mark. There is **no premium boolean**.
+- It is overwritten by every store answer, so a refund seen online also ends offline premium.
+- It can be cleared (`invalidateCache()`).
+- It is parsed strictly: anything malformed or tampered with counts as no cache (FREE).
+- Location: its own key-value file, `my-resume-entitlement.db`, not a table in the resume database. Subscription state never mixes with user data or backups, can be wiped on its own, and the step 2 schema did not have to change.
+
+**Clock rollback**
+- If the device time is earlier than the high-water mark, cached premium is refused until the store verifies again.
+- A store answer resets the mark to the later of device time and store time. A device clock that has been moved back therefore still can't extend the cache after the next verification.
+
+**Gating in the service layer**
+
+| Feature | Enforced in |
+|---|---|
+| PDF / DOCX export | `ExportService`: premium check **before generation** and **again immediately before sharing**. A denied or failed export deletes its file immediately. Shared files stay in the private `exports/` cache folder until the next launch clears it (the receiving app may still be reading them). Callers get no file path |
+| Image export | `ExportService.exportImage`: premium check. The feature itself arrives in step 6 |
+| Clean preview | `PreviewService.render`: FREE is always watermarked |
+| Job Match | `PremiumTools.jobMatch` |
+| Writing Coach / Tailoring | `PremiumTools.writingCoach` / `.tailoring`: premium check. The features arrive in steps 8 and 10 |
+| Custom accent | `CustomizationService.setAccent`. The screens' store API no longer accepts a raw accent; template changes reset to the template's default (free) color |
+
+**Callers cannot supply a decision**
+- Premium operations take the resume only (tested by function arity).
+- Extra "premium: true" arguments, or premium-looking fields on the resume, are ignored (tested).
+
+**Fake store** (development and tests only)
+- It can simulate every state, offline, pending/approval, refunds, cancelled/failed purchases, and a store clock separate from the device clock.
+- It is `require`d only inside `if (__DEV__)`. Verified in real bundles via source maps:
+
+| Bundle | Fake store present? |
+|---|---|
+| iOS release | no |
+| Android release | no |
+| Android development | yes |
+
+- Release builds use `UnavailableStoreProvider`, so every user stays FREE until real billing is approved.
+- The Step 1 rule that unlocked exports in debug builds was **removed**. Debug builds start FREE and subscribe through the fake store.
+
+**Paywall** (existing screen layout kept)
+- The copy now reads **"Premium — $7.99/month"**, with the premium feature list and an auto-renew/cancel line.
+- The flow:
+  1. a premium action is refused by its service;
+  2. `PaywallCoordinator.request()` remembers the action and opens the paywall;
+  3. the user subscribes through the fake store;
+  4. the store verifies again;
+  5. the paywall closes and the remembered action runs again through **its own checks**.
+- Cancel keeps the action pending until "Not now". A pending purchase does not resume. Restore can resume.
+
+**Screen changes** (wiring and copy only, no redesign)
+- Preview:
+  - export buttons always call `ExportService`;
+  - the watermark comes from `PreviewService`;
+  - colors go through `setAccent`;
+  - the color row now shows the spec palette (template default + 8 presets) instead of the prototype's 8 colors. That row is what the free/premium color rule applies to.
+- Job Match calls `PremiumTools`.
+- The paywall copy changed, and its title in the navigation bar is now "Premium".
+- The layout provider order is now Database → Entitlement → Resume store.
+
+**Fixed along the way**
+- `File.move` returns a Promise and the prototype never awaited it, so a PDF could be shared before the move finished. It is now awaited.
+
+**Tests: 162 in total** (83 new)
+- 70 of the earlier tests are unchanged.
+- 9 were **ported, not deleted**, because their APIs let the caller pass the decision, which Step 3 forbids:
+  - the 7 `resolveExportAccess` cases now run through `EntitlementService`, with the same intent per case. One case is deliberately inverted: debug builds no longer auto-unlock;
+  - the 2 export-record cases now run through `ExportService`.
+
+| Area | Tests |
+|---|---|
+| Policy | all 10 states (store and cache); expiry; missing expiry; 7-day boundary (−1 ms / exactly 7 days); expiry before the boundary; clock rollback; provider mismatch; cache contents; strict codec; injected `premium: true` |
+| Service with fake store | every state; cancel at period end; renewal; reinstall with an empty cache (online and offline); online/offline; stale cache; offline FREE; expiry online and offline; refund online and offline; grace/retry/hold/pause; clock rollback forcing store verification; cache invalidation; corrupt/failing cache; purchase success/pending/cancel/fail/offline/unverified; restore; release provider |
+| Gating | every premium feature for FREE vs PREMIUM; Job Match; Coach/Tailoring entry points; custom accent vs free palette; clean vs watermarked preview; FREE users can still use all templates |
+| Export gate | FREE refused before generation (PDF, DOCX, image); two checks per export; premium lost between generate and share → not shared + discarded; share failure → discarded; offline export inside/outside the 7-day window |
+| Caller-supplied decisions | function arity; extra premium arguments; premium-looking resume fields |
+| Paywall | Export PDF → refused → paywall → fake subscription → export resumes with fresh checks (3 verifications); cancel; pending; restore; resumed action refused again if premium was lost |
+| Architecture | no billing SDK declared or imported; fake store only through the dev branch; screens cannot import the renderer, raw export platform, storage library, fake store, entitlement internals or `matchJob`; no persisted premium boolean. Each guard was broken on purpose to confirm it fails |
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator |
+|---|---|
+| Policy, service, gates, export gate, paywall flow and resume-after-purchase, all with the fake store and controlled clocks | The paywall screen, navigation back, and resuming the export on a real device |
+| Fake store excluded from iOS and Android release bundles; included in the dev bundle (source maps) | Real Apple/Google purchase, restore, refunds and grace periods (real billing is a later step) |
+| Clean install, typecheck, lint, all tests, iOS and Android bundles; no billing packages installed | The device cache file (`expo-sqlite/kv-store`) and the export-folder purge on launch |
 
 ## 20. Major risks and failure modes
 
