@@ -20,7 +20,7 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.bg },
             }}
           >
-            <Stack.Screen name="index" options={{ title: 'MyResume' }} />
+            <Stack.Screen name="index" options={{ title: 'My Resume' }} />
             <Stack.Screen name="import" options={{ title: 'Import text', presentation: 'modal' }} />
             <Stack.Screen name="resume/[id]/index" options={{ title: 'Edit' }} />
             <Stack.Screen name="resume/[id]/preview" options={{ title: 'Preview' }} />

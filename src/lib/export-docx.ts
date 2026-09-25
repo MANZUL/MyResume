@@ -214,7 +214,7 @@ export async function buildResumeDocxBase64({
   }
 
   const doc = new Document({
-    creator: 'MyResume',
+    creator: 'My Resume',
     title: `${data.name || 'Resume'} — ${templateName}`,
     styles: {
       default: {

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "MyResume",
-    "slug": "myresume",
+    "name": "My Resume",
+    "slug": "my-resume",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,15 +9,15 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.myresume.app",
+      "bundleIdentifier": "com.manzul.myresume",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.myresume.app",
+      "package": "com.manzul.myresume",
       "adaptiveIcon": {
-        "backgroundColor": "#F4F2EE",
+        "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -32,7 +32,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F2EE"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

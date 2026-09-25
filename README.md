@@ -20,7 +20,7 @@ A test (`src/__tests__/tools.test.ts`) fails if any AI SDK, `fetch(`, or remote 
 ## Run
 
 ```bash
-cd resume-mobile
+cd MyResume
 npm install
 npm test            # unit tests: parser, job match, renderer, DOCX, payment gate, no-AI guard
 npm run typecheck

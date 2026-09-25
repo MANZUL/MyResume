@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status: plan only.** Nothing is implemented yet: no billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Step 0 is done** (§19). No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -34,7 +34,7 @@ Types below are **design notation**, not code to paste in.
 
 ## 1. Complete feature inventory (specification) and tier
 
-The inventory was extracted from the web code. Items marked ◇ are **new for mobile**; they are not in the spec but the owner requires them. Items marked † are my proposals and need confirmation (see the end of this document).
+The inventory was extracted from the web code. Items marked ◇ are **new for mobile**; they are not in the spec but the owner requires them. All tier decisions are approved.
 
 | # | Feature | Spec source | Mobile approach | Tier |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ The inventory was extracted from the web code. Items marked ◇ are **new for mo
 | 3 | Template gallery: 12 templates, categories, thumbnails, descriptions | `TemplateGallery.tsx` | Native gallery | FREE |
 | 4 | Start from a template | `home.tsx:202-212` | Same | FREE |
 | 5 | Brand | `home.tsx:282-287` | App name "My Resume"; icon and splash from the logo mark | — |
-| ◇ | **Create an account** | not in spec | **Open decision; conflicts with "no backend".** V1 proposal: local profile, no sign-in (§4.6) | FREE |
+| ◇ | **Local Profile** (owner's "create an account", decided as device-only) | not in spec | On-device profile that pre-fills resumes; no login, no cloud (§4.6) | FREE |
 | 6 | Upload PDF/DOCX | `resume-upload.ts` | On-device import (§8) | FREE |
 | 7 | Paste resume / LinkedIn / notes → draft | `resume-parser.ts` (AI) | Deterministic parser + review (§8) | FREE |
 | 8 | Parse / upload failure paths | `home.tsx:144-171` | Same | FREE |
@@ -61,8 +61,8 @@ The inventory was extracted from the web code. Items marked ◇ are **new for mo
 | 26 | Cover Letter (generate, edit, copy) | `resume-ai.ts:182-219` | Deterministic, JD-aware (§10) | **FREE** |
 | 27 | Use all 12 templates | `templates.ts`, `TemplateRenderer.tsx` | One data-driven renderer (§7) | **FREE** |
 | 28 | Template picker; changing the template resets the accent | `home.tsx:578-616` | Same | FREE |
-| 29 | Default customization: template default accent + the spec's 8 preset colors | `home.tsx:623` | Same palette | **FREE**† |
-| 30 | Custom accent color (free hex/color picker) | `home.tsx:634-643` | Native picker | **PREMIUM**† ("premium customization") |
+| 29 | Default customization: template default accent + the spec's 8 preset colors | `home.tsx:623` | Same palette | **FREE** |
+| 30 | Custom accent color (free hex/color picker) | `home.tsx:634-643` | Native picker | **PREMIUM** ("premium customization") |
 | 31 | In-app preview of the full resume | right panel | Preview screen, full resume, every page | **FREE** (with "PREVIEW" watermark) |
 | 32 | PDF export | `window.print()` | Local PDF, Letter/A4 (§11) | **PREMIUM** |
 | 33 | DOCX export | `export-docx.ts` | Spec generator (§11) | **PREMIUM** |
@@ -94,7 +94,7 @@ The inventory was extracted from the web code. Items marked ◇ are **new for mo
 src/
   app/            Expo Router screens (thin)
   features/       library/ editor/ templates/ preview/ export/ import/
-                  job-match/ cover-letter/ coach/ check/ paywall/ settings/ profile/
+                  job-match/ cover-letter/ coach/ check/ paywall/ settings/ local-profile/
   domain/         pure TypeScript: no React, React Native or Expo imports; unit-tested
     resume/ templates/ render/ parse/ match/ letter/ coach/ check/
     access/       PremiumFeature catalog + policy: requiresPremium(feature)
@@ -121,7 +121,7 @@ src/
 - Export sheet (PDF / DOCX / Image; Letter or A4)
 - Tools: Check (FREE), Cover Letter (FREE), Job Match (PREMIUM)
 - Premium paywall (one plan)
-- Settings: profile, subscription status, Manage subscription, Restore, backup, paper size, Terms, Privacy
+- Settings: Local Profile, subscription status, Manage subscription, Restore, backup, paper size, Terms, Privacy
 
 ---
 
@@ -165,8 +165,8 @@ src/
 | Create, edit, save, duplicate and delete resumes | ✓ | ✓ |
 | Import (paste, DOCX, PDF) + review | ✓ | ✓ |
 | Browse and **use all 12 templates** | ✓ | ✓ |
-| Default customization (template default accent + spec presets)† | ✓ | ✓ |
-| Premium customization (custom accent color)† | — | ✓ |
+| Default customization (template default accent + spec presets) | ✓ | ✓ |
+| Premium customization (custom accent color) | — | ✓ |
 | **In-app preview of the complete resume** | ✓ with a visible "PREVIEW" watermark | ✓ **no watermark** |
 | Resume Score / Check | ✓ | ✓ |
 | **Cover Letter** (generate, edit, copy) | ✓ | ✓ |
@@ -256,14 +256,19 @@ domain/access: PremiumFeature =
   - the verified source is the store (live), or the cache within its deadline;
   - the clock guard passes.
 
-### 4.6 Account ("Create an account") — open decision, no backend added
+### 4.6 Local Profile (approved; replaces "Create an account")
 
-The owner listed "Create an account" as FREE. An account that exists off the device needs an authentication backend, which conflicts with "no backend for normal usage". Adding third-party login would also, on iOS, bring in the Sign in with Apple requirement (App Review 4.8).
+The product has a **Local Profile**. It is **not an account**.
 
-The plan does **not** add a backend. Options:
+- **Fields:** name, email, phone, location, job title / headline, LinkedIn, website. These are the profile-type fields of `ResumeData.contact` plus the tagline.
+- **Stored only on the device**, in SQLite. It is included in the user's own backup file.
+- **Purpose:** pre-fills the personal details and headline of new resumes. It never overwrites an existing resume.
+- **There is none of:** login, password, cloud account, backend identity system, cloud sync.
+- **FREE** for everyone, and it works offline.
+- **Purchases and Restore** use the user's Apple ID / Google account through the native store APIs. The app has no identity of its own for billing.
+- UI copy says "Profile" or "Local Profile", **never "Account" or "Sign in"**.
 
-| Option | What it is | Backend | Effect |
-|---|---|---|---|
+---|---|---|---|
 | **A (proposed for V1)** | **Local profile**: name, email and phone stored on the device and used to prefill new resumes. No sign-in. | None | Meets "free to create an account" in the product sense. The subscription is tied to the Apple ID / Google account, and resumes stay on the device |
 | B | Sign in with Apple / Google, used only for identity (no sync) | Needs token verification if the identity is used for anything | Little benefit without sync |
 | C | Real accounts with cloud sync | Needs auth + storage backend | Contradicts the current constraints; post-V1 |
@@ -294,7 +299,7 @@ ResumeData { name, contact{phone,email,location,linkedin,website}, summary{tagli
              projects[]{name,description,bullets[]}, awards[] }
 
 Resume        { id(uuid), title, templateId, accent, data, schemaVersion: 1, createdAt, updatedAt, deletedAt? }
-Profile       { id, name, email, phone, location, createdAt, updatedAt }   // local "account" (§4.6, option A)
+LocalProfile  { id, name, email, phone, location, headline, linkedin, website, updatedAt }   // device-only, no login (§4.6)
 TargetJob     { id, resumeId, title, company, description, updatedAt }
 CoverLetter   { id, resumeId, targetJobId?, tone, body, updatedAt }
 ImportSession { id, sourceKind, rawText, draft, unassigned[], confidence }  // transient
@@ -319,8 +324,8 @@ ExportRecord  { id, resumeId, format: 'pdf'|'docx'|'png', paper, templateId, cre
 - **Thumbnails** are pre-rendered at build time.
 - **Customization**
   - Changing the template resets the accent to its default.
-  - FREE users get the template default plus the 8 spec presets†.
-  - PREMIUM users also get a custom color†.
+  - FREE users get the template default plus the 8 spec presets.
+  - PREMIUM users also get a custom color.
   - Paper size (Letter or A4) is a setting.
 - **Watermark**
   - The FREE preview shows a large, diagonal "PREVIEW" watermark on **every page**, repeated so that no crop of a single page is clean.
@@ -430,7 +435,7 @@ JD → segment → extract → normalize → weight → evidence → score + gap
 **Output**
 - The letter is editable and saved.
 - **Copy to clipboard is FREE.**
-- Sharing the letter *text* through the system text share is FREE†.
+- Sharing the letter *text* through the system text share is FREE.
 - There is no letter PDF/DOCX/image in V1. If one is added later, it goes through `ExportService` like any other export.
 
 ---
@@ -490,7 +495,7 @@ ExportService.share(handle)
 
 | Table | Contents |
 |---|---|
-| `profile` | local "account" (§4.6 A) |
+| `local_profile` | single row; device-only (§4.6) |
 | `resumes` | id, title, template_id, accent, data_json, schema_version, created/updated/deleted_at |
 | `target_jobs` | id, resume_id, title, company, description, updated_at |
 | `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at |
@@ -503,7 +508,7 @@ ExportService.share(handle)
 **Files.** Exports live in an app-private export directory. It is purged on every launch, and temporary share copies are deleted after the share sheet closes.
 
 **User backup**
-- The backup is raw data (JSON of profile, resumes, jobs and letters) and is **FREE**.
+- The backup is raw data (JSON of the Local Profile, resumes, jobs and letters) and is **FREE**.
 - It is not a rendered resume. It never includes the entitlement cache.
 - Import merges records by id.
 
@@ -551,7 +556,7 @@ The `StoreProvider` interface fits all three options.
 
 | Capability | Offline behavior |
 |---|---|
-| Create, edit, save, delete; import (paste, DOCX, text PDF); all 12 templates; default customization; **watermarked full preview**; Resume Score; **Cover Letter** (incl. copy); local profile; backup | **Works for everyone** |
+| Create, edit, save, delete; import (paste, DOCX, text PDF); all 12 templates; default customization; **watermarked full preview**; Resume Score; **Cover Letter** (incl. copy); Local Profile; backup | **Works for everyone** |
 | Premium: PDF / DOCX / image export, share, clean preview, Coach, Job Match, Tailoring, custom accent | Works only while `isPremium()` is true: status active or grace, before `MIN(expiry, lastVerifiedAt + 7d)`, clock guard OK. Otherwise locked with "Connect to verify your subscription" |
 | Subscribe, restore, manage | Unavailable, with a message. The cache is unchanged |
 | Paywall price | Cached store offer if one exists; otherwise `$7.99/month` fallback text, and the Subscribe button is disabled until online |
@@ -563,7 +568,7 @@ The `StoreProvider` interface fits all three options.
 1. **User data**
    - iOS deletes it on uninstall unless the device is restored from a backup.
    - Android may restore it through Auto Backup.
-   - Otherwise the library and local profile start empty, and the app offers **Import backup**.
+   - Otherwise the library and Local Profile start empty, and the app offers **Import backup**.
 2. **Subscription**
    - A silent `refresh()` on first launch reads the store's current entitlements, without a sign-in prompt.
    - An active subscription unlocks export when the device is online.
@@ -580,7 +585,6 @@ The `StoreProvider` interface fits all three options.
    - "My Resume Premium, $7.99/month (localized), auto-renews";
    - what is unlocked: export + tools;
    - how to cancel;
-   - intro-offer terms, if any†;
    - Terms and Privacy links;
    - Restore and Not now.
 3. **Purchase.** `purchase()` opens the store sheet. Possible outcomes:
@@ -610,7 +614,7 @@ The `StoreProvider` interface fits all three options.
    - otherwise → FREE, with a message: "No active subscription for this account" or "Expired on <date>".
 4. **The cache is replaced** with the store's answer. A failed call never downgrades the user; a downgrade needs a successful store answer or the deadline passing.
 5. **Offline or error:** the app shows a message and leaves the cache unchanged.
-6. **Store account switch:** the refresh on launch and foreground picks up the new account's state. Resumes and the local profile stay on the device.
+6. **Store account switch:** the refresh on launch and foreground picks up the new account's state. Resumes and the Local Profile stay on the device.
 
 ---
 
@@ -618,7 +622,7 @@ The `StoreProvider` interface fits all three options.
 
 | Module | Verdict | Reason |
 |---|---|---|
-| `src/lib/types.ts` | **REFACTOR** | Correct `ResumeData`. Add `schemaVersion`, `Profile`, `TargetJob`, `CoverLetter`, `ExportRecord` and uuids |
+| `src/lib/types.ts` | **REFACTOR** | Correct `ResumeData`. Add `schemaVersion`, `LocalProfile`, `TargetJob`, `CoverLetter`, `ExportRecord` and uuids |
 | `src/lib/sample-data.ts` | **KEEP** | Spec content |
 | `src/lib/templates.ts` | **REFACTOR** | 12 configs verbatim. Add font metadata; no product IDs |
 | `src/lib/text.ts` | **KEEP** | Escaping, hex validation, file names |
@@ -663,9 +667,9 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 
 | Step | Work | Exit criteria |
 |---|---|---|
-| 0 | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets. Answer the open decisions, **especially the account question (§4.6)** | Repo builds |
+| 0 ✅ | Create `MANZUL/MyResume`; move the prototype; set identity (My Resume, `com.manzul.myresume`); brand assets; record decisions. **Done**: prototype history imported, identity and assets set, decisions recorded | Repo builds ✅ |
 | 1 | Restructure into `domain/ services/ features/ ui/`. Delete RevenueCat, the web dependencies and AsyncStorage | Green |
-| 2 | Domain model v1 (including `Profile`, `ExportRecord`); SQLite repositories and migrations; library; local profile | CRUD and migration tests |
+| 2 | Domain model v1 (including `LocalProfile`, `ExportRecord`); SQLite repositories and migrations; library; Local Profile | CRUD and migration tests |
 | 3 | **Entitlement architecture:** `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume); Settings subscription section | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall |
 | 4 | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume | Unit tests for the gates (FREE denied before generation and before share; expiry between generate and share denied) ◆ PDF and DOCX on both platforms |
 | 5 | Renderer parity (fonts, rules, Letter/A4), **per-page watermark** in the FREE preview, thumbnails, gallery, picker, spec palette (FREE) + custom color (PREMIUM) | ◆ Visual parity; watermark visible on every page in FREE, absent in PREMIUM |
@@ -687,7 +691,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 1 | **"Free to build" makes screenshots a substitute for export** | Lower conversion | Per-page watermark, non-selectable text, screen-resolution only. The paid output is vector PDF, editable DOCX and a clean high-resolution PNG. No false claim of screenshot prevention |
 | 2 | App Review 3.1.2: auto-renewing subscriptions must provide ongoing value | Rejection | Ongoing tools (Job Match and tailoring per application, Coach, unlimited exports); full disclosures; review notes |
 | 3 | Subscribe → export → cancel churn | Revenue | Owner's commercial model; watch retention after launch |
-| 4 | **"Create an account" vs no backend** | Scope creep, or a missed expectation | §4.6 decision before step 0 completes; V1 proposal is a local profile |
+| 4 | Users expect a cloud account | Missed expectation | Resolved: Local Profile only (§4.6); clear "stored on this device" copy; free backup |
 | 5 | On-device verification (option A) can be tampered with on rooted devices | Revenue leakage | Accept for V1, or move to B/C (same interface) |
 | 6 | Refund while the device stays offline | Up to 7 days of continued premium | Accepted consequence of the approved policy; never extends past expiry |
 | 7 | Subscription lifecycle edge cases | Wrong tier | Status mapping, listener, refresh, step-11 matrix |
@@ -714,11 +718,11 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 - Enforcement lives in `ExportService` through `EntitlementService.isPremium()`.
 - No claim of screenshot prevention.
 
-**Open (marked † above). Proposals in brackets:**
-1. **"Create an account"**: local profile, sync, or no backend? [Option A: local profile, no sign-in, no backend]
-2. Split between default and premium customization. [FREE: template default + the 8 spec presets. PREMIUM: custom color]
-3. Share Cover Letter *text* through the system share sheet: FREE? [yes; copy is already free; there is no letter file export in V1]
-4. Free trial or intro offer? [none in V1]
-5. Family Sharing? [off]
+**Approved (previously open):**
+1. **Local Profile**, not an account: device-only, no login, password, cloud or backend identity (§4.6).
+2. FREE: template default color + the web app's 8 presets. PREMIUM: adds the custom accent color.
+3. Cover Letter is completely FREE: generate, edit, copy, share.
+4. No free trial or introductory offer in V1.
+5. Family Sharing is OFF in V1.
 
 **Deferred to step 11:** verification option [A]; product IDs; Terms and Privacy URLs.
