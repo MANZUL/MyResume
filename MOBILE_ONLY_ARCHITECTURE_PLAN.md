@@ -678,6 +678,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 7 ✅ | Editor parity; Resume Score (FREE) with jump-to-section. **Done in code** (see §19.7) | Pure-logic and guard tests ✅ ◆ Editor pass on devices: **NOT RUN** (no simulator or device in this environment) |
 | 8 ✅ | Writing Coach (PREMIUM). **Done in code** (see §19.8) | Rule tests ✅; no-fact-insertion ✅ (property tests + grounding guard + mutation checks) ◆ Coach panel on devices: **NOT RUN** |
 | 9 ✅ | **ATS Readability Checker (FREE)**: owner-approved addition (Near-Term Features #1). **Done in code** (see §19.9) | Rule corpus ✅; template claims verified against real PDF and DOCX output ✅ ◆ ATS tab on devices: **NOT RUN** |
+| 9a ✅ | **PDF typography / ATS extraction fix** (owner-approved): heading and upper-case-name letter-spacing set to 0.08em. **Done** (see §19.9a) | 12/12 PDFs extract whole words (pdf.js + pdfminer.six) ✅; no layout change ✅ ◆ `expo-print` on devices: **NOT RUN** |
 | 9b | Import (FREE): parser rewrite + corpus, review, DOCX, PDF. *(Was step 9; moved after the ATS checker by the owner. Not started)* | Corpus thresholds ◆ real files |
 | 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
 | 11 | **(Separate approval)** Real `StoreProvider`s (option A proposed); App Store subscription group + product; Play subscription + base plan; product IDs in `BillingConfig`; Terms and Privacy URLs; sandbox tests of the full lifecycle | ◆ Full matrix on both stores |
@@ -1532,7 +1533,7 @@ The passive and tense checks are pattern-based and deliberately narrow, so they 
 - the name, in the 4 upper-case-name templates;
 - the headings, in the 6 underline or small-caps heading templates.
 
-A PDF text layer splits both into single letters. The checker reports this honestly and points to the DOCX export. Changing the templates (for example, removing letter-spacing from the PDF output) is a template change, and needs an owner decision.
+A PDF text layer splits both into single letters. The checker reported this honestly and pointed to the DOCX export. **Resolved in step 9a (§19.9a):** the letter-spacing is now 0.08em, and all 12 templates export whole words.
 
 **Corpus** (`__tests__/fixtures/ats-corpus.ts`)
 - **Strong (5):** the sample, a UK engineer with ISO dates and "C++/C#", a multilingual resume with accents, an Arabic name and location, and a resume with certification and expected dates. **0 findings** in the plain template. In letter-spaced templates, only the template-text finding, checked over all 12 templates.
@@ -1579,6 +1580,54 @@ A PDF text layer splits both into single letters. The checker reports this hones
 |---|---|
 | Rules, corpus, properties, template claims against Chromium PDF and generated DOCX | The ATS tab layout and Improve navigation on iOS and Android |
 | | Letter-spacing in `expo-print` PDFs (WebKit on iOS, Chromium-based on Android): expected the same, not confirmed |
+
+### 19.9a Step 9a record: PDF typography / ATS extraction fix
+
+**Decision (owner).** Set letter-spacing to 0.08em on the three heading styles (`underline`, `small-caps`, `small-caps-rule`) and on the upper-case name. Nothing else changes. Banner (0.06em) and plain (0.04em) headings stay as they were.
+
+**Root cause (investigation).**
+- Chromium writes every glyph as its own positioned text operation, and extractors rebuild words from the gaps between glyphs.
+- Letter-spacing alone decides the split. Upper case, small caps, font family and font size have no effect.
+- Words stayed whole up to 0.10em and split from 0.12em, and pdf.js and pdfminer.six agreed exactly.
+- The templates used 0.12em for headings and 0.15em for names. 0.08em leaves a margin below the limit.
+
+**Change**
+- `render-html.ts`:
+  - exports `HEADING_TRACKING_EM` and `NAME_TRACKING_EM`;
+  - the CSS and the name's inline style use them (0.08em for the changed values).
+- `ats/template-facts.ts`:
+  - the letter-spacing facts are now derived from the renderer's tracking and the measured limit (`MAX_WHOLE_WORD_TRACKING_EM = 0.10`), instead of a fixed list;
+  - the ATS checker therefore reports no template-text issue today, and would flag any future widening.
+- `ats/rules.ts`: the template-text check accepts an optional tracking value (tests only).
+- No other ATS rule, Resume Score, dependency, schema or persistence change.
+
+**Results**
+
+| Check | Result |
+|---|---|
+| PDF extraction (Chromium, the 12 templates; name + all 6 headings) | **12/12 whole words** with pdf.js and with pdfminer.six (before: 3/12) |
+| DOCX extraction (12 templates) | 12/12 whole words; no header, footer or table (unchanged) |
+| Element geometry (every element in `.content`, 12 templates, before vs after) | **0 boxes changed**: no wrapping, height or position change |
+| Pixels | the 9 affected templates changed (glyph spacing only); the 3 others are byte-identical |
+| Visual review | tracking still clearly wide, design identity kept, no overlap with marks |
+| Step 5 (parity and layout), Step 9 (ATS), rasterizer suites | pass |
+
+**Tests: 384** (383 before; the ATS template-text test became two: the current renderer is clean in 12/12, and the rule still flags the pre-9a tracking in exactly the 9 templates).
+
+**Mutation checks: 9, all caught.**
+- Heading or name tracking set back to 0.12 or 0.15 in the constants.
+- The renderer hard-codes `.12em` or `.15em` instead of the constants.
+- Facts limit loosened; facts ignore heading or name tracking.
+- The rule ignores the tracking input.
+- Banner widened to 0.12.
+
+**Validation:** clean install ✅, `tsc` ✅, `expo lint` ✅, 384/384 ✅, iOS and Android release bundles ✅. Step 7 files untouched.
+
+**Not verified (NOT RUN).**
+- `expo-print` output on devices.
+  - Android prints through the Chromium-based WebView, so the same result is expected.
+  - iOS prints through WebKit and CoreGraphics, so it needs confirmation.
+- To check without EAS: a local `npx expo run:ios|android` build (or an Expo Go probe that calls `Print.printToFileAsync`), then the same pdf.js + pdfminer.six extraction on the exported files.
 
 ## 20. Major risks and failure modes
 

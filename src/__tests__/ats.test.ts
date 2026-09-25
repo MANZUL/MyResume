@@ -5,7 +5,8 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkAtsReadability } from '../domain/ats/ats';
 import { isOrdered, parseDate, parseDateField } from '../domain/ats/dates';
-import { templateTextFacts } from '../domain/ats/template-facts';
+import { MAX_WHOLE_WORD_TRACKING_EM, RENDERER_TRACKING, templateTextFacts, type Tracking } from '../domain/ats/template-facts';
+import { templateTextCheck } from '../domain/ats/rules';
 import type { AtsReport, AtsRuleId } from '../domain/ats/types';
 import { buildResumeDocxBase64 } from '../domain/render/export-docx';
 import { EDITOR_SECTIONS } from '../domain/resume/sections';
@@ -90,18 +91,34 @@ describe('sections', () => {
 });
 
 describe('template text (letter-spacing)', () => {
-  it('flags letter-spaced name and/or headings per template, and recommends the Word export', () => {
-    const byTemplate = Object.fromEntries(TEMPLATES.map((t) => [t.id, findingsOf('template-text', base, t.id).map((f) => f.message)]));
-    const flagged = Object.entries(byTemplate).filter(([, m]) => m.length).map(([id]) => id).sort();
+  /** The tracking before step 9a, which split words in 9 of 12 templates. */
+  const OLD: Tracking = { headings: { banner: 0.06, underline: 0.12, 'small-caps': 0.12, 'small-caps-rule': 0.12, plain: 0.04 }, name: 0.15 };
+
+  it('step 9a: with the renderer\'s tracking no template is letter-spaced beyond the whole-word limit (12/12 readable)', () => {
+    expect(Math.max(...Object.values(RENDERER_TRACKING.headings), RENDERER_TRACKING.name)).toBeLessThanOrEqual(0.08);
+    expect(MAX_WHOLE_WORD_TRACKING_EM).toBe(0.1);
+    for (const t of TEMPLATES) {
+      expect(templateTextFacts(t), t.id).toMatchObject({ nameLetterSpaced: false, headingsLetterSpaced: false });
+      expect(findingsOf('template-text', base, t.id), t.id).toEqual([]);
+    }
+  });
+
+  it('the rule still flags wide tracking (the pre-9a values reproduce the 9 affected templates)', () => {
+    const flagged = TEMPLATES.filter((t) => {
+      const facts = templateTextFacts(t, OLD);
+      return facts.nameLetterSpaced || facts.headingsLetterSpaced;
+    }).map((t) => t.id).sort();
     expect(flagged).toEqual([
       'academic-researcher', 'academic-scholar', 'corporate-boardroom', 'corporate-partner', 'creative-editorial',
       'healthcare-educator', 'tech-builder', 'trades-foreman', 'trades-operator',
     ]);
-    expect(byTemplate['trades-foreman'][0]).toMatch(/letter-spaced name and section headings/);
-    expect(byTemplate['corporate-boardroom'][0]).toMatch(/letter-spaced name can/);
-    expect(byTemplate['tech-builder'][0]).toMatch(/letter-spaced section headings can/);
-    expect(byTemplate['tech-builder'][0]).toMatch(/Word \(DOCX\) export keeps them as whole words/);
-    expect(byTemplate[PLAIN]).toEqual([]);
+    const message = (id: string) => templateTextCheck({ data: base, template: TEMPLATES.find((t) => t.id === id)!, tracking: OLD }).findings[0].message;
+    expect(message('trades-foreman')).toMatch(/letter-spaced name and section headings/);
+    expect(message('corporate-boardroom')).toMatch(/letter-spaced name can/);
+    expect(message('tech-builder')).toMatch(/letter-spaced section headings can/);
+    expect(message('tech-builder')).toMatch(/Word \(DOCX\) export keeps them as whole words/);
+    // At exactly the limit, words are whole.
+    expect(templateTextFacts(TEMPLATES.find((t) => t.id === 'tech-builder')!, { ...OLD, headings: { ...OLD.headings, underline: 0.1 } }).headingsLetterSpaced).toBe(false);
   });
 });
 
@@ -407,6 +424,7 @@ describe.skipIf(!existsSync(CHROMIUM))('template claims match a real PDF (Chromi
   }
 
   it('letter-spacing claims hold for all 12 templates; reading order and contact placement hold for all', async () => {
+    let whole = 0;
     for (const t of TEMPLATES) {
       const text = await pdfText(t.id);
       const facts = templateTextFacts(t);
@@ -423,7 +441,9 @@ describe.skipIf(!existsSync(CHROMIUM))('template claims match a real PDF (Chromi
       expect(at(base.contact.email), t.id).toBeGreaterThan(at(base.contact.phone));
       expect(at('strategicproductleader'), t.id).toBeGreaterThan(at(base.contact.email));
       expect(text, t.id).toContain(exp.bullets[0]);
+      if (lower.includes('eleanor vance') && lower.includes('summary') && lower.includes('experience') && lower.includes('education')) whole++;
     }
+    expect(whole).toBe(12); // step 9a: name and headings are whole words in 12/12 PDFs
   }, 120_000);
 });
 
@@ -442,7 +462,8 @@ const valueSpecs = (source: string) => [...source.matchAll(/^import\s+(?!type\s)
 describe('architecture', () => {
   it('domain/ats is pure: only domain imports', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'ats'))) {
-      for (const spec of specs(read(relative(SRC, file)))) expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$/);
+      // Pure domain only; the renderer is read for its tracking constants (step 9a).
+      for (const spec of specs(read(relative(SRC, file)))) expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$|^\.\.\/render\/render-html$/);
     }
   });
 

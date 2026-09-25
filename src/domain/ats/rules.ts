@@ -2,7 +2,7 @@ import type { ResumeData } from '../resume/types';
 import type { TemplateConfig } from '../templates/templates';
 import { isOrdered, parseDateField, type DateStyle, type ParsedDate } from './dates';
 import { textFields, type TextField } from './fields';
-import { RENDERED_HEADINGS, templateTextFacts } from './template-facts';
+import { RENDERED_HEADINGS, templateTextFacts, type Tracking } from './template-facts';
 import type { AtsCheck, AtsDetection, AtsFinding, AtsLocation, AtsRuleId, AtsStatus } from './types';
 
 // Ten deterministic checks. Each is conservative: it reports only what the data (or
@@ -11,6 +11,8 @@ import type { AtsCheck, AtsDetection, AtsFinding, AtsLocation, AtsRuleId, AtsSta
 export interface AtsInput {
   data: ResumeData;
   template: TemplateConfig;
+  /** Defaults to the renderer's tracking; tests pass other values to exercise the rule. */
+  tracking?: Tracking;
 }
 
 type Draft = Omit<AtsFinding, 'id'>;
@@ -101,8 +103,8 @@ export function sectionsCheck({ data }: AtsInput): { check: AtsCheck; detected: 
 
 // --- 3. template text (letter-spacing) ---
 
-export function templateTextCheck({ template }: AtsInput): AtsCheck {
-  const facts = templateTextFacts(template);
+export function templateTextCheck({ template, tracking }: AtsInput): AtsCheck {
+  const facts = templateTextFacts(template, tracking);
   const f: Draft[] = [];
   const parts = [facts.nameLetterSpaced ? 'name' : null, facts.headingsLetterSpaced ? 'section headings' : null].filter(Boolean);
   if (parts.length) {

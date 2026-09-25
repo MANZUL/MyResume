@@ -26,6 +26,15 @@ const PAPER_CSS: Record<PaperSize, { width: string; height: string; name: string
   a4: { width: '210mm', height: '297mm', name: 'A4' },
 };
 
+/**
+ * Letter-spacing (em). Wide tracking splits words into letters in a PDF text layer
+ * ("S U M M A R Y"): measured in Chromium PDFs with pdf.js and pdfminer.six, words stay
+ * whole up to 0.10em and split from 0.12em. Headings and upper-case names use 0.08em
+ * (step 9a), which keeps a margin below that limit.
+ */
+export const HEADING_TRACKING_EM = { banner: 0.06, underline: 0.08, 'small-caps': 0.08, 'small-caps-rule': 0.08, plain: 0.04 } as const;
+export const NAME_TRACKING_EM = 0.08;
+
 /** Size of the quarter-circle mark and the room kept free around it. */
 export const QUARTER_CIRCLE_PX = 96;
 const MARK_GAP_PX = 8;
@@ -181,11 +190,11 @@ function sharedCss(config: TemplateConfig, accent: string): string {
     .stack { display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; }
     h1 { margin: 0 0 4px; font-size: 28pt; font-weight: 700; line-height: 1.15; font-family: ${font(config.fontName)}; }
     h2 { margin: 0 0 10px; font-size: 11pt; font-family: ${font(config.fontHeadings)}; color: var(--accent); }
-    .h-banner { padding: 3px 8px; font-weight: 700; background: var(--tint); letter-spacing: .06em; }
-    .h-underline { padding-bottom: 3px; font-weight: 700; border-bottom: ${config.headerRuleVariant === 'thick' ? 2 : 1}px solid var(--accent); letter-spacing: .12em; }
-    .h-small-caps { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; }
-    .h-small-caps-rule { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: .12em; border-bottom: ${config.headerRuleVariant === 'hairline' ? 0.5 : 1}px solid var(--accent); }
-    .h-plain { font-weight: 700; font-size: 12pt; letter-spacing: .04em; }
+    .h-banner { padding: 3px 8px; font-weight: 700; background: var(--tint); letter-spacing: ${HEADING_TRACKING_EM.banner}em; }
+    .h-underline { padding-bottom: 3px; font-weight: 700; border-bottom: ${config.headerRuleVariant === 'thick' ? 2 : 1}px solid var(--accent); letter-spacing: ${HEADING_TRACKING_EM.underline}em; }
+    .h-small-caps { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: ${HEADING_TRACKING_EM['small-caps']}em; }
+    .h-small-caps-rule { padding-bottom: 3px; font-weight: 600; font-variant: small-caps; letter-spacing: ${HEADING_TRACKING_EM['small-caps-rule']}em; border-bottom: ${config.headerRuleVariant === 'hairline' ? 0.5 : 1}px solid var(--accent); }
+    .h-plain { font-weight: 700; font-size: 12pt; letter-spacing: ${HEADING_TRACKING_EM.plain}em; }
     .upper { text-transform: uppercase; }
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
     .date { font-size: 9.5pt; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -257,7 +266,7 @@ function renderHeader(data: ResumeData, config: TemplateConfig): string {
     ? '<div style="height:1px;background:var(--accent);margin-bottom:6px"></div>'
     : '';
   return `<header style="text-align:${align}">
-    <h1 style="${upper ? 'text-transform:uppercase;letter-spacing:.15em;' : ''}">${e(data.name)}</h1>
+    <h1 style="${upper ? `text-transform:uppercase;letter-spacing:${NAME_TRACKING_EM}em;` : ''}">${e(data.name)}</h1>
     ${rule}
     <div style="font-size:9.5pt;text-align:${config.contactAlign === 'center' ? 'center' : 'left'}">${contact.map(e).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>
   </header>`;
