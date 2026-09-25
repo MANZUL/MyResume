@@ -88,6 +88,8 @@ describe('layering', () => {
 describe('core features work without a network', () => {
   it('app source has no network APIs or remote URLs outside of text-pattern parsing', () => {
     for (const file of sourceFiles()) {
+      // Vendored pdf.js (generated on install) is checked separately: see "image export boundary".
+      if (file.endsWith('.generated.ts')) continue;
       const source = readFileSync(file, 'utf8');
       expect(source, relative(SRC, file)).not.toMatch(/\bfetch\(|XMLHttpRequest|new WebSocket|EventSource|axios/);
       // http(s) may appear only inside regular expressions that recognize links in resume text,
@@ -200,7 +202,9 @@ describe('secure export boundary (step 4)', () => {
   it('screens reach exports only through ExportService', () => {
     for (const file of sourceFiles(join(SRC, 'features'))) {
       for (const spec of importsOf(readFileSync(file, 'utf8'))) {
-        expect(spec, relative(SRC, file)).not.toMatch(/services\/export\/(file-export-platform|expo-export-platform)|domain\/render\/(export-docx|render-html)/);
+        expect(spec, relative(SRC, file)).not.toMatch(
+          /services\/export\/(file-export-platform|expo-export-platform|rasterizer\/)|domain\/render\/(export-docx|render-html)|pdfjs/,
+        );
       }
     }
   });
@@ -208,5 +212,43 @@ describe('secure export boundary (step 4)', () => {
   it('ExportService never reads export history', () => {
     const source = readFileSync(join(SRC, 'services', 'export', 'export-service.ts'), 'utf8');
     expect(source).not.toMatch(/\.list(Recent|ForResume)\(/);
+  });
+});
+
+describe('image export boundary (step 6)', () => {
+  const RASTER = join('services', 'export', 'rasterizer');
+  const references = (pattern: RegExp) =>
+    [...sourceFiles(), ...sourceFiles(join(SRC, 'app'))]
+      .filter((file, index, all) => all.indexOf(file) === index)
+      .filter((file) => !file.endsWith('.generated.ts') && pattern.test(readFileSync(file, 'utf8')))
+      .map((file) => relative(SRC, file))
+      .sort();
+
+  it('only the rasterizer page loads the bundled pdf.js source', () => {
+    expect(references(/pdfjs-source\.generated/)).toEqual([join(RASTER, 'rasterizer-page.ts')]);
+    expect(references(/from ['"]pdfjs-dist|require\(['"]pdfjs-dist/)).toEqual([]);
+  });
+
+  it('only the export platform, its Expo adapter and the hidden host reach the rasterizer', () => {
+    expect(references(/rasterizer\/rasterizer-bridge['"]|\.\/rasterizer-bridge['"]/)).toEqual(
+      [join('services', 'export', 'expo-export-platform.ts'), join('services', 'export', 'file-export-platform.ts'), join(RASTER, 'RasterizerHost.tsx')].sort(),
+    );
+    expect(references(/rasterizer-page['"]/)).toEqual([join(RASTER, 'RasterizerHost.tsx'), join(RASTER, 'rasterizer-bridge.ts')].sort());
+    // The host is mounted once, by the root layout; no screen renders or drives it.
+    expect(references(/RasterizerHost['"]/)).toEqual([join('app', '_layout.tsx')]);
+    expect(references(/__rasterize/)).toEqual([join(RASTER, 'rasterizer-bridge.ts'), join(RASTER, 'rasterizer-page.ts')].sort());
+  });
+
+  it('image generation is only reachable through ExportService (format png → export.image)', () => {
+    const service = readFileSync(join(SRC, 'services', 'export', 'export-service.ts'), 'utf8');
+    expect(service).toMatch(/png: 'export\.image'/);
+    expect(references(/\.generatePng\(/)).toEqual([join('services', 'export', 'export-service.ts')]);
+    expect(references(/\.rasterize\(/)).toEqual([join('services', 'export', 'file-export-platform.ts')]);
+  });
+
+  it('pdfjs-dist is pinned exactly, and the generated source is not committed', () => {
+    expect(pkg.dependencies['pdfjs-dist']).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(readFileSync(join(ROOT, '.gitignore'), 'utf8')).toMatch(/^\*\.generated\.ts$/m);
+    expect((pkg as unknown as { scripts: Record<string, string> }).scripts.postinstall).toBe('node scripts/pdfjs-source.mjs');
   });
 });

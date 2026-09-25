@@ -79,7 +79,10 @@ describe('no AI dependency', () => {
     expect(files.length).toBeGreaterThan(5);
     for (const file of files) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).not.toMatch(/anthropic|openai|gemini|\bclaude\b|\bfetch\(|XMLHttpRequest|axios/i);
+      expect(source, file).not.toMatch(/anthropic|openai|gemini|\bclaude\b/i);
+      // Vendored pdf.js (generated) contains fetch/XHR code paths it never uses here; its page blocks
+      // all network access (CSP connect-src 'none') and is checked for requests in rasterizer.test.ts.
+      if (!file.endsWith('.generated.ts')) expect(source, file).not.toMatch(/\bfetch\(|XMLHttpRequest|axios/i);
     }
   });
 

@@ -233,6 +233,7 @@ describe('export records are written after the access decision, never used for i
     const full: ExportPlatform = {
       generatePdf: async () => ({ id: 'a1' }),
       generateDocx: async () => ({ id: 'a1' }),
+      generatePng: async () => ({ id: 'a1' }),
       share: async () => undefined,
       discard: async () => undefined,
       ...platform,

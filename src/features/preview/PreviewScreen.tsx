@@ -33,7 +33,7 @@ export default function PreviewScreen() {
     }, [resumeId, flush]),
   );
   const insets = useSafeAreaInsets();
-  const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
+  const [busy, setBusy] = useState<'pdf' | 'docx' | 'image' | null>(null);
   const [html, setHtml] = useState('');
 
   // The preview service decides the watermark from the entitlement (FREE: watermarked).
@@ -56,11 +56,12 @@ export default function PreviewScreen() {
 
   // Every export goes to the ExportService, which checks premium itself. When it
   // refuses, the paywall remembers this export and runs it again after subscribing.
-  const runExport = async (kind: 'pdf' | 'docx'): Promise<void> => {
+  const runExport = async (kind: 'pdf' | 'docx' | 'image'): Promise<void> => {
     setBusy(kind);
     try {
       if (kind === 'pdf') await exporter.exportPdf(resume);
-      else await exporter.exportDocx(resume);
+      else if (kind === 'docx') await exporter.exportDocx(resume);
+      else await exporter.exportImage(resume);
     } catch (error) {
       if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => runExport(kind) });
       else if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
@@ -154,6 +155,7 @@ export default function PreviewScreen() {
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
           <Button title={decision.premium ? 'Export PDF' : 'PDF 🔒'} loading={busy === 'pdf'} onPress={() => runExport('pdf')} style={{ flex: 1 }} />
           <Button title={decision.premium ? 'Export Word' : 'Word 🔒'} variant="secondary" loading={busy === 'docx'} onPress={() => runExport('docx')} style={{ flex: 1 }} />
+          <Button title={decision.premium ? 'Export Image' : 'Image 🔒'} variant="secondary" loading={busy === 'image'} onPress={() => runExport('image')} style={{ flex: 1 }} />
         </View>
         {entitlements.providerId === 'fake' ? (
           <View style={{ paddingHorizontal: 16 }}>

@@ -2,7 +2,7 @@
 // never read to decide whether an export is allowed, and it never stores a
 // file path or file contents (plan §11, §13).
 
-export const EXPORT_TYPES = ['pdf', 'docx'] as const;
+export const EXPORT_TYPES = ['pdf', 'docx', 'png'] as const;
 export type ExportType = (typeof EXPORT_TYPES)[number];
 
 export const EXPORT_OUTCOMES = ['succeeded', 'failed', 'denied'] as const;

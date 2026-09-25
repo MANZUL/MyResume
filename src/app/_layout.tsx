@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
 import { EntitlementProvider } from '../services/entitlement/entitlement';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
+import { RasterizerHost } from '../services/export/rasterizer/RasterizerHost';
 import { DatabaseProvider } from '../services/storage/database-context';
 import { ResumeStoreProvider } from '../services/storage/resume-store';
 
@@ -36,6 +37,8 @@ export default function RootLayout() {
               <Stack.Screen name="resume/[id]/tools" options={{ title: 'Tools' }} />
               <Stack.Screen name="unlock" options={{ title: 'Premium', presentation: 'modal' }} />
             </Stack>
+            {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
+            <RasterizerHost />
           </ResumeStoreProvider>
         </EntitlementProvider>
       </DatabaseProvider>

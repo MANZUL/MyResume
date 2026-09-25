@@ -77,6 +77,27 @@ async function importLegacyResumes(tx: SqlExecutor, context: MigrationContext): 
   }
 }
 
+// v2 (step 6): image export records ('png'). SQLite cannot change a CHECK
+// constraint in place, so the table is rebuilt with the same columns and rows.
+const V2_EXPORT_RECORDS = [
+  `CREATE TABLE export_records_v2 (
+     id             TEXT    PRIMARY KEY NOT NULL,
+     resume_id      TEXT    REFERENCES resumes (id) ON DELETE SET NULL,
+     template_id    TEXT    NOT NULL,
+     export_type    TEXT    NOT NULL CHECK (export_type IN ('pdf', 'docx', 'png')),
+     outcome        TEXT    NOT NULL CHECK (outcome IN ('succeeded', 'failed', 'denied')),
+     access_reason  TEXT    NOT NULL,
+     error_message  TEXT,
+     created_at     INTEGER NOT NULL
+   )`,
+  `INSERT INTO export_records_v2 (id, resume_id, template_id, export_type, outcome, access_reason, error_message, created_at)
+     SELECT id, resume_id, template_id, export_type, outcome, access_reason, error_message, created_at FROM export_records`,
+  `DROP TABLE export_records`,
+  `ALTER TABLE export_records_v2 RENAME TO export_records`,
+  `CREATE INDEX IF NOT EXISTS export_records_created_at ON export_records (created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS export_records_resume ON export_records (resume_id)`,
+];
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -84,6 +105,13 @@ export const MIGRATIONS: readonly Migration[] = [
     async up(tx, context) {
       for (const statement of V1_TABLES) await tx.exec(statement);
       await importLegacyResumes(tx, context);
+    },
+  },
+  {
+    version: 2,
+    name: "export_records: allow export_type 'png' (image export)",
+    async up(tx) {
+      for (const statement of V2_EXPORT_RECORDS) await tx.exec(statement);
     },
   },
 ];

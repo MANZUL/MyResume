@@ -31,8 +31,8 @@ const columns = (db: TestDatabase, table: string) =>
 
 describe('schema version', () => {
   it('is explicit, starts at 1, and matches the last migration', () => {
-    expect(SCHEMA_VERSION).toBe(1);
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1]);
+    expect(SCHEMA_VERSION).toBe(2);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2]);
   });
 });
 
@@ -41,8 +41,8 @@ describe('fresh install', () => {
     const db = openDb();
     expect(await getSchemaVersion(db)).toBe(0);
     const app = await initializeDatabase(db, { newId: testId });
-    expect(app.migration).toEqual({ from: 0, to: 1, applied: [1] });
-    expect(await getSchemaVersion(db)).toBe(1);
+    expect(app.migration).toEqual({ from: 0, to: SCHEMA_VERSION, applied: [1, 2] });
+    expect(await getSchemaVersion(db)).toBe(SCHEMA_VERSION);
     expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes']);
     expect(await app.resumes.list()).toEqual([]);
   });
@@ -73,7 +73,7 @@ describe('repeated migration and restart', () => {
     const first = await initializeDatabase(db, { newId: testId });
     await first.resumes.create({ id: 'r1', title: 'A', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const again = await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null });
-    expect(again).toEqual({ from: 1, to: 1, applied: [] });
+    expect(again).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION, applied: [] });
     expect((await first.resumes.list()).map((r) => r.id)).toEqual(['r1']);
   });
 
@@ -85,7 +85,7 @@ describe('repeated migration and restart', () => {
 
     const reopened = openDb();
     const restarted = await initializeDatabase(reopened, { newId: testId });
-    expect(restarted.migration).toEqual({ from: 1, to: 1, applied: [] });
+    expect(restarted.migration).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION, applied: [] });
     expect((await restarted.resumes.get('r1'))?.title).toBe('Kept');
   });
 });
@@ -118,7 +118,7 @@ describe('importing the Step 1 key-value data (existing install)', () => {
       const db = openDb(`db-${Math.random()}.db`);
       const app = await initializeDatabase(db, { newId: testId, readLegacyResumes: reader });
       expect(await app.resumes.list()).toEqual([]);
-      expect(await getSchemaVersion(db)).toBe(1);
+      expect(await getSchemaVersion(db)).toBe(SCHEMA_VERSION);
     }
     const issues: string[] = [];
     const db = openDb('throws.db');
@@ -152,8 +152,9 @@ describe('importing the Step 1 key-value data (existing install)', () => {
 });
 
 describe('upgrading an existing database and failure safety', () => {
+  const NEXT = SCHEMA_VERSION + 1;
   const v2: Migration = {
-    version: 2,
+    version: NEXT,
     name: 'test-only: add a column',
     async up(tx) {
       await tx.exec("ALTER TABLE resumes ADD COLUMN note TEXT NOT NULL DEFAULT ''");
@@ -165,10 +166,10 @@ describe('upgrading an existing database and failure safety', () => {
     const app = await initializeDatabase(db, { newId: testId });
     await app.resumes.create({ id: 'r1', title: 'Old', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const result = await migrate(db, [...MIGRATIONS, v2], { now: 1, legacyResumesJson: null });
-    expect(result).toEqual({ from: 1, to: 2, applied: [2] });
+    expect(result).toEqual({ from: SCHEMA_VERSION, to: NEXT, applied: [NEXT] });
     expect(columns(db, 'resumes')).toContain('note');
     expect((await app.resumes.get('r1'))?.title).toBe('Old');
-    expect(await migrate(db, [...MIGRATIONS, v2], { now: 1, legacyResumesJson: null })).toEqual({ from: 2, to: 2, applied: [] });
+    expect(await migrate(db, [...MIGRATIONS, v2], { now: 1, legacyResumesJson: null })).toEqual({ from: NEXT, to: NEXT, applied: [] });
   });
 
   it('rolls a failed migration back completely and leaves the version unchanged', async () => {
@@ -176,7 +177,7 @@ describe('upgrading an existing database and failure safety', () => {
     const app = await initializeDatabase(db, { newId: testId });
     await app.resumes.create({ id: 'r1', title: 'Safe', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const broken: Migration = {
-      version: 2,
+      version: NEXT,
       name: 'test-only: fails halfway',
       async up(tx) {
         await tx.exec('CREATE TABLE half_done (x INTEGER)');
@@ -185,7 +186,7 @@ describe('upgrading an existing database and failure safety', () => {
       },
     };
     await expect(migrate(db, [...MIGRATIONS, broken], { now: 1, legacyResumesJson: null })).rejects.toBeInstanceOf(MigrationError);
-    expect(await getSchemaVersion(db)).toBe(1);
+    expect(await getSchemaVersion(db)).toBe(SCHEMA_VERSION);
     expect(tables(db)).not.toContain('half_done');
     expect((await app.resumes.get('r1'))?.title).toBe('Safe');
   });
@@ -199,9 +200,31 @@ describe('upgrading an existing database and failure safety', () => {
     expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes']);
   });
 
+  it('v1 → v2 keeps every export record and its indexes, and then accepts image (png) records', async () => {
+    const db = openDb();
+    await migrate(db, MIGRATIONS.slice(0, 1), { now: 1, legacyResumesJson: null });
+    expect(await getSchemaVersion(db)).toBe(1);
+    const insert = db.raw.prepare(
+      'INSERT INTO export_records (id, resume_id, template_id, export_type, outcome, access_reason, error_message, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)',
+    );
+    insert.run('e1', 'tech-builder', 'pdf', 'succeeded', 'verified', null, 10);
+    insert.run('e2', 'corporate-boardroom', 'docx', 'failed', 'cached', 'Error: disk', 20);
+    expect(() => insert.run('e3', 'tech-builder', 'png', 'succeeded', 'verified', null, 30)).toThrow(/CHECK/); // v1 refuses png
+    expect(await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).toEqual({ from: 1, to: 2, applied: [2] });
+    expect(db.raw.prepare('SELECT id, template_id, export_type, outcome, access_reason, error_message, created_at FROM export_records ORDER BY id').all()).toEqual([
+      { id: 'e1', template_id: 'tech-builder', export_type: 'pdf', outcome: 'succeeded', access_reason: 'verified', error_message: null, created_at: 10 },
+      { id: 'e2', template_id: 'corporate-boardroom', export_type: 'docx', outcome: 'failed', access_reason: 'cached', error_message: 'Error: disk', created_at: 20 },
+    ]);
+    insert.run('e3', 'tech-builder', 'png', 'succeeded', 'verified', null, 30);
+    expect(() => insert.run('e4', 'tech-builder', 'jpeg', 'succeeded', 'verified', null, 40)).toThrow(/CHECK/);
+    const indexes = (db.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'export_records' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
+    expect(indexes).toEqual(['export_records_created_at', 'export_records_resume']);
+    expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes']);
+  });
+
   it('rejects a migration list with gaps', async () => {
     const db = openDb();
-    const gap: Migration = { version: 3, name: 'gap', up: async () => undefined };
+    const gap: Migration = { version: NEXT + 1, name: 'gap', up: async () => undefined };
     await expect(migrate(db, [...MIGRATIONS, gap], { now: 1, legacyResumesJson: null })).rejects.toThrow(/without gaps/);
   });
 });

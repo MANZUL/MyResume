@@ -17,6 +17,7 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "pdfjs-dist": "6.3.289",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
@@ -38,7 +39,8 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "node scripts/pdfjs-source.mjs"
   },
   "private": true
 }

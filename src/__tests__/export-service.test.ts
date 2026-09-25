@@ -22,11 +22,15 @@ import {
 import {
   createFileExportPlatform,
   DOCX_MIME,
+  pdfHtml,
+  PNG_MIME,
   type ExportFileSystem,
   type FileRef,
   type PrintAdapter,
   type ShareAdapter,
 } from '../services/export/file-export-platform';
+import { RasterizerError, type RasterPage, type Rasterizer } from '../services/export/rasterizer/rasterizer-bridge';
+import { renderResumeHtml } from '../domain/render/render-html';
 
 const T = 1_700_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -46,6 +50,11 @@ class MemoryFs implements ExportFileSystem {
       throw this.fail.write;
     }
     this.files.set(file.uri, base64);
+  }
+  async readBase64(uri: string) {
+    const content = this.files.get(uri);
+    if (content === undefined) throw new Error('source missing');
+    return Buffer.from(content).toString('base64');
   }
   async moveInto(sourceUri: string, target: FileRef) {
     if (this.fail.move) throw this.fail.move;
@@ -104,6 +113,23 @@ class FakeShare implements ShareAdapter {
   }
 }
 
+/** Stands in for the pdf.js WebView: records the PDF it was given and returns N fake PNG pages. */
+class FakeRasterizer implements Rasterizer {
+  inputs: string[] = [];
+  pageCount = 2;
+  fail: Error | null = null;
+  async rasterize(pdfBase64: string): Promise<RasterPage[]> {
+    this.inputs.push(Buffer.from(pdfBase64, 'base64').toString());
+    if (this.fail) throw this.fail;
+    return Array.from({ length: this.pageCount }, (_, index) => ({
+      index,
+      width: 1836,
+      height: 2376,
+      pngBase64: `iVBORw0KGgo-page-${index + 1}`,
+    }));
+  }
+}
+
 class MemoryRecords implements ExportRecordRepository {
   added: NewExportRecord[] = [];
   reads = 0;
@@ -131,7 +157,8 @@ function setup(options: { premium?: boolean; seedRecords?: ExportRecord[] } = {}
   const fs = new MemoryFs();
   const print = new FakePrint(fs);
   const share = new FakeShare();
-  const platform = createFileExportPlatform({ fs, print, share });
+  const rasterizer = new FakeRasterizer();
+  const platform = createFileExportPlatform({ fs, print, share, rasterizer });
   const records = new MemoryRecords(options.seedRecords);
   const foreground = { value: true };
   const service = new ExportService(gate, platform, {
@@ -141,7 +168,7 @@ function setup(options: { premium?: boolean; seedRecords?: ExportRecord[] } = {}
     handleLifetimeMs: 60_000,
   });
   const paywall = new PaywallCoordinator(entitlements);
-  return { clock, store, entitlements, gate, fs, print, share, platform, records, foreground, service, paywall };
+  return { clock, store, entitlements, gate, fs, print, share, rasterizer, platform, records, foreground, service, paywall };
 }
 
 const resume = (overrides: Partial<StoredResume> = {}): StoredResume => ({
@@ -520,5 +547,273 @@ describe('security: bypass attempts all fail', () => {
     w.store.setNextPurchaseResult({ kind: 'cancelled' });
     expect((await w.paywall.subscribe()).resume).toBeNull(); // cancelled purchase does not release it
     expect(w.share.shared).toHaveLength(0);
+  });
+});
+
+describe('image export (PNG, step 6)', () => {
+  const pngFiles = (w: ReturnType<typeof setup>) => w.fs.exportFiles().filter((uri) => uri.endsWith('.png'));
+
+  it('FREE: refused before anything is printed or rasterized; denial recorded; paywall feature is export.image', async () => {
+    const w = setup({ premium: false });
+    await expect(w.service.exportImage(resume())).rejects.toEqual(new PremiumRequiredError('export.image'));
+    expect(w.print.calls).toHaveLength(0);
+    expect(w.rasterizer.inputs).toHaveLength(0);
+    expect(w.fs.files.size).toBe(0);
+    expect(outcomes(w.records)).toEqual(['png:denied']);
+  });
+
+  it('PREMIUM: one PNG per page from the export PDF, shared in page order from the private folder', async () => {
+    const w = setup();
+    await w.service.exportImage(resume());
+    expect(w.rasterizer.inputs).toEqual(['%PDF-fake 612x792']); // exactly the printed PDF
+    expect(w.share.shared.map((s) => s.uri.replace(/exports\/[^/]+\//, 'exports/<id>/'))).toEqual([
+      'mem://cache/exports/<id>/eleanor_vance_page-1.png',
+      'mem://cache/exports/<id>/eleanor_vance_page-2.png',
+    ]);
+    expect(w.share.shared.every((s) => s.mimeType === PNG_MIME)).toBe(true);
+    expect(pngFiles(w).map((uri) => w.fs.files.get(uri))).toEqual(['iVBORw0KGgo-page-1', 'iVBORw0KGgo-page-2']);
+    expect(w.fs.tempFiles()).toEqual([]); // the intermediate PDF is deleted
+    expect(w.fs.exportFiles().some((uri) => uri.endsWith('.pdf'))).toBe(false); // and never becomes an artifact
+    expect(outcomes(w.records)).toEqual(['png:succeeded']);
+  });
+
+  it('a one-page resume gives a single <Name>.png', async () => {
+    const w = setup();
+    w.rasterizer.pageCount = 1;
+    await w.service.exportImage(resume());
+    expect(w.share.shared).toHaveLength(1);
+    expect(w.share.shared[0].uri).toMatch(/\/eleanor_vance\.png$/);
+  });
+
+  it('uses the shared rendering path: the exact PDF-mode HTML of the PDF export, Letter or A4, never watermarked', async () => {
+    const w = setup();
+    for (const paper of ['letter', 'a4'] as const) {
+      await w.service.exportImage(resume(), paper);
+      await w.service.exportPdf(resume(), paper);
+    }
+    const [imgLetter, pdfLetter, imgA4, pdfA4] = w.print.calls;
+    expect(imgLetter).toEqual(pdfLetter);
+    expect(imgA4).toEqual(pdfA4);
+    expect(imgLetter).toMatchObject({ width: 612, height: 792, marginPt: 54 });
+    expect(imgA4).toMatchObject({ width: 595, height: 842, marginPt: 54 });
+    expect(imgLetter.html).toBe(pdfHtml(resume(), 'letter'));
+    expect(imgLetter.html).toBe(
+      renderResumeHtml(SAMPLE_RESUME, { templateId: 'corporate-boardroom', accent: '#1B2B47', mode: 'pdf', paper: 'letter' }),
+    );
+    for (const call of w.print.calls) {
+      expect(call.html).not.toContain('class="watermark"');
+      expect(call.html).not.toContain('PREVIEW');
+    }
+  });
+
+  it('keeps the template, accent and resume content', async () => {
+    const w = setup();
+    await w.service.exportImage(resume({ templateId: 'creative-editorial', accent: '#0F766E' }));
+    await w.service.exportImage(resume({ templateId: 'trades-foreman', accent: '#B45309', data: { ...SAMPLE_RESUME, name: 'Ada Lovelace' } }));
+    const [editorial, foreman] = w.print.calls.map((c) => c.html);
+    expect(editorial).toContain('mark-rule');
+    expect(editorial).toContain('--accent: #0F766E');
+    expect(foreman).toContain('mark-qc');
+    expect(foreman).toContain('--accent: #B45309');
+    expect(foreman).toContain('Ada Lovelace');
+    for (const heading of ['Summary', 'Experience', 'Education']) expect(foreman).toContain(`>${heading}</h2>`);
+    expect(w.share.shared.at(-1)!.uri).toMatch(/ada_lovelace_page-2\.png$/);
+  });
+
+  it('checks the entitlement before generation, before sharing, and again before every further page', async () => {
+    const w = setup();
+    const before = w.store.calls.verify;
+    await w.service.exportImage(resume()); // 2 pages
+    expect(w.store.calls.verify - before).toBe(3);
+    w.rasterizer.pageCount = 1;
+    const mid = w.store.calls.verify;
+    await w.service.exportImage(resume());
+    expect(w.store.calls.verify - mid).toBe(2);
+  });
+
+  it('entitlement lost before sharing → nothing shared, every page deleted, denial recorded', async () => {
+    const w = setup();
+    const handle = await w.service.prepare(resume(), { format: 'png' });
+    expect(pngFiles(w)).toHaveLength(2);
+    w.store.refund();
+    await expect(w.service.share(handle)).rejects.toEqual(new PremiumRequiredError('export.share'));
+    expect(w.share.shared).toHaveLength(0);
+    expect(w.fs.exportFiles()).toEqual([]);
+    expect(outcomes(w.records)).toEqual(['png:denied']);
+    w.store.setSubscription('active', T + 30 * DAY);
+    await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+  });
+
+  it('entitlement lost between pages → the next page is not shared, files deleted, denial recorded, paywall error', async () => {
+    const w = setup();
+    w.share.onShare = () => {
+      if (w.share.shared.length === 0) w.store.refund(); // refund lands while page 1's sheet is open
+    };
+    await expect(w.service.exportImage(resume())).rejects.toEqual(new PremiumRequiredError('export.share'));
+    expect(w.share.shared).toHaveLength(1);
+    expect(w.fs.exportFiles()).toEqual([]);
+    expect(outcomes(w.records)).toEqual(['png:denied']);
+  });
+
+  it('a refused image export resumes through the existing paywall flow after subscribing', async () => {
+    const w = setup({ premium: false });
+    let resumeAction: (() => Promise<void>) | null = null;
+    try {
+      await w.service.exportImage(resume());
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) {
+        w.paywall.request({ feature: error.feature, run: () => w.service.exportImage(resume()) });
+      }
+    }
+    expect(w.paywall.pendingFeature()).toBe('export.image');
+    resumeAction = (await w.paywall.subscribe()).resume;
+    await resumeAction!();
+    expect(w.share.shared).toHaveLength(2);
+    expect(outcomes(w.records)).toEqual(['png:denied', 'png:succeeded']);
+  });
+
+  describe('handles', () => {
+    it('are opaque (no path) and work once', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      expect(Object.isFrozen(handle)).toBe(true);
+      expect(Object.keys(handle).sort()).toEqual(['format', 'id']);
+      expect(handle.format).toBe('png');
+      expect(JSON.stringify(handle)).not.toMatch(/mem:|exports|\/|\.png|page-/);
+      await w.service.share(handle);
+      await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      expect(w.share.shared).toHaveLength(2);
+    });
+
+    it('expire: every page deleted, nothing shared', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      w.clock.now += 60_001;
+      await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      expect(w.fs.exportFiles()).toEqual([]);
+      expect(w.share.shared).toHaveLength(0);
+    });
+
+    it('are invalid after discard, which deletes every page', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      await w.service.discard(handle);
+      expect(w.fs.exportFiles()).toEqual([]);
+      await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+    });
+
+    it('cannot be forged, copied, or used by another service instance', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      await expect(w.service.share({ id: handle.id, format: 'png' } as ExportHandle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      await expect(w.service.share({ ...handle })).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      await expect(new ExportService(w.gate, w.platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      expect(w.share.shared).toHaveLength(0);
+    });
+
+    it('die with the process (app restart); the launch purge removes the pages', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      expect(pngFiles(w)).toHaveLength(2);
+      const platform = createFileExportPlatform({ fs: w.fs, print: w.print, share: w.share, rasterizer: w.rasterizer });
+      await expect(new ExportService(w.gate, platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      platform.purgeAll();
+      expect(w.fs.exportFiles()).toEqual([]);
+      expect(w.share.shared).toHaveLength(0);
+    });
+  });
+
+  describe('failures leave no artifact', () => {
+    it('renderer (print) failure: nothing rasterized, nothing written', async () => {
+      const w = setup();
+      w.print.fail = new Error('WebView print failed');
+      await expect(w.service.exportImage(resume())).rejects.toThrow('WebView print failed');
+      expect(w.rasterizer.inputs).toHaveLength(0);
+      expect(w.fs.files.size).toBe(0);
+      expect(outcomes(w.records)).toEqual(['png:failed']);
+    });
+
+    it('rasterizer failure (pdf.js / WebView): temp PDF and pages removed, error has no path', async () => {
+      const w = setup();
+      w.rasterizer.fail = new RasterizerError('webview_terminated');
+      const error = await w.service.exportImage(resume()).catch((e: Error) => e);
+      expect(error).toBeInstanceOf(RasterizerError);
+      expect((error as Error).message).not.toMatch(/mem:|\/|exports/);
+      expect(w.fs.files.size).toBe(0);
+      expect(outcomes(w.records)).toEqual(['png:failed']);
+      expect(w.records.added[0].errorMessage).toBe('RasterizerError: Image export failed (webview_terminated).');
+    });
+
+    it('rasterizer not available (no host): refused cleanly', async () => {
+      const w = setup();
+      const platform = createFileExportPlatform({ fs: w.fs, print: w.print, share: w.share });
+      const service = new ExportService(w.gate, platform, { records: w.records });
+      await expect(service.exportImage(resume())).rejects.toBeInstanceOf(RasterizerError);
+      expect(w.fs.files.size).toBe(0);
+    });
+
+    it('file system failure while reading the printed PDF', async () => {
+      const w = setup();
+      w.fs.readBase64 = async () => {
+        throw new Error('EIO');
+      };
+      await expect(w.service.exportImage(resume())).rejects.toThrow('EIO');
+      expect(w.fs.files.size).toBe(0);
+    });
+
+    it('insufficient storage while writing a page: partial page and earlier pages removed', async () => {
+      const w = setup();
+      const write = w.fs.writeBase64.bind(w.fs);
+      let writes = 0;
+      w.fs.writeBase64 = (file, base64) => {
+        writes += 1;
+        if (writes === 2) {
+          w.fs.files.set(file.uri, 'PARTIAL');
+          throw new Error('ENOSPC');
+        }
+        write(file, base64);
+      };
+      await expect(w.service.exportImage(resume())).rejects.toThrow('ENOSPC');
+      expect(w.fs.files.size).toBe(0);
+      expect(w.share.shared).toHaveLength(0);
+    });
+
+    it('share sheet failure deletes every page and invalidates the handle', async () => {
+      const w = setup();
+      w.share.fail = new Error('no activity');
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      await expect(w.service.share(handle)).rejects.toThrow('no activity');
+      expect(w.fs.exportFiles()).toEqual([]);
+      await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      expect(outcomes(w.records)).toEqual(['png:failed']);
+    });
+
+    it('cancelled share: remaining pages not offered, files deleted', async () => {
+      const w = setup();
+      w.share.result = 'dismissed';
+      await expect(w.service.exportImage(resume())).rejects.toBeInstanceOf(ExportCancelledError);
+      expect(w.share.shared).toHaveLength(1);
+      expect(w.fs.exportFiles()).toEqual([]);
+    });
+
+    it('app backgrounded before sharing: not shared, pages deleted', async () => {
+      const w = setup();
+      const handle = await w.service.prepare(resume(), { format: 'png' });
+      w.foreground.value = false;
+      await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportInterruptedError);
+      expect(w.fs.exportFiles()).toEqual([]);
+      expect(w.share.shared).toHaveLength(0);
+    });
+  });
+
+  it('bypass attempts: "premium" arguments and resume fields change nothing', async () => {
+    const w = setup({ premium: false });
+    const anyService = w.service as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    await expect(anyService.exportImage(resume(), 'letter', { premium: true, watermark: false })).rejects.toBeInstanceOf(PremiumRequiredError);
+    await expect(anyService.prepare(resume(), { format: 'png', premium: true })).rejects.toBeInstanceOf(PremiumRequiredError);
+    const sneaky = { ...resume(), premium: true, data: { ...SAMPLE_RESUME, premium: true } } as StoredResume;
+    await expect(w.service.exportImage(sneaky)).rejects.toBeInstanceOf(PremiumRequiredError);
+    expect(w.print.calls).toHaveLength(0);
+    expect(w.rasterizer.inputs).toHaveLength(0);
   });
 });

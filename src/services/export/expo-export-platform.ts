@@ -3,9 +3,11 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { ExportPlatform } from './export-service';
 import { createFileExportPlatform, type ExportFileSystem, type FileRef } from './file-export-platform';
+import { getRasterizerBridge } from './rasterizer/rasterizer-bridge';
 
-// Device adapters for the export platform: expo-file-system, expo-print and
-// expo-sharing. Only ExportService (via use-export-service.ts) uses this.
+// Device adapters for the export platform: expo-file-system, expo-print,
+// expo-sharing and the hidden pdf.js WebView (image export, see RasterizerHost).
+// Only ExportService (via use-export-service.ts) uses this.
 
 const exportsDir = () => new Directory(Paths.cache, 'exports');
 
@@ -19,6 +21,9 @@ const expoFs: ExportFileSystem = {
     const target = file as File;
     target.create({ overwrite: true });
     target.write(base64, { encoding: 'base64' });
+  },
+  readBase64(uri) {
+    return new File(uri).base64();
   },
   async moveInto(sourceUri, target) {
     await new File(sourceUri).move(target as File);
@@ -46,6 +51,7 @@ let platform: (ExportPlatform & { purgeAll(): void }) | null = null;
 export function getExpoExportPlatform(): ExportPlatform {
   platform ??= createFileExportPlatform({
     fs: expoFs,
+    rasterizer: getRasterizerBridge(),
     print: {
       printToFile: ({ html, width, height, marginPt }) =>
         Print.printToFileAsync({ html, width, height, margins: { top: marginPt, bottom: marginPt, left: marginPt, right: marginPt } }),

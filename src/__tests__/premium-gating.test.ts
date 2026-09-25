@@ -41,6 +41,12 @@ function world(premium: boolean) {
       artifacts.push(a);
       return a;
     },
+    generatePng: async () => {
+      log.push('generate png');
+      const a = { id: `png-${artifacts.length}` };
+      artifacts.push(a);
+      return a;
+    },
     share: async (a) => void log.push(`share ${a.id}`),
     discard: async (a) => void log.push(`discard ${a.id}`),
   };
@@ -120,14 +126,14 @@ describe('export gate (ExportService is the boundary)', () => {
     expect(free.log).toEqual([]);
   });
 
-  it('PREMIUM PDF and DOCX: generate → second check → share; shared files are kept for the launch purge', async () => {
+  it('PREMIUM PDF, DOCX and image: generate → second check → share; shared files are kept for the launch purge', async () => {
     const paid = world(true);
     const verifyBefore = paid.store.calls.verify;
     await paid.exporter.exportPdf(resume());
     await paid.exporter.exportDocx(resume());
-    expect(paid.log).toEqual(['generate pdf', 'share pdf-0', 'generate docx', 'share docx-1']);
-    expect(paid.store.calls.verify - verifyBefore).toBe(4); // two entitlement checks per export
-    await expect(paid.exporter.exportImage(resume())).rejects.toBeInstanceOf(FeatureNotAvailableYetError);
+    await paid.exporter.exportImage(resume());
+    expect(paid.log).toEqual(['generate pdf', 'share pdf-0', 'generate docx', 'share docx-1', 'generate png', 'share png-2']);
+    expect(paid.store.calls.verify - verifyBefore).toBe(6); // two entitlement checks per export
   });
 
   it('premium lost between generation and sharing → not shared, artifact discarded', async () => {
@@ -162,6 +168,7 @@ describe('export gate (ExportService is the boundary)', () => {
     const exporter = new ExportService(new PremiumGate(entitlements), {
       generatePdf: async () => ((log.push('generate'), { id: 'a' })),
       generateDocx: async () => ({ id: 'b' }),
+      generatePng: async () => ({ id: 'c' }),
       share: async () => void log.push('share'),
       discard: async () => void log.push('discard'),
     });

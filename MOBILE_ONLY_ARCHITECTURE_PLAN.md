@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–5 are done** (§19, §19.1–§19.5). No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–6 are done in code** (§19, §19.1–§19.6); device validation of steps 4–6 is still open. No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -497,7 +497,7 @@ ExportService.share(handle)
 |---|---|---|
 | `resumes` | id, title, template_id, accent, data_json, is_active, created_at, updated_at. A partial unique index allows at most one active resume | Step 2 ✅ |
 | `local_profile` | single row (`id = 1`): name, email, phone, location, headline, linkedin, website, updated_at | Step 2 ✅ |
-| `export_records` | id, resume_id (becomes NULL when the resume is deleted), template_id, export_type (`pdf`/`docx`), outcome (`succeeded`/`failed`/`denied`), access_reason, error_message, created_at. **No file path or file content** | Step 2 ✅ |
+| `export_records` | id, resume_id (becomes NULL when the resume is deleted), template_id, export_type (`pdf`/`docx`, and `png` from schema v2), outcome (`succeeded`/`failed`/`denied`), access_reason, error_message, created_at. **No file path or file content** | Step 2 ✅ |
 | `target_jobs` | id, resume_id, title, company, description, updated_at | Step 10 (Job Match) |
 | `cover_letters` | id, resume_id, target_job_id, tone, body, updated_at | Step 10 (Cover Letter) |
 | ~~`entitlement_cache`~~ | **Not a table.** Step 3 stores the offline entitlement cache in its own key-value file, `my-resume-entitlement.db`, separate from the resume database (see §19.3) | Step 3 ✅ |
@@ -674,7 +674,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 3 ✅ | **Entitlement architecture:** **Done** (see §19.3). `EntitlementService.isPremium()` policy (statuses, `MIN(expiry, lastVerifiedAt + 7d)`, clock guard); `FakeStoreProvider`; `PremiumFeature` catalog; premium paywall (fake offer, 3.1.2 layout, pending-request resume). *The Settings subscription section was not built in step 3 (new UI); it moves to step 12 with the other settings* | Scripted tests for: subscribe, pending, cancel-at-period-end, renew, expire (**including offline: no extension past expiry**), grace, retry, pause, refund, offline within and beyond 7 days, clock rollback, reinstall ✅ |
 | 4 ✅ | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume. **Done** (see §19.4) | Unit tests for the gates ✅ ◆ PDF and DOCX on both platforms: **still open** (no device yet) |
 | 5 ✅ | Renderer parity (rules, Letter/A4), **watermark** in the FREE preview, Boardroom/Foreman mark overlap. **Done, narrowed scope** (see §19.5). *Bundled spec fonts, thumbnails, gallery, paper picker and the custom-color UI were taken out of step 5 by the owner and move to step 12* | Layout tests in a real engine ✅: no text under a mark, preview/PDF geometry parity, watermark coverage and readability, no watermark in PREMIUM or PDF ◆ WebView and `expo-print` on devices: **still open** |
-| 6 | **Image export**: PDF → PNG via pdf.js (fallback: view-shot), per page, through `ExportService` | ◆ PNG matches the PDF on both platforms; memory caps respected |
+| 6 ✅ | **Image export**: PDF → PNG via pdf.js, per page, through `ExportService`. **Done in code** (see §19.6); the view-shot fallback was not needed | End-to-end in Chromium ✅ (real renderer → PDF → bundled pdf.js → PNG) ◆ PNG on both platforms and memory on low-end Android: **still open** |
 | 7 | Editor parity; Resume Score (FREE) with jump-to-section | ◆ Editor pass |
 | 8 | Writing Coach (PREMIUM) | Rule tests; no-fact-insertion |
 | 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
@@ -1147,6 +1147,101 @@ The layout tests use `playwright-core` (new **dev-only** dependency, exact versi
 | Renderer output, parity and watermark decisions (unit tests) | The watermark in the iOS `WKWebView` and the Android WebView (SVG data-URI backgrounds, opacity) |
 | Layout, overlap, overflow, watermark coverage and multi-page PDF in Chromium | `expo-print` page breaks and mark position on iOS (WebKit) and Android |
 | Release bundles for both platforms | Pinch-zoom and scaling of the preview sheet on small and large phones |
+
+### 19.6 Step 6 record: image export (PNG)
+
+**Scope.** Premium image export only. No import, Writing Coach, Job Match, tailoring, billing, settings, paper picker, custom colors, fonts or template changes.
+
+**Format and method (as the plan specifies, §11).**
+- The format is **PNG, one image per page**. No other format was added.
+- Each page is rasterized from **the same PDF as the PDF export**:
+  - resume data → `renderResumeHtml` (PDF mode, never watermarked) → `expo-print` → temporary PDF;
+  - → pdf.js in a hidden, offline WebView → one PNG per page.
+- There is no separate image renderer: image, PDF and preview share one rendering path.
+- The `react-native-view-shot` fallback was not needed.
+
+**How it works**
+
+| Part | What it does |
+|---|---|
+| `ExportService.exportImage(resume, paper)` | Format `png`, gated on `export.image`, using the same boundary as PDF and DOCX. Check #1 runs before generation, check #2 before sharing, and a further check before every extra page's share sheet |
+| `file-export-platform.generatePng` | Prints through the same `printPdf` step as `generatePdf`. It reads the temporary PDF, rasterizes it and writes `exports/<id>/<Name>.png` (or `<Name>_page-N.png`). It then always deletes the temporary PDF, which never becomes an artifact. Any failure deletes the artifact folder |
+| `rasterizer/rasterizer-bridge.ts` | Job protocol with the WebView: one job at a time, 60 s timeout. Validates every message: job id, page order, page count, size caps and the PNG signature |
+| `rasterizer/rasterizer-page.ts` | The pdf.js page, with CSP `default-src 'none'; connect-src 'none'; worker-src 'none'` and inline scripts only. Caps: 3× (216 dpi), longest side ≤ 2400 px, ≤ 10 pages |
+| `rasterizer/RasterizerHost.tsx` | Hidden 2×2 WebView, mounted by the root layout only while a job runs (no memory kept between exports). JavaScript on; no navigation, file access, cache or remote loads |
+| Sharing | Through the Step 4 share boundary: one share sheet per page, in order (`expo-sharing` shares one file at a time). Cancelling stops the remaining pages and deletes the files |
+| Records | `export_records` schema **v2** rebuilds the table to accept `png`. All rows and indexes are kept, and v1 → v2 is tested |
+
+**pdf.js packaging**
+
+- `pdfjs-dist` 6.3.289 is pinned exactly (Apache-2.0).
+- On install, `scripts/pdfjs-source.mjs` (postinstall) turns its legacy build into `pdfjs-source.generated.ts`:
+  - the main module's exports become a global;
+  - the worker runs on the page's main thread;
+  - non-ASCII characters are escaped;
+  - the file is gitignored, and the app loads it lazily.
+- About **+1.85 MB** per bundle (iOS 2.8 → 4.7 MB, Android 3.1 → 5.0 MB). Without the ASCII escaping, Hermes would have stored it as UTF-16 (+3.5 MB).
+- `pdfjs-dist` also installs `@napi-rs/canvas`, an optional dependency for Node. It stays in `node_modules` and is **not** in the app bundles (verified).
+
+**Security (the Step 4 rules, applied to images)**
+
+- Opaque, frozen, single-use handles with no path.
+- A handle is invalid after:
+  - its lifetime expires;
+  - discard;
+  - entitlement loss (even if premium returns);
+  - forging or copying;
+  - use from another service instance;
+  - an app restart.
+- The launch purge deletes all pages.
+- Every failure leaves no artifact: print, rasterizer (including a missing host), reading the PDF, writing a page (partial file), share failure, cancellation, backgrounding.
+- A refused image export opens the existing paywall, which resumes the export after a verified subscription.
+- The generated pdf.js file is the only vendored code exempt from the "no `fetch(`" source guard. In its place:
+  - an integrity test (the file equals the generator's output from the installed package);
+  - an ASCII test;
+  - the CSP;
+  - a Chromium test showing that the page's own `fetch` is blocked and that no request leaves the engine during image export.
+
+**Tests: 269** (221 before; +23 in `export-service.test.ts`, +20 in `rasterizer.test.ts`, +1 migration, +4 architecture guards; the existing gating test now exercises image export instead of "not available yet")
+
+| Area | Covered |
+|---|---|
+| Gating | FREE refused before print/rasterize (denial recorded, paywall feature `export.image`); PREMIUM generates; check count 2 (one page) or 3 (two pages); entitlement loss before share and between pages; paywall resume |
+| Rendering path | the image's print call is identical to the PDF export's, equal to `renderResumeHtml(mode 'pdf')`; Letter 612×792 / A4 595×842 pt; no watermark; template, accent and content |
+| Handles and failures | as listed above |
+| Bridge | ready handshake; malformed, foreign and stale messages ignored; wrong order, non-PNG, oversized, over-count or fractional pages fail the job; count mismatch, page error, timeout, lost host, busy; a failing host never leaves a job stuck (bug found and fixed while writing these tests) |
+| End to end (Chromium standing in for `expo-print` and the WebView) | real `ExportService` → shared renderer → PDF → bundled pdf.js → PNG:<br>• one 1836×2376 PNG per PDF page;<br>• Boardroom and Foreman quarter-circle pixels in the accent color;<br>• Editorial rule in its accent;<br>• the PDF text has the name, contact and all sections in order, and no "PREVIEW";<br>• the empty part of the last page is pure white;<br>• positive control: the same check detects a watermark;<br>• A4 capped at 2400 px;<br>• page cap enforced;<br>• no network |
+| Architecture | only `rasterizer-page` loads the pdf.js source; only the export platform, its Expo adapter and the host reach the bridge; only the root layout mounts the host; only `ExportService` calls `generatePng`; screens cannot import anything under `services/export/rasterizer`; `pdfjs-dist` pinned; generated file not committed |
+
+**Mutation checks (each reverted):**
+
+| Mutation | Tests that fail |
+|---|---|
+| Remove the second check | 10 |
+| Ignore the per-page guard | 2 |
+| Skip check #1 for PNG | 6 |
+| Rasterize the watermarked preview instead of the PDF HTML | 4 |
+| No cleanup on image failure | 1 |
+| Keep the temporary PDF | 5 |
+| Accept non-PNG pages | 1 |
+| Allow network in the page CSP | 2 |
+| Remove the page cap | 1 |
+
+**Validation:** clean install (the postinstall generates the pdf.js source) ✅, `tsc` ✅, `expo lint` ✅, 269/269 ✅. iOS and Android release bundles ✅: fake store, billing SDKs, AI SDKs, `playwright-core`, `pdfjs-dist`'s Node files and `@napi-rs/canvas` all absent.
+
+**Known limits**
+
+- **Multi-page share.** Multi-page images are shared one share sheet per page, because `expo-sharing` takes one file per call. The plan's "shared together" would need a multi-file share module (a new native dependency), which needs owner approval.
+- **pdf.js worker on the main thread.** pdf.js runs its worker code on the WebView's main thread (no separate worker file). This is fine for 1–3 pages, but its speed on low-end Android is not measured.
+- **Fonts.** The image uses the fonts embedded in the `expo-print` PDF, so it matches that platform's PDF, not necessarily another platform's.
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator |
+|---|---|
+| The whole pipeline with real pdf.js in Chromium, and the export service with in-memory doubles | pdf.js inside `WKWebView` (iOS) and Android System WebView: inline module scripts, CSP, `injectJavaScript`, `postMessage` message sizes |
+| Release bundles for both platforms | Reading the `expo-print` temporary PDF with `File.base64()`; writing PNGs with `expo-file-system` |
+| | Share sheets for `image/png` (one per page) on both platforms; memory and time on low-end Android |
 
 ## 20. Major risks and failure modes
 

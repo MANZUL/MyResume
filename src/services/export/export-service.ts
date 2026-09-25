@@ -5,7 +5,6 @@ import type { PaperSize } from '../../domain/render/render-html';
 import type { StoredResume } from '../../domain/resume/types';
 import { newId } from '../../domain/shared/id';
 import type { PremiumGate } from '../entitlement/premium-gate';
-import { FeatureNotAvailableYetError } from '../premium/premium-tools';
 
 // The only export/share boundary (plan §11).
 //
@@ -13,7 +12,8 @@ import { FeatureNotAvailableYetError } from '../premium/premium-tools';
 //   share(handle)             validate handle → premium check #2 → share → handle consumed
 //   discard(handle)           delete the artifact; the handle becomes invalid
 //
-// exportPdf / exportDocx run prepare + share in one call (what screens use).
+// exportPdf / exportDocx / exportImage run prepare + share in one call (what screens use).
+// Image export (PNG, one per page) is rasterized from the same PDF as exportPdf.
 //
 // Rules:
 // - Callers pass the resume only; the entitlement always comes from the gate.
@@ -30,11 +30,16 @@ export interface ExportArtifact {
 
 export type ShareResult = 'completed' | 'dismissed' | 'unknown';
 
+/** Re-checks the entitlement before each further file of a multi-file share. Throws to stop. */
+export type ShareGuard = () => Promise<void>;
+
 /** Platform side effects (rendering to files, file system, share sheet). Only this service calls it. */
 export interface ExportPlatform {
   generatePdf(resume: StoredResume, paper?: PaperSize): Promise<ExportArtifact>;
   generateDocx(resume: StoredResume): Promise<ExportArtifact>;
-  share(artifact: ExportArtifact): Promise<ShareResult | void>;
+  /** One PNG per page, rasterized from the export PDF. */
+  generatePng(resume: StoredResume, paper?: PaperSize): Promise<ExportArtifact>;
+  share(artifact: ExportArtifact, guard?: ShareGuard): Promise<ShareResult | void>;
   discard(artifact: ExportArtifact): Promise<void>;
 }
 
@@ -96,7 +101,7 @@ export interface ExportServiceOptions {
   handleLifetimeMs?: number;
 }
 
-const FEATURE: Record<ExportFormat, PremiumFeature> = { pdf: 'export.pdf', docx: 'export.docx' };
+const FEATURE: Record<ExportFormat, PremiumFeature> = { pdf: 'export.pdf', docx: 'export.docx', png: 'export.image' };
 const DEFAULT_HANDLE_LIFETIME_MS = 5 * 60 * 1000;
 
 export class ExportService {
@@ -131,10 +136,9 @@ export class ExportService {
     return this.exportOnce(resume, { format: 'docx' });
   }
 
-  /** Image export arrives in migration step 6; the premium check already guards it. */
-  async exportImage(_resume: StoredResume): Promise<never> {
-    await this.gate.require('export.image');
-    throw new FeatureNotAvailableYetError('Image export');
+  /** PNG image(s) of the resume, one per page, identical to the PDF pages. */
+  exportImage(resume: StoredResume, paper: PaperSize = 'letter'): Promise<void> {
+    return this.exportOnce(resume, { format: 'png', paper });
   }
 
   private async exportOnce(resume: StoredResume, options: ExportOptions): Promise<void> {
@@ -192,7 +196,9 @@ export class ExportService {
       artifact =
         format === 'pdf'
           ? await this.platform.generatePdf(resume, options.paper ?? 'letter')
-          : await this.platform.generateDocx(resume);
+          : format === 'png'
+            ? await this.platform.generatePng(resume, options.paper ?? 'letter')
+            : await this.platform.generateDocx(resume);
     } catch (error) {
       await this.record(resume, format, 'failed', decision.reason, error);
       throw error;
@@ -234,10 +240,14 @@ export class ExportService {
     this.live.delete(handle);
     let result: ShareResult | void;
     try {
-      result = await this.platform.share(entry.artifact);
+      // Multi-page images: the entitlement is checked again before every further page.
+      result = await this.platform.share(entry.artifact, async () => {
+        await this.gate.require('export.share');
+      });
     } catch (error) {
       await this.platform.discard(entry.artifact).catch(() => undefined);
-      await this.record(resume, format, 'failed', decision.reason, error);
+      if (error instanceof PremiumRequiredError) await this.record(resume, format, 'denied', 'not_premium');
+      else await this.record(resume, format, 'failed', decision.reason, error);
       throw error;
     }
     if (result === 'dismissed') {
