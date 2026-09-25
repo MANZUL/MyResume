@@ -1,12 +1,12 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '../../ui/components';
 import { useResume } from '../../services/storage/resume-store';
 import { CheckTool } from '../check/CheckTool';
+import { improveHref } from '../check/improve-link';
 import { LetterTool } from '../cover-letter/LetterTool';
 import { MatchTool } from '../job-match/MatchTool';
-
 
 type Tool = 'check' | 'match' | 'letter';
 
@@ -44,7 +44,10 @@ export default function ToolsScreen() {
             </Pressable>
           ))}
         </View>
-        {tool === 'check' ? <CheckTool data={resume.data} /> : null}
+        {tool === 'check' ? (
+          // "Improve" returns to the editor below this screen, opened on the warning's section.
+          <CheckTool data={resume.data} onImprove={(section) => router.dismissTo(improveHref(resume.id, section, Date.now()))} />
+        ) : null}
         {tool === 'match' ? <MatchTool data={resume.data} /> : null}
         {tool === 'letter' ? <LetterTool data={resume.data} /> : null}
       </ScrollView>

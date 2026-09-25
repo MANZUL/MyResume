@@ -1,6 +1,6 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–6 are done in code** (§19, §19.1–§19.6); device validation of steps 4–6 is still open. No billing SDK, no AI, no EAS builds.
+**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–7 are done in code** (§19, §19.1–§19.7); device validation of steps 4–7 is still open. No billing SDK, no AI, no EAS builds.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -675,7 +675,7 @@ Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. S
 | 4 ✅ | **`ExportService`** with both gates, handles, export directory and purge; PDF + DOCX; share; architecture guard test (only the service produces output); FREE users get `PremiumRequired` → paywall → auto-resume. **Done** (see §19.4) | Unit tests for the gates ✅ ◆ PDF and DOCX on both platforms: **still open** (no device yet) |
 | 5 ✅ | Renderer parity (rules, Letter/A4), **watermark** in the FREE preview, Boardroom/Foreman mark overlap. **Done, narrowed scope** (see §19.5). *Bundled spec fonts, thumbnails, gallery, paper picker and the custom-color UI were taken out of step 5 by the owner and move to step 12* | Layout tests in a real engine ✅: no text under a mark, preview/PDF geometry parity, watermark coverage and readability, no watermark in PREMIUM or PDF ◆ WebView and `expo-print` on devices: **still open** |
 | 6 ✅ | **Image export**: PDF → PNG via pdf.js, per page, through `ExportService`. **Done in code** (see §19.6); the view-shot fallback was not needed | End-to-end in Chromium ✅ (real renderer → PDF → bundled pdf.js → PNG) ◆ PNG on both platforms and memory on low-end Android: **still open** |
-| 7 | Editor parity; Resume Score (FREE) with jump-to-section | ◆ Editor pass |
+| 7 ✅ | Editor parity; Resume Score (FREE) with jump-to-section. **Done in code** (see §19.7) | Pure-logic and guard tests ✅ ◆ Editor pass on devices: **NOT RUN** (no simulator or device in this environment) |
 | 8 | Writing Coach (PREMIUM) | Rule tests; no-fact-insertion |
 | 9 | Import (FREE): parser rewrite + corpus, review, DOCX, PDF | Corpus thresholds ◆ real files |
 | 10 | Job Match + taxonomy + tailoring (PREMIUM); then Cover Letter (FREE) on the shared engine | Regression pairs; letter grounding; gating test (letter works while FREE) |
@@ -1271,6 +1271,77 @@ Rejected as fragile or wrong:
 | The whole pipeline with real pdf.js in Chromium, and the export service with in-memory doubles | pdf.js inside `WKWebView` (iOS) and Android System WebView: inline module scripts, CSP, `injectJavaScript`, `postMessage` message sizes |
 | Release bundles for both platforms | Reading the `expo-print` temporary PDF with `File.base64()`; writing PNGs with `expo-file-system` |
 | | Share sheets for `image/png` (one per page) on both platforms; memory and time on low-end Android |
+
+### 19.7 Step 7 record: editor parity and Resume Score with jump-to-section
+
+**Scope source.** No `PRODUCT_CONSTITUTION`, `MVP_SCOPE` (for this product) or `TECHNICAL_IMPLEMENTATION_PLAN` exists in either repository. The step comes from this plan (§19 row 7, §1 items #13–21 and #25, §18 editor row) and from the web source it references (`ResumeEditor.tsx`, `ResumeTools.tsx`, `resume-score.ts`).
+
+**Owner decisions (approved before implementation)**
+1. Web labels where they are part of parity. No redesign, and the mobile additions are kept: resume title, reorder, date and location placeholders, entry counts, subtitles.
+2. Stable keys are UI-only. No ids in `ResumeData`, no migration, and no schema or persistence change (schema stays v2).
+3. "Improve" stays in Tools → Check and returns to the editor with a route parameter. There is no new screen.
+4. `Collapsible` can be controlled optionally (`open` / `onOpenChange`), and behaves as before without them.
+5. The web empty-list hint is shown in string lists.
+6. Scoring rules are unchanged, and the existing null-safety guard stays.
+7. No component-testing library: pure-logic tests, architecture guards and the existing suite.
+
+**What changed**
+
+| Area | Change |
+|---|---|
+| `domain/resume/sections.ts` (new) | The seven editor sections in order, web section titles, and `parseSectionParam`, which accepts exactly those seven ids and returns null for anything else (arrays, `__proto__`, case or spacing variants, non-strings) |
+| `domain/check/resume-score.ts` | Type only: the warning's `section` now uses the shared section type. **No rule changed**; a one-off cross-check against the web file returned identical output on the golden inputs |
+| `features/check/CheckTool.tsx` | Web order and headings: "Resume Score" x / 100, categories, "What is working" (only when present), "Needs attention" with an **Improve** link per warning, then the disclaimer "Designed for reliable parsing with standard headings and readable text. No ATS guarantee is implied." |
+| `features/check/improve-link.ts` (new) | Check copy and `improveHref(resumeId, section, jump)` |
+| `features/tools/ToolsScreen.tsx` | Improve → `router.dismissTo(editor, { section, jump })`: a stack pop back to the editor underneath (Expo Router 57's `dismissTo` = `POP_TO`; if the editor is not in the stack it replaces the screen) |
+| `features/editor/EditorScreen.tsx` | Web labels (from `editor-copy.ts`); stable keys for the four entry lists; anchors per section. A new `jump` token opens the target section: Personal or Summary, or every entry of a list section. The open state is set during render (React's pattern for new props), and an effect then scrolls to the section header |
+| `features/editor/editor-copy.ts` (new) | Labels, placeholders and add-button text from the web editor |
+| `ui/entry-keys.ts` (new) | `applyListOp` / `applyKeyOp` (the same operation on data and keys), `syncKeys` (deterministic positional fill if a list changes from outside), and `useStableKeys` |
+| `ui/components.tsx` | `Collapsible`: optional controlled `open`, with internal state kept in step with every toggle. `StringListEditor`: stable row keys and `EMPTY_LIST_HINT` |
+
+**Tests: 298** (269 before, all still passing; +27 `editor.test.ts`, +2 architecture)
+
+| Area | Covered |
+|---|---|
+| Sections | seven ids in order, web titles, `parseSectionParam` accepts all seven and rejects 20 other values |
+| Score (golden) | sample (100, five strengths, no warnings), empty (15, five warnings with messages and sections), partial (48, six warnings including `short-bullets` and `action-verbs`); every warning maps to a real section; the null-safety guard is pinned |
+| Navigation | `improveHref` round-trips through `parseSectionParam`; a new jump token each time; Tools uses `dismissTo`; the editor only uses the parsed section |
+| Stable keys | add, delete first, delete middle, reorder up and down, and a mixed sequence: a key never points at a different entry, a surviving entry keeps its key, keys are unique, one per entry. Negative control: index keys fail the same check. The editor and the list editor apply each operation to keys and data together, and no `key={index}` remains. `ResumeData` entries have no id field |
+| Copy parity | editor copy equals the web strings; the resume title is the only non-web field label; mobile additions still present; empty hint; Check copy and web order |
+| Collapsible | uncontrolled by default; `open` overrides; internal state follows toggles |
+| Architecture | `features/editor` and `features/check` import no entitlement, premium, paywall or export code (both stay FREE); the score imports only domain code |
+
+**Mutation checks (each reverted)**
+
+| Mutation | Tests that fail |
+|---|---|
+| Index keys in `applyKeyOp` | 7 |
+| Fresh keys on every change | 7 |
+| `key={index}` in the editor | 2 |
+| `parseSectionParam` accepting any string | 1 |
+| A scoring weight changed | 1 |
+| Empty hint removed | 1 |
+| Improve not calling back | 1 |
+| Collapsible ignoring `open` | 1 |
+| List editor not updating keys on delete | 1 |
+| Null-safety guard removed | 1 (the source pin) |
+
+The null-safety mutant has no observable behavior: `String.split` always returns at least one element, and `noUncheckedIndexedAccess` is off. It is therefore pinned at source level only.
+
+**Validation:** clean install ✅, `tsc` ✅, `expo lint` ✅, 298/298 ✅. iOS and Android release bundles ✅: fake store, billing SDKs, AI SDKs, `playwright-core` and `@napi-rs` all absent. No dependency changes.
+
+**Limits**
+
+- **UI checked through source guards.** There is no component renderer in the test setup (owner decision), so the UI wiring is checked by source-level guards. The actual open, scroll and focus behavior is part of the device editor pass.
+- **Scroll position.** The target is taken from the section header's layout. With very long open sections above it, the first layout pass may be off by a frame, which is why the scroll waits 50 ms, as the web version does. Only a device can confirm this.
+
+**Verified vs. not verified**
+
+| Verified in code (this environment) | Not verified on a device or simulator (NOT RUN) |
+|---|---|
+| Section parsing, golden scores, key stability, copy parity, FREE boundary, bundles | Improve → editor → section opens → scroll lands on the header (iOS and Android) |
+| | Keyboard, focus and input state after delete or reorder with stable keys |
+| | `dismissTo` behavior when the editor is not in the stack (deep link into Tools) |
 
 ## 20. Major risks and failure modes
 

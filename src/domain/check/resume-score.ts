@@ -1,9 +1,11 @@
+import type { EditorSection } from '../resume/sections';
 import type { ResumeData } from '../resume/types';
 
 export type ResumeScoreWarning = {
   id: string;
   message: string;
-  section: 'personal' | 'summary' | 'experience' | 'education' | 'projects';
+  /** The editor section the "Improve" link opens. */
+  section: Extract<EditorSection, 'personal' | 'summary' | 'experience' | 'education' | 'projects'>;
 };
 
 export type ResumeScore = {

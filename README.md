@@ -4,7 +4,8 @@ Standalone iOS and Android resume builder (Expo). No AI, no backend: resumes sta
 the app works offline.
 
 **Status: migration in progress.** The app is still the prototype, restructured with a real SQLite data layer, entitlement
-architecture, secure export (PDF, Word, PNG images) and a watermarked FREE preview (steps 1–6 of
+architecture, secure export (PDF, Word, PNG images), a watermarked FREE preview, and editor parity
+with Resume Check jump-to-section (steps 1–7 of
 [`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md)). The product specification,
 pricing (free to build, $7.99/month "premium" to export) and the remaining steps are in that plan.
 

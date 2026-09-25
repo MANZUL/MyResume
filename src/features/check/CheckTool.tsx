@@ -1,15 +1,28 @@
 import { useMemo } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { scoreResume } from '../../domain/check/resume-score';
+import type { EditorSection } from '../../domain/resume/sections';
 import { Card, colors, Muted, styles } from '../../ui/components';
+import { CHECK_COPY } from './improve-link';
 
-export function CheckTool({ data }: { data: Parameters<typeof scoreResume>[0] }) {
+// Resume Check (FREE). Same rules and order as the web tool: score, categories,
+// what is working, what needs attention (each with "Improve"), disclaimer.
+export function CheckTool({
+  data,
+  onImprove,
+}: {
+  data: Parameters<typeof scoreResume>[0];
+  onImprove: (section: EditorSection) => void;
+}) {
   const score = useMemo(() => scoreResume(data), [data]);
   return (
     <>
       <Card style={{ alignItems: 'center', gap: 4 }}>
-        <Text style={{ fontSize: 48, fontWeight: '700', color: colors.text }}>{score.score}</Text>
-        <Muted>Resume score out of 100</Muted>
+        <Muted>{CHECK_COPY.title}</Muted>
+        <Text style={{ fontSize: 48, fontWeight: '700', color: colors.text }}>
+          {score.score}
+          <Text style={{ fontSize: 18, fontWeight: '400', color: colors.muted }}> / 100</Text>
+        </Text>
       </Card>
       <Card style={{ gap: 8 }}>
         {score.categories.map((category) => (
@@ -21,20 +34,33 @@ export function CheckTool({ data }: { data: Parameters<typeof scoreResume>[0] })
           </View>
         ))}
       </Card>
-      {score.warnings.length ? (
+      {score.strengths.length ? (
         <Card style={{ gap: 8 }}>
-          <Text style={styles.sectionTitle}>To improve</Text>
-          {score.warnings.map((w) => (
-            <Text key={w.id} style={{ color: colors.text, fontSize: 15, lineHeight: 21 }}>• {w.message}</Text>
+          <Text style={styles.sectionTitle}>{CHECK_COPY.working}</Text>
+          {score.strengths.map((s) => (
+            <Text key={s} style={{ color: colors.text, fontSize: 15 }}>✓ {s}</Text>
           ))}
         </Card>
       ) : null}
-      <Card style={{ gap: 8 }}>
-        <Text style={styles.sectionTitle}>Strengths</Text>
-        {score.strengths.map((s) => (
-          <Text key={s} style={{ color: colors.text, fontSize: 15 }}>✓ {s}</Text>
-        ))}
-      </Card>
+      {score.warnings.length ? (
+        <Card style={{ gap: 10 }}>
+          <Text style={styles.sectionTitle}>{CHECK_COPY.attention}</Text>
+          {score.warnings.map((w) => (
+            <View key={w.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <Text style={{ flex: 1, color: colors.text, fontSize: 15, lineHeight: 21 }}>⚠︎ {w.message}</Text>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`${CHECK_COPY.improve}: ${w.message}`}
+                onPress={() => onImprove(w.section)}
+                hitSlop={8}
+              >
+                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '600' }}>{CHECK_COPY.improve}</Text>
+              </Pressable>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+      <Muted>{CHECK_COPY.disclaimer}</Muted>
     </>
   );
 }

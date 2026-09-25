@@ -9,6 +9,10 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { useStableKeys } from './entry-keys';
+
+/** Shown in an empty string list (web editor copy). */
+export const EMPTY_LIST_HINT = 'Nothing added. Leave this empty if you do not need it.';
 
 export const colors = {
   bg: '#F4F2EE',
@@ -98,24 +102,38 @@ export function SectionHeader({ title, action }: { title: string; action?: React
   );
 }
 
+/**
+ * Uncontrolled by default (`initiallyOpen`). Pass `open` (and `onOpenChange`) to
+ * control it, e.g. to open a section from outside.
+ */
 export function Collapsible({
   title,
   subtitle,
   initiallyOpen = false,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: {
   title: string;
   subtitle?: string;
   initiallyOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
+  const [internalOpen, setInternalOpen] = useState(initiallyOpen);
+  const open = controlledOpen ?? internalOpen;
+  const toggle = () => {
+    // Internal state follows every toggle, so it is correct if control is released later.
+    setInternalOpen(!open);
+    onOpenChange?.(!open);
+  };
   return (
     <Card>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        onPress={() => setOpen((v) => !v)}
+        onPress={toggle}
         style={styles.collapsibleHeader}
       >
         <View style={{ flex: 1 }}>
@@ -143,11 +161,14 @@ export function StringListEditor({
   placeholder?: string;
   addLabel?: string;
 }) {
+  // Stable row keys, so deleting a row keeps focus and input state on the right rows.
+  const [keys, applyKeys] = useStableKeys(items.length);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
+      {items.length === 0 ? <Text style={styles.emptyHint}>{EMPTY_LIST_HINT}</Text> : null}
       {items.map((item, index) => (
-        <View key={index} style={styles.listRow}>
+        <View key={keys[index]} style={styles.listRow}>
           <TextInput
             value={item}
             multiline
@@ -160,7 +181,10 @@ export function StringListEditor({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove ${label} ${index + 1}`}
-            onPress={() => onChange(items.filter((_, i) => i !== index))}
+            onPress={() => {
+              applyKeys({ type: 'remove', index });
+              onChange(items.filter((_, i) => i !== index));
+            }}
             hitSlop={8}
             style={styles.removeButton}
           >
@@ -168,7 +192,14 @@ export function StringListEditor({
           </Pressable>
         </View>
       ))}
-      <Pressable accessibilityRole="button" onPress={() => onChange([...items, ''])} style={styles.addRow}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          applyKeys({ type: 'add' });
+          onChange([...items, '']);
+        }}
+        style={styles.addRow}
+      >
         <Text style={styles.addText}>+ {addLabel}</Text>
       </Pressable>
     </View>
@@ -231,5 +262,17 @@ export const styles = StyleSheet.create({
   listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   removeButton: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   addRow: { paddingVertical: 8 },
+  emptyHint: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
   addText: { color: colors.accent, fontWeight: '600', fontSize: 15 },
 });

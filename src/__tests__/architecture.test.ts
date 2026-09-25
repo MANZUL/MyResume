@@ -252,3 +252,20 @@ describe('image export boundary (step 6)', () => {
     expect((pkg as unknown as { scripts: Record<string, string> }).scripts.postinstall).toBe('node scripts/pdfjs-source.mjs');
   });
 });
+
+describe('editor and Resume Check stay FREE (step 7)', () => {
+  it('neither the editor nor the check imports entitlement, premium, paywall or export code', () => {
+    for (const dir of [join(SRC, 'features', 'editor'), join(SRC, 'features', 'check')]) {
+      for (const file of sourceFiles(dir)) {
+        for (const spec of importsOf(readFileSync(file, 'utf8'))) {
+          expect(spec, relative(SRC, file)).not.toMatch(/entitlement|premium|paywall|services\/export|unlock/);
+        }
+      }
+    }
+  });
+
+  it('Resume Check logic stays pure domain code', () => {
+    const score = readFileSync(join(SRC, 'domain', 'check', 'resume-score.ts'), 'utf8');
+    expect(importsOf(score).every((spec) => spec.startsWith('../'))).toBe(true);
+  });
+});
