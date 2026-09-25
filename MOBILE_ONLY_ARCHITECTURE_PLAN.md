@@ -1231,9 +1231,38 @@ The layout tests use `playwright-core` (new **dev-only** dependency, exact versi
 
 **Known limits**
 
-- **Multi-page share.** Multi-page images are shared one share sheet per page, because `expo-sharing` takes one file per call. The plan's "shared together" would need a multi-file share module (a new native dependency), which needs owner approval.
+- **Multi-page share (known limitation; spike done, see below).** A resume of N pages opens N share sheets, one per page. Sharing them in one sheet is **not possible with the current stack** without a native change.
 - **pdf.js worker on the main thread.** pdf.js runs its worker code on the WebView's main thread (no separate worker file). This is fine for 1–3 pages, but its speed on low-end Android is not measured.
 - **Fonts.** The image uses the fonts embedded in the `expo-print` PDF, so it matches that platform's PDF, not necessarily another platform's.
+
+**Spike: multi-file sharing with the existing stack (result: not possible without native code)**
+
+I checked the installed packages, including their native sources, not the documentation:
+
+| API (installed version) | Contract | Multiple files? |
+|---|---|---|
+| `expo-sharing` 57.0.22 `shareAsync(url: string, options)` | iOS: `UIActivityViewController(activityItems: [url])`, one item. Android: `Intent.ACTION_SEND` with one `EXTRA_STREAM` | **No** (not `ACTION_SEND_MULTIPLE`; there is no array parameter) |
+| `expo-sharing` `getSharedPayloads` / `getResolvedSharedPayloadsAsync` / `useIncomingShare` | Content shared **into** the app by other apps | Not outbound sharing |
+| React Native `Share.share({ url, message })` | iOS: one `url`. Android: `EXTRA_TEXT` only (text, no files) | **No** (Android cannot share files at all) |
+| `expo-print` | `printAsync` (printer), `printToFileAsync` (one PDF) | No sharing |
+| `expo-file-system` 57 | `Directory.pickDirectoryAsync`, `File.pickFileAsync`: pick a folder or file | Saves to a folder; this is not a share sheet |
+| Web Share API inside `react-native-webview` | Android System WebView does not implement `navigator.share` | Not cross-platform |
+
+Rejected as fragile or wrong:
+- Sharing the export **folder** URL (most targets cannot receive a directory, and Android `ACTION_SEND` needs a file content URI).
+- Sequencing the share sheets faster.
+- Web Share in the WebView.
+
+**What a later fix needs (not implemented; owner decision):**
+1. **A native multi-file share call.** iOS: `UIActivityViewController` with several file URLs. Android: `ACTION_SEND_MULTIPLE` with an `ArrayList<Uri>` in `EXTRA_STREAM`, `ClipData`, read-URI grants through the existing FileProvider. Two ways to add it:
+   - a small **local Expo module** in this repo (no third-party code, the smallest surface);
+   - a maintained library that already accepts several URLs.
+   Either needs a new development build. It would sit behind the existing `ShareAdapter`, as a `share(uris[])` variant, so `ExportService`, the handles, and the entitlement checks (check #2 before the one sheet) stay as they are.
+2. **Or a product change with no native code**, still within the current stack:
+   - one combined image (all pages stacked in one tall PNG, drawn by the same pdf.js page);
+   - "save all pages to a folder" with `Directory.pickDirectoryAsync` (a save, not a share, and iOS behaviour needs device checks);
+   - pointing multi-page users to the PDF, which already carries every page in one file.
+   Each of these changes the plan's "one PNG per page, shared together" and needs owner approval.
 
 **Verified vs. not verified**
 
