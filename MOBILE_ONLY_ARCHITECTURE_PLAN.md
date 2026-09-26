@@ -1656,6 +1656,32 @@ A PDF text layer splits both into single letters. The checker reported this hone
 
 **Validation.** Clean install ✅, `tsc` ✅, `expo lint` ✅, 422/422 tests ✅ (384 before; +35 job match, +3 storage), 22/22 mutations caught ✅, iOS and Android release bundles ✅, no new dependencies. Match tab on devices: **NOT RUN**.
 
+### 19.10a Template-first navigation (owner-approved, after the first Android device build)
+
+**Why.** On the device the app opened on "New blank resume / Import text / Try sample", and templates were only reachable from Preview after a resume existed. The owner asked for the template to be chosen first.
+
+**Flow.** Home → Templates (`/templates`) → Template preview (`/templates/[templateId]`) → "Use this template" → a new blank resume is created with that template and its default accent → Editor. Back from the editor returns to Home. A gallery card's own "Use this template" button skips the preview.
+
+**What changed**
+- Home has three areas:
+  - "Create your resume" (opens the gallery);
+  - "Explore templates" (a row of thumbnails and "See all");
+  - "Your resumes".
+- Import text and Try sample are secondary links. They still create with the default template (The Boardroom), which can be switched in Preview as before.
+- Gallery: filters All plus the 6 categories. Each card shows a thumbnail, name, category, description and "Use this template".
+- Categories are the web product's taxonomy, unchanged. The mobile registry already carries it verbatim (Corporate, Tech, Creative, Healthcare, Academic, Trades; 2 templates each). `TEMPLATE_CATEGORIES` is derived from `TEMPLATES`.
+- `ResumeLibrary.create(data, title, templateId?)` sets the template and its default accent. An unknown id falls back to the default template.
+
+**Rendering and thumbnails**
+- The large preview is the existing `renderResumeHtml` on the sample resume (`templateSampleHtml`), in the same locked-down WebView as Preview.
+- It has no watermark (owner decision): it only ever shows sample data. A user's own resume is still previewed only through PreviewService with the FREE/PREMIUM watermark rules.
+- Thumbnails are pre-rendered from the same function in Chromium (`npm run thumbnails`): 12 PNGs, 510×660, about 750 KB in total. A test fails if a template's output changes without regenerating them.
+- Known V1 limit (accepted): Chromium's serif fallback can differ slightly from the device WebView. The large preview is authoritative.
+
+**Not changed:** schema, entitlement, pricing, export, renderer, editor, Preview (including template switching), Tools. No new dependencies.
+
+**Validation:** `tsc` ✅, `expo lint` ✅, 457 passed + 1 skipped generator (422 before; +33 gallery tests, +2 architecture guards) ✅, iOS and Android bundles ✅ (thumbnails included). Gallery and flow on devices: **NOT RUN**.
+
 ## 20. Major risks and failure modes
 
 | # | Risk | Impact | Mitigation |

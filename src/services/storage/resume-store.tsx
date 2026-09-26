@@ -14,7 +14,8 @@ interface StoreState {
   ready: boolean;
   resumes: StoredResume[];
   activeId: string | null;
-  create: (data: ResumeData, title?: string) => StoredResume;
+  /** Creates a resume with the given template (default: the first) and its default accent. */
+  create: (data: ResumeData, title?: string, templateId?: string) => StoredResume;
   /** Content edits. Colors go through setAccent, which enforces the premium rules. */
   update: (id: string, patch: Partial<Pick<StoredResume, 'title' | 'data'>>) => void;
   /** Switches template and resets the accent to its default (FREE). */
@@ -85,7 +86,7 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       ready,
       resumes,
       activeId,
-      create: (data, title) => library.create(data, title),
+      create: (data, title, templateId) => library.create(data, title, templateId),
       update: (id, patch) => {
         // Only content fields are accepted here; accent/template have their own rules.
         const content: { title?: string; data?: ResumeData } = {};

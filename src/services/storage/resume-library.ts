@@ -1,6 +1,6 @@
 import type { ResumeRepository } from '../../domain/ports/repositories';
 import type { ResumeData, StoredResume } from '../../domain/resume/types';
-import { TEMPLATES } from '../../domain/templates/templates';
+import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
 import { createAutosaver, type Autosaver, type Timers } from './autosave';
 
 // In-memory view of the resume library backed by a ResumeRepository.
@@ -83,9 +83,13 @@ export class ResumeLibrary {
     return this.autosaver.flush(resume.id);
   }
 
-  /** Adds a resume and stores it right away. Returns the new record synchronously. */
-  create(data: ResumeData, title?: string): StoredResume {
-    const template = TEMPLATES[0];
+  /**
+   * Adds a resume and stores it right away. Returns the new record synchronously.
+   * The template (default: the first one) sets the initial template and its default
+   * accent; an unknown id falls back to the default template.
+   */
+  create(data: ResumeData, title?: string, templateId?: string): StoredResume {
+    const template = templateId ? getTemplate(templateId) : TEMPLATES[0];
     const now = this.now();
     const resume: StoredResume = {
       id: this.options.newId(),

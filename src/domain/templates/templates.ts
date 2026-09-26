@@ -273,3 +273,11 @@ export const TEMPLATES: TemplateConfig[] = [
 export function getTemplate(id: string): TemplateConfig {
   return TEMPLATES.find((template) => template.id === id) ?? TEMPLATES[0];
 }
+
+/** Categories in registry order (the web gallery's filter order). */
+export const TEMPLATE_CATEGORIES: readonly TemplateCategory[] = [...new Set(TEMPLATES.map((template) => template.category))];
+
+/** The template with this id, or undefined. Use getTemplate where a fallback is wanted. */
+export function findTemplate(id: string): TemplateConfig | undefined {
+  return TEMPLATES.find((template) => template.id === id);
+}

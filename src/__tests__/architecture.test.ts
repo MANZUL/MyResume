@@ -269,3 +269,25 @@ describe('editor and Resume Check stay FREE (step 7)', () => {
     expect(importsOf(score).every((spec) => spec.startsWith('../'))).toBe(true);
   });
 });
+
+describe('template gallery (template-first navigation)', () => {
+  it('the unwatermarked template preview renders only the sample resume, in preview mode', () => {
+    const source = readFileSync(join(SRC, 'domain', 'templates', 'sample-preview.ts'), 'utf8');
+    expect(source).toMatch(/renderResumeHtml\(SAMPLE_RESUME, \{/);
+    expect(source).toMatch(/mode: 'preview'/);
+    expect(source.match(/renderResumeHtml\(/g)).toHaveLength(1);
+    expect(source).toMatch(/^export function templateSampleHtml\(templateId: string\): string/m);
+  });
+
+  it('gallery screens use the existing registry and renderer: no export, entitlement or second renderer', () => {
+    const files = sourceFiles(join(SRC, 'features', 'templates'));
+    expect(files.length).toBeGreaterThan(3);
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      for (const spec of importsOf(source)) {
+        expect(spec, relative(SRC, file)).not.toMatch(/entitlement|premium|paywall|services\/export|services\/preview|unlock|domain\/render/);
+      }
+      expect(source, relative(SRC, file)).not.toMatch(/<!DOCTYPE|TEMPLATES\s*[:=]\s*\[|TemplateConfig\s*=\s*\{/);
+    }
+  });
+});

@@ -40,6 +40,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "test": "vitest run",
+    "thumbnails": "UPDATE_THUMBNAILS=1 vitest run src/__tests__/template-gallery.test.ts",
     "postinstall": "node scripts/pdfjs-source.mjs"
   },
   "private": true
