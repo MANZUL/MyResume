@@ -49,7 +49,7 @@ const WATERMARK_TILE =
   "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='190'>" +
   "<text x='150' y='95' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30 150 95)' " +
   "font-family='Helvetica, Arial, sans-serif' font-size='46' font-weight='700' letter-spacing='6' " +
-  "fill='#111111' fill-opacity='0.11'>PREVIEW</text></svg>";
+  "fill='#111111' fill-opacity='0.08'>PREVIEW</text></svg>";
 export const WATERMARK_TILE_URL = `data:image/svg+xml,${encodeURIComponent(WATERMARK_TILE)}`;
 
 export interface RenderOptions {

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Button, colors, Muted } from '../../ui/components';
+import { Button, colors, LockIcon, Muted } from '../../ui/components';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
 import { freeAccentsFor } from '../../domain/entitlement/palette';
 import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
@@ -15,6 +15,12 @@ import {
 } from '../../services/export/export-service';
 import { useExportService } from '../../services/export/use-export-service';
 import { useResume } from '../../services/storage/resume-store';
+
+const EXPORT_BUTTONS = [
+  { kind: 'pdf', label: 'PDF', variant: 'primary' },
+  { kind: 'docx', label: 'Word', variant: 'secondary' },
+  { kind: 'image', label: 'Image', variant: 'secondary' },
+] as const;
 
 export default function PreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -128,7 +134,7 @@ export default function PreviewScreen() {
             );
           })}
         </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4, gap: 10, alignItems: 'center' }}>
           <Text style={{ color: colors.muted, fontSize: 13 }}>{template.category} · Accent</Text>
           {freeAccentsFor(resume.templateId).map((color) => (
             <Pressable
@@ -153,9 +159,19 @@ export default function PreviewScreen() {
           ))}
         </ScrollView>
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
-          <Button title={decision.premium ? 'Export PDF' : 'PDF 🔒'} loading={busy === 'pdf'} onPress={() => runExport('pdf')} style={{ flex: 1 }} />
-          <Button title={decision.premium ? 'Export Word' : 'Word 🔒'} variant="secondary" loading={busy === 'docx'} onPress={() => runExport('docx')} style={{ flex: 1 }} />
-          <Button title={decision.premium ? 'Export Image' : 'Image 🔒'} variant="secondary" loading={busy === 'image'} onPress={() => runExport('image')} style={{ flex: 1 }} />
+          {EXPORT_BUTTONS.map(({ kind, label, variant }) => (
+            <Button
+              key={kind}
+              title={decision.premium ? `Export ${label}` : label}
+              icon={decision.premium ? undefined : <LockIcon color={variant === 'primary' ? colors.primaryText : colors.text} size={13} />}
+              accessibilityLabel={decision.premium ? `Export ${label}` : `${label}, locked. Requires Premium`}
+              variant={variant}
+              fit
+              loading={busy === kind}
+              onPress={() => runExport(kind)}
+              style={{ flex: 1, paddingHorizontal: 10 }}
+            />
+          ))}
         </View>
         {entitlements.providerId === 'fake' ? (
           <View style={{ paddingHorizontal: 16 }}>

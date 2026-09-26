@@ -50,7 +50,8 @@ export function TemplateCard({ template, onUse }: { template: TemplateConfig; on
             {template.name}
           </Text>
           <CategoryTag label={template.category} />
-          <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }} numberOfLines={2}>
+          {/* Always two lines tall, so cards in a row line up; longer text ends in an ellipsis. */}
+          <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 17, height: 34 }} numberOfLines={2} ellipsizeMode="tail">
             {template.description}
           </Text>
         </View>
@@ -58,6 +59,7 @@ export function TemplateCard({ template, onUse }: { template: TemplateConfig; on
       <Button
         title="Use this template"
         variant="secondary"
+        fit
         style={{ minHeight: 40, paddingHorizontal: 12 }}
         accessibilityHint={`Creates a new resume with ${template.name}`}
         onPress={() => onUse(template.id)}
