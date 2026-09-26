@@ -52,9 +52,9 @@ export default function Home() {
       keyExtractor={(item) => item.id}
       ListHeaderComponent={
         <View style={{ gap: 12, marginBottom: 8 }}>
-          <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>Build a resume that gets read.</Text>
+          <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>Build a resume that gets noticed.</Text>
           <Muted>Choose one of 12 ATS-friendly templates. Works offline; your resumes stay on this device.</Muted>
-          <Button title="Create your resume" onPress={() => router.push('/templates')} accessibilityHint="Choose a template first" />
+          <Button title="Create my resume" onPress={() => router.push('/templates')} accessibilityHint="Choose a template first" />
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
             <Button title="Import text" variant="ghost" style={{ minHeight: 40 }} onPress={() => router.push('/import')} />
             <Button
@@ -96,7 +96,7 @@ export default function Home() {
       }
       ListEmptyComponent={
         <Card>
-          <Muted>No resumes yet. Tap Create your resume to pick a template, or import your existing resume text.</Muted>
+          <Muted>No resumes yet. Tap Create my resume to pick a template, or import your existing resume text.</Muted>
         </Card>
       }
       renderItem={({ item }) => (

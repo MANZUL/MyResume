@@ -34,7 +34,16 @@ export function CategoryTag({ label }: { label: string }) {
   );
 }
 
-/** Gallery card: tap to see the large preview; "Use this template" creates the resume. */
+/** Every template's text layer is machine-readable (checked by the ATS Readability tests). */
+export function AtsReadyBadge() {
+  return (
+    <View style={{ alignSelf: 'flex-start', backgroundColor: '#E6F2EA', borderWidth: 1, borderColor: '#CFE6D7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.success, textTransform: 'uppercase' }}>ATS Ready</Text>
+    </View>
+  );
+}
+
+/** Gallery card: tap to see the large preview; "Use template" creates the resume. */
 export function TemplateCard({ template, onUse }: { template: TemplateConfig; onUse: (templateId: string) => void }) {
   return (
     <View style={{ flex: 1, gap: 8 }}>
@@ -44,20 +53,21 @@ export function TemplateCard({ template, onUse }: { template: TemplateConfig; on
         onPress={() => router.push(templateHref(template.id))}
         style={({ pressed }) => [{ gap: 8 }, pressed && { opacity: 0.8 }]}
       >
-        <TemplateThumbnail template={template} />
+        <View>
+          <TemplateThumbnail template={template} />
+          <View style={{ position: 'absolute', top: 6, left: 6 }}>
+            <AtsReadyBadge />
+          </View>
+        </View>
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }} numberOfLines={1}>
             {template.name}
           </Text>
           <CategoryTag label={template.category} />
-          {/* Always two lines tall, so cards in a row line up; longer text ends in an ellipsis. */}
-          <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 17, height: 34 }} numberOfLines={2} ellipsizeMode="tail">
-            {template.description}
-          </Text>
         </View>
       </Pressable>
       <Button
-        title="Use this template"
+        title="Use template"
         variant="secondary"
         fit
         style={{ minHeight: 40, paddingHorizontal: 12 }}
