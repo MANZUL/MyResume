@@ -1,3 +1,4 @@
+import type { AnalysisText } from '../i18n/analysis-text';
 import type { LanguageSupport } from '../i18n/analysis-support';
 import type { EditorSection } from '../resume/sections';
 
@@ -20,31 +21,40 @@ export type AtsRuleId =
 /** `readable` = nothing found; `check` = worth a look; `issue` = likely to confuse a parser. */
 export type AtsStatus = 'readable' | 'check' | 'issue';
 
+// Every text is a message code plus parameters (`*Text`, rendered by the UI in the app
+// language). The plain strings next to them are the English rendering of the same codes.
+
 export interface AtsLocation {
   section: EditorSection;
-  /** Human-readable place, e.g. "Experience 2 · Accomplishment 3". */
+  /** English, e.g. "Experience 2 · Accomplishment 3". */
   label: string;
+  labelText: AnalysisText;
 }
 
 export interface AtsFinding {
   id: string;
   status: Exclude<AtsStatus, 'readable'>;
+  /** English rendering of `messageText`. */
   message: string;
+  messageText: AnalysisText;
   location?: AtsLocation;
 }
 
 export interface AtsCheck {
   rule: AtsRuleId;
   title: string;
+  titleText: AnalysisText;
   status: AtsStatus;
   /** One sentence describing what was checked and the outcome. */
   summary: string;
+  summaryText: AnalysisText;
   findings: AtsFinding[];
 }
 
 /** Presence of the parts an ATS looks for ("Detected" / "Not detected"). */
 export interface AtsDetection {
   label: string;
+  labelText: AnalysisText;
   detected: boolean;
 }
 

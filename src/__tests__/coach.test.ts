@@ -306,7 +306,7 @@ describe('no-fact invariant', () => {
 // --- 4. grounding guard: forged fixes are rejected ---
 
 const forged = (text: string, start: number, end: number, replacement: string): CoachFinding => ({
-  id: 'forged', textKey: textKey(text), rule: 'wordy', category: 'concise', message: 'x', start, end, fix: { kind: 'preview', replacement },
+  id: 'forged', textKey: textKey(text), rule: 'wordy', category: 'concise', message: 'x', messageText: { code: 'x' }, start, end, fix: { kind: 'preview', replacement },
 });
 
 describe('grounding guard rejects any fix that adds a fact', () => {
@@ -495,7 +495,7 @@ describe('architecture: Editor → PremiumTools → domain/coach', () => {
   it('domain/coach is pure (imports only itself and the language contract)', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'coach'))) {
       for (const spec of [...read(relative(SRC, file)).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
-        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/i18n\/(analysis-support|languages)$/);
+        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/i18n\/(analysis-support|analysis-text|languages)$|^\.\.\/\.\.\/i18n\/analysis$/);
       }
     }
   });

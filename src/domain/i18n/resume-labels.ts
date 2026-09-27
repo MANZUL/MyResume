@@ -1,8 +1,11 @@
+import { CATALOGS, type PartialMessages } from '../../i18n/catalog';
+import { createTranslator } from '../../i18n/translate';
 import type { Language } from './languages';
 
-// The one source of every label the app itself writes into a resume document. The
-// preview, PDF, image and DOCX all read these, keyed by the RESUME's language (not the
-// app language). Missing translations fall back to English per label.
+// The labels the app itself writes into a resume document. The one source is the catalog
+// ("resume.labels.*", src/i18n/messages); they are looked up in the RESUME's language
+// (never the app language), with English as the per-label fallback. The preview, PDF,
+// image and DOCX all read them through this function.
 
 export interface ResumeLabels {
   summary: string;
@@ -17,26 +20,12 @@ export interface ResumeLabels {
   previewWatermark: string;
 }
 
-const EN: ResumeLabels = {
-  summary: 'Summary',
-  experience: 'Experience',
-  education: 'Education',
-  certifications: 'Certifications',
-  projects: 'Projects',
-  awards: 'Awards',
-  resume: 'Resume',
-  previewWatermark: 'PREVIEW',
-};
+export const RESUME_LABEL_KEYS = ['summary', 'experience', 'education', 'certifications', 'projects', 'awards', 'resume', 'previewWatermark'] as const;
 
-// Translations are a later phase; empty tables fall back to English.
-export const RESUME_LABELS: Record<Language, Partial<ResumeLabels>> = {
-  en: EN,
-  de: {},
-  fr: {},
-  es: {},
-  ar: {},
-};
-
-export function resumeLabels(language: Language): ResumeLabels {
-  return { ...EN, ...RESUME_LABELS[language] };
+export function resumeLabels(language: Language, catalogs: Record<Language, PartialMessages> = CATALOGS): ResumeLabels {
+  // Document text is data inside the page: no UI isolation marks.
+  const { t } = createTranslator(language, catalogs, { isolate: false });
+  const labels = {} as ResumeLabels;
+  for (const key of RESUME_LABEL_KEYS) labels[key] = t(`resume.labels.${key}`);
+  return labels;
 }

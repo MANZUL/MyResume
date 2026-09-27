@@ -194,11 +194,16 @@ describe('corpus', () => {
 
   it('records where in the resume each term appears', () => {
     const r = analyzeJobMatch(RESUMES.engineer, JDS.softwareEngineer, 'en');
-    expect(r.terms.find((t) => t.id === 'typescript')!.resume).toEqual([
+    const plain = (list: { section: string; label: string }[]) => list.map(({ section, label }) => ({ section, label }));
+    expect(plain(r.terms.find((t) => t.id === 'typescript')!.resume)).toEqual([
       { section: 'summary', label: 'Skill 1' },
       { section: 'experience', label: 'Experience 1 · Accomplishment 1' },
     ]);
-    expect(r.title).toEqual({ text: 'Senior Software Engineer', core: 'Software Engineer', resume: [{ section: 'summary', label: 'Tagline' }, { section: 'experience', label: 'Experience 1 · Job Title' }] });
+    expect({ ...r.title!, resume: plain(r.title!.resume) }).toEqual({ text: 'Senior Software Engineer', core: 'Software Engineer', resume: [{ section: 'summary', label: 'Tagline' }, { section: 'experience', label: 'Experience 1 · Job Title' }] });
+    expect(r.title!.resume[1].labelText).toEqual({
+      code: 'analysis.location.inEntry',
+      params: { entry: { code: 'analysis.location.entry.experience', params: { n: 1 } }, field: { code: 'analysis.location.field.jobTitle' } },
+    });
   });
 
   it('counts every term once, however often it is mentioned', () => {
@@ -391,7 +396,7 @@ describe('architecture', () => {
   it('domain/job-match is pure', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'job-match'))) {
       for (const spec of [...read(relative(SRC, file)).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
-        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume)\/[\w-]+$|^\.\.\/ats\/fields$|^\.\.\/i18n\/(analysis-support|languages)$/);
+        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume)\/[\w-]+$|^\.\.\/ats\/fields$|^\.\.\/i18n\/(analysis-support|analysis-text|languages)$|^\.\.\/\.\.\/i18n\/analysis$/);
       }
     }
   });

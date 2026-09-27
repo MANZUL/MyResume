@@ -9,6 +9,7 @@ import { useTargetJob } from '../../services/storage/use-target-job';
 import { Button, Card, colors, Field, Muted, styles } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useLocalization } from '../../services/i18n/localization';
+import { errorText, renderText } from '../../i18n/analysis';
 import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
 export function MatchTool({ resumeId, data, language }: { resumeId: string; data: ResumeData; language: Language }) {
@@ -26,7 +27,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
       setError('');
     } catch (e) {
       if (e instanceof PremiumRequiredError) paywall.request({ feature: e.feature, run: compare });
-      else setError(e instanceof Error ? e.message : t('match.failed'));
+      else setError(errorText(t, e, 'match.failed'));
     }
   };
 
@@ -61,7 +62,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
               <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{report.title.text}</Text>
               <Text style={{ color: report.title.resume.length ? colors.success : colors.muted }}>
                 {report.title.resume.length
-                  ? t('match.titleMentioned', { core: report.title.core, where: report.title.resume.map((e) => e.label).join(t('match.listSeparator')) })
+                  ? t('match.titleMentioned', { core: report.title.core, where: report.title.resume.map((e) => renderText(t, e.labelText)).join(t('match.listSeparator')) })
                   : t('match.titleNotDetected', { core: report.title.core })}
               </Text>
             </Card>
@@ -86,7 +87,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
                         (term.job.mentions > 1 ? t('match.mentionLines', { count: term.job.mentions }) : '')}
                     </Muted>
                     {term.resume.length ? (
-                      <Muted>{t('match.inResume', { where: term.resume.map((e) => e.label).join(t('match.listSeparator')) })}</Muted>
+                      <Muted>{t('match.inResume', { where: term.resume.map((e) => renderText(t, e.labelText)).join(t('match.listSeparator')) })}</Muted>
                     ) : null}
                   </View>
                 ))}

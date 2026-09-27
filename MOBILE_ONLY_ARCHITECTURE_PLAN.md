@@ -1746,6 +1746,73 @@ So "Zoë Müller" → `zoë-müller.pdf` and "محمد أحمد" → `محمد-�
 
 **Validation:** `tsc` ✅, `expo lint` ✅, 500 passed + 1 skipped generator (459 before) ✅, iOS and Android bundles ✅. Devices: **NOT RUN**.
 
+### 19.11a Phase 13A: English catalog hardening (no translations)
+
+**String inventory.** The English catalog `src/i18n/messages/en.ts` has 474 keys, 10 of them plural. Every user-visible string belongs to one of six categories:
+
+| Category | Catalog namespaces | Keys | Localized |
+|---|---|---|---|
+| APP_UI | `nav`, `home`, `gallery`, `templatePreview`, `editor`, `coach`, `tools`, `check`, `ats`, `match`, `letter`, `preview`, `share`, `paywall`, `import`, `settings`, `resume.{untitled,sample,imported,copyOf}` | 246 | yes (app language) |
+| TEMPLATE_METADATA | `templates.<id>.{name,shortName,description}`, `templates.categories.<id>` | 42 | yes (app language) |
+| RESUME_DOCUMENT_LABEL | `resume.labels.*` (summary, experience, education, certifications, projects, awards, resume, previewWatermark) | 8 | yes (**resume** language) |
+| ANALYSIS_MESSAGE | `analysis.{location,reference,ats,score,coach}.*` | 169 | yes (app language) |
+| SYSTEM_ERROR | `errors.*`, `database.*` | 9 | yes (app language) |
+| USER_GENERATED_DATA | none: resume content, titles, job descriptions, letters | 0 | **never** |
+
+**Analysis output is coded.** Score, ATS, Job Match and the Writing Coach return `AnalysisText { code, params }` next to each English string (`messageText`, `titleText`, `summaryText`, `labelText`, `strengthTexts`). Parameters can be nested codes: a finding's location or a verb tense are codes, not English words.
+- The English strings are rendered from the same catalog (`englishText`), so they are unchanged. A test checks every pair over the ATS, Coach and Job corpora.
+- Screens render the codes in the app language (`renderText`).
+- Coded errors (`JobDescriptionTooLongError`, `CoachInputError`, `CoachStaleFindingError`, `CoachFixRejectedError`) carry `messageText`; screens use `errorText`.
+- The rules, scores and taxonomy are unchanged. The rule packs are still English-only (§19.11).
+
+**Keys.**
+- Keys are semantic: `resume.labels.summary`, `analysis.ats.contact.*`, `templates.<id>.name`.
+- A value may appear under several keys only where the context differs (document heading vs. editor field vs. analysis location, a heading vs. a status chip). The shared groups are pinned by a test.
+
+**Plurals.**
+- Counted sentences use plural messages: `ats.toCheck`, `ats.issues`, `match.alsoFound`, `match.mentionLines`, `analysis.score.warnings.shortBullets`, `analysis.coach.{repeatedOpener,longBullet}`, `errors.{jobDescriptionTooLong,coachTextTooLong}`.
+- A test fails on a manual `=== 1 ? '' : 's'`.
+
+**Formatting.** App-generated numbers are formatted per app language (`1,234 / 25,000` → `1.234 / 25.000` in German). User dates and user text are never reformatted.
+
+**Template metadata.**
+- `TEMPLATES` is built from 12 structural definitions.
+- Each design carries `id`, `categoryKey`, `nameKey`, `shortNameKey` and `descriptionKey`.
+- There are no per-language definitions.
+
+**Resume labels.**
+- `resumeLabels(language)` reads `resume.labels.*` through the translator, with English fallback per label.
+- The PDF/preview renderer, the watermark tile and the DOCX use only this source.
+- The old separate label table is removed.
+
+**Hard-coded string guard.** Two layers:
+1. JSX text, text props (`title`, `label`, `placeholder`, `accessibilityLabel`/`Hint`, `subtitle`), `Alert.alert` literals and navigation `title:` in screens, UI components and routes.
+2. Every string literal in `features/`, `ui/`, `app/`, the database context and the localization provider.
+
+The second layer allows:
+- `t()` keys, module specifiers and `require` assets;
+- routes (`name=`, `href`, `pathname`), colors, `about:blank`, `data:` and `http(s)` URLs;
+- enum comparisons, style keys and single technical identifiers;
+- `console.*` tags and developer-only `throw new Error(...)`.
+
+Comments are stripped before the scan.
+
+How the guard is proven:
+- A test feeds it injected English (JSX, ternary title, alert, `setError`, navigation title, placeholder, template-literal accessibility label, "OK") and technical strings.
+- It was also mutation-checked on real files: English was injected into `CheckTool.tsx` (a literal) and `EditorScreen.tsx` (JSX text). The test failed each time, the files were restored, and it passed again.
+
+**Regression tests.**
+- *Case A*: app German, resume English. UI comes from the German catalog with English fallback. Document labels stay English, with `lang="en" dir="ltr"`.
+- *Case B*: app English, resume German. UI stays English. Labels come from the German catalog with fallback, with `lang="de" dir="ltr"`.
+- *Migration v4*: `local_profile` is unchanged, and a re-run is a no-op.
+- *Renderer*: the 96-render English hash is unchanged.
+- *Thumbnails*: the 12 PNGs are hash-pinned. A Chromium capture of the current renders is byte-identical to them.
+
+**Remaining English outside the catalog (known).**
+- Store and purchase errors, and export and rasterizer errors, are shown via `error.message` in `UnlockScreen` and `PreviewScreen`. They belong to protected areas and are left unchanged in this phase.
+- Job Match term labels come from the taxonomy (English data).
+- The cover letter body is written in English (§19.11).
+
 ## 20. Major risks and failure modes
 
 | # | Risk | Impact | Mitigation |

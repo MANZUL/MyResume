@@ -1,3 +1,5 @@
+import { englishText } from '../../i18n/analysis';
+import { text as coded, type AnalysisText } from '../i18n/analysis-text';
 import type { LanguageSupport } from '../i18n/analysis-support';
 import type { EditorSection } from '../resume/sections';
 import type { JdSection } from './segment';
@@ -9,8 +11,10 @@ import type { TermCategory } from './taxonomy';
 
 export interface Evidence {
   section: EditorSection;
-  /** e.g. "Experience 1 · Accomplishment 2". */
+  /** English, e.g. "Experience 1 · Accomplishment 2". */
   label: string;
+  /** The same place as a code, for the UI. */
+  labelText: AnalysisText;
 }
 
 export interface JobTerm {
@@ -45,8 +49,10 @@ export interface JobMatchReport {
 export const JOB_DESCRIPTION_MAX = 25_000;
 
 export class JobDescriptionTooLongError extends Error {
+  /** For the UI, in the app language. */
+  readonly messageText = coded('errors.jobDescriptionTooLong', { count: JOB_DESCRIPTION_MAX });
   constructor() {
-    super(`This job description is too long (${JOB_DESCRIPTION_MAX.toLocaleString('en-US')} characters max).`);
+    super(englishText(coded('errors.jobDescriptionTooLong', { count: JOB_DESCRIPTION_MAX }), { formatNumbers: true }));
     this.name = 'JobDescriptionTooLongError';
   }
 }

@@ -63,9 +63,12 @@ describe('contact', () => {
   });
 
   it('detections', () => {
-    expect(report(base).detected.slice(0, 5)).toEqual([
+    expect(report(base).detected.slice(0, 5).map(({ label, detected }) => ({ label, detected }))).toEqual([
       { label: 'Name', detected: true }, { label: 'Email', detected: true }, { label: 'Phone', detected: true },
       { label: 'Location', detected: true }, { label: 'LinkedIn or website', detected: true },
+    ]);
+    expect(report(base).detected.map((d) => d.labelText.code).slice(0, 5)).toEqual([
+      'analysis.ats.detected.name', 'analysis.ats.detected.email', 'analysis.ats.detected.phone', 'analysis.ats.detected.location', 'analysis.ats.detected.linkOrWebsite',
     ]);
     expect(report(emptyResume()).detected.slice(0, 5).every((d) => !d.detected)).toBe(true);
   });
@@ -475,7 +478,7 @@ describe('architecture', () => {
       // language; the English rule pack names templates with the English catalog text.
       for (const spec of specs(read(relative(SRC, file)))) {
         expect(spec, relative(SRC, file)).toMatch(
-          /^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$|^\.\.\/render\/render-html$|^\.\.\/i18n\/(analysis-support|languages|resume-labels|typography)$|^\.\.\/\.\.\/i18n\/messages\/en$/,
+          /^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$|^\.\.\/render\/render-html$|^\.\.\/i18n\/(analysis-support|analysis-text|languages|resume-labels|typography)$|^\.\.\/\.\.\/i18n\/analysis$/,
         );
       }
     }

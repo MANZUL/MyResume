@@ -7,6 +7,7 @@ import { colors, styles } from '../../ui/components';
 import { analysisSupport } from '../../domain/i18n/analysis-support';
 import type { Language } from '../../domain/i18n/languages';
 import { useT } from '../../services/i18n/localization';
+import { errorText, renderText } from '../../i18n/analysis';
 
 const CATEGORY_ORDER: readonly CoachCategory[] = ['grammar', 'concise', 'professional', 'impact', 'measurable'];
 
@@ -41,7 +42,7 @@ export function CoachEntry({
       setMessage('');
       paywall.request({ feature: error.feature, run: retry });
     } else {
-      setMessage(error instanceof Error ? error.message : t('coach.failed'));
+      setMessage(errorText(t, error, 'coach.failed'));
     }
   };
 
@@ -125,7 +126,7 @@ function FindingRow({ finding, text, onApply }: { finding: CoachFinding; text: s
   const before = text.slice(finding.start, finding.end);
   return (
     <View style={{ gap: 4 }}>
-      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{finding.message}</Text>
+      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{renderText(t, finding.messageText)}</Text>
       {fix?.kind === 'preview' ? (
         <Text style={{ color: colors.muted, fontSize: 13 }}>
           “{before}” → “{fix.replacement}”

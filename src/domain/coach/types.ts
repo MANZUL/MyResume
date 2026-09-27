@@ -1,4 +1,6 @@
 import type { LanguageSupport } from '../i18n/analysis-support';
+import { englishText } from '../../i18n/analysis';
+import { text as coded, type AnalysisText } from '../i18n/analysis-text';
 import type { Language } from '../i18n/languages';
 // Writing Coach (PREMIUM, plan §3): deterministic rules with reasons and a few
 // safe, user-triggered fixes. No rewriting, no AI. A fix never adds a fact.
@@ -55,8 +57,10 @@ export interface CoachFinding {
   id: string;
   rule: CoachRuleId;
   category: CoachCategory;
-  /** Why this was flagged. */
+  /** Why this was flagged (English rendering of `messageText`). */
   message: string;
+  /** The same as a message code (analysis.coach.*) plus parameters. */
+  messageText: AnalysisText;
   /** Identifies the exact text this finding was computed on (any edit makes it stale). */
   textKey: string;
   /** Span of the analysed text the finding (and its fix) covers. */
@@ -77,26 +81,29 @@ export interface CoachReport {
 export const COACH_LIMITS = { maxTextLength: 6000, maxContextLength: 300, maxOpenerLength: 40 } as const;
 
 export class CoachInputError extends Error {
+  /** For the UI, in the app language. */
+  readonly messageText: AnalysisText;
   constructor(readonly reason: 'text_too_long' | 'context_too_long' | 'invalid_context') {
-    super(
-      reason === 'text_too_long'
-        ? `This text is too long for the Coach (${COACH_LIMITS.maxTextLength} characters max).`
-        : 'The Coach could not use this entry’s other bullets.',
-    );
+    const messageText =
+      reason === 'text_too_long' ? coded('errors.coachTextTooLong', { count: COACH_LIMITS.maxTextLength }) : coded('errors.coachContext');
+    super(englishText(messageText));
+    this.messageText = messageText;
     this.name = 'CoachInputError';
   }
 }
 
 export class CoachStaleFindingError extends Error {
+  readonly messageText = coded('errors.coachStale');
   constructor() {
-    super('The text changed since these suggestions were made. Refresh the suggestions.');
+    super(englishText(coded('errors.coachStale')));
     this.name = 'CoachStaleFindingError';
   }
 }
 
 export class CoachFixRejectedError extends Error {
+  readonly messageText = coded('errors.coachFixRejected');
   constructor(readonly reason: 'no_fix' | 'invalid_choice' | 'not_grounded' | 'out_of_range') {
-    super('This suggestion cannot be applied.');
+    super(englishText(coded('errors.coachFixRejected')));
     this.name = 'CoachFixRejectedError';
   }
 }

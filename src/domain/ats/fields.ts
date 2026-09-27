@@ -1,4 +1,6 @@
 import type { ResumeData } from '../resume/types';
+import { text } from '../i18n/analysis-text';
+import { at, loc, personal } from './locations';
 import type { AtsLocation } from './types';
 
 // Every text value of a resume, with where it is in the editor. Rules iterate this
@@ -19,46 +21,44 @@ export function textFields(data: ResumeData): TextField[] {
   const add = (value: string, kind: FieldKind, key: string, location: AtsLocation) => {
     if (typeof value === 'string' && value !== '') out.push({ value, kind, key, location });
   };
-  const personal = (label: string): AtsLocation => ({ section: 'personal', label });
-  add(data.name, 'name', 'name', personal('Full Name'));
-  const contactLabels = { email: 'Email', phone: 'Phone', location: 'Location', linkedin: 'LinkedIn', website: 'Website' } as const;
-  for (const key of Object.keys(contactLabels) as (keyof typeof contactLabels)[]) {
-    add(data.contact[key], 'contact', `contact.${key}`, personal(contactLabels[key]));
+  const field = (key: string, params?: Record<string, number>) => text(`analysis.location.field.${key}`, params);
+  add(data.name, 'name', 'name', personal('name'));
+  for (const key of ['email', 'phone', 'location', 'linkedin', 'website'] as const) {
+    add(data.contact[key], 'contact', `contact.${key}`, personal(key));
   }
-  const summary = (label: string): AtsLocation => ({ section: 'summary', label });
-  add(data.summary.tagline, 'paragraph', 'summary.tagline', summary('Tagline'));
-  data.summary.bullets.forEach((b, i) => add(b, 'item', `summary.bullets.${i}`, summary(`Summary bullet ${i + 1}`)));
-  data.summary.skills.forEach((s, i) => add(s, 'skill', `summary.skills.${i}`, summary(`Skill ${i + 1}`)));
+  add(data.summary.tagline, 'paragraph', 'summary.tagline', loc('summary', text('analysis.location.tagline')));
+  data.summary.bullets.forEach((b, i) => add(b, 'item', `summary.bullets.${i}`, loc('summary', text('analysis.location.summaryBullet', { n: i + 1 }))));
+  data.summary.skills.forEach((s, i) => add(s, 'skill', `summary.skills.${i}`, loc('summary', text('analysis.location.skill', { n: i + 1 }))));
   data.experience.forEach((e, i) => {
-    const at = (label: string): AtsLocation => ({ section: 'experience', label: `Experience ${i + 1} · ${label}` });
-    add(e.title, 'line', `experience.${i}.title`, at('Job Title'));
-    add(e.company, 'line', `experience.${i}.company`, at('Company'));
-    add(e.location, 'line', `experience.${i}.location`, at('Location'));
-    add(e.start, 'date', `experience.${i}.start`, at('Start Date'));
-    add(e.end, 'date', `experience.${i}.end`, at('End Date'));
-    add(e.summary, 'paragraph', `experience.${i}.summary`, at('Short Summary'));
-    e.bullets.forEach((b, j) => add(b, 'item', `experience.${i}.bullets.${j}`, at(`Accomplishment ${j + 1}`)));
+    const on = (f: ReturnType<typeof field>) => at('experience', i, f);
+    add(e.title, 'line', `experience.${i}.title`, on(field('jobTitle')));
+    add(e.company, 'line', `experience.${i}.company`, on(field('company')));
+    add(e.location, 'line', `experience.${i}.location`, on(field('location')));
+    add(e.start, 'date', `experience.${i}.start`, on(field('startDate')));
+    add(e.end, 'date', `experience.${i}.end`, on(field('endDate')));
+    add(e.summary, 'paragraph', `experience.${i}.summary`, on(field('shortSummary')));
+    e.bullets.forEach((b, j) => add(b, 'item', `experience.${i}.bullets.${j}`, on(field('accomplishment', { n: j + 1 }))));
   });
   data.education.forEach((e, i) => {
-    const at = (label: string): AtsLocation => ({ section: 'education', label: `Education ${i + 1} · ${label}` });
-    add(e.degree, 'line', `education.${i}.degree`, at('Degree'));
-    add(e.school, 'line', `education.${i}.school`, at('School'));
-    add(e.location, 'line', `education.${i}.location`, at('Location'));
-    add(e.date, 'date', `education.${i}.date`, at('Date'));
-    add(e.honors, 'line', `education.${i}.honors`, at('Honors'));
+    const on = (f: ReturnType<typeof field>) => at('education', i, f);
+    add(e.degree, 'line', `education.${i}.degree`, on(field('degree')));
+    add(e.school, 'line', `education.${i}.school`, on(field('school')));
+    add(e.location, 'line', `education.${i}.location`, on(field('location')));
+    add(e.date, 'date', `education.${i}.date`, on(field('date')));
+    add(e.honors, 'line', `education.${i}.honors`, on(field('honors')));
   });
   data.certifications.forEach((c, i) => {
-    const at = (label: string): AtsLocation => ({ section: 'certifications', label: `Certification ${i + 1} · ${label}` });
-    add(c.name, 'line', `certifications.${i}.name`, at('Name'));
-    add(c.org, 'line', `certifications.${i}.org`, at('Organization'));
-    add(c.date, 'date', `certifications.${i}.date`, at('Date'));
+    const on = (f: ReturnType<typeof field>) => at('certifications', i, f);
+    add(c.name, 'line', `certifications.${i}.name`, on(field('name')));
+    add(c.org, 'line', `certifications.${i}.org`, on(field('organization')));
+    add(c.date, 'date', `certifications.${i}.date`, on(field('date')));
   });
   data.projects.forEach((p, i) => {
-    const at = (label: string): AtsLocation => ({ section: 'projects', label: `Project ${i + 1} · ${label}` });
-    add(p.name, 'line', `projects.${i}.name`, at('Project Name'));
-    add(p.description, 'paragraph', `projects.${i}.description`, at('Short Description'));
-    p.bullets.forEach((b, j) => add(b, 'item', `projects.${i}.bullets.${j}`, at(`Accomplishment ${j + 1}`)));
+    const on = (f: ReturnType<typeof field>) => at('projects', i, f);
+    add(p.name, 'line', `projects.${i}.name`, on(field('projectName')));
+    add(p.description, 'paragraph', `projects.${i}.description`, on(field('shortDescription')));
+    p.bullets.forEach((b, j) => add(b, 'item', `projects.${i}.bullets.${j}`, on(field('accomplishment', { n: j + 1 }))));
   });
-  data.awards.forEach((a, i) => add(a, 'item', `awards.${i}`, { section: 'awards', label: `Award ${i + 1}` }));
+  data.awards.forEach((a, i) => add(a, 'item', `awards.${i}`, loc('awards', text('analysis.location.award', { n: i + 1 }))));
   return out;
 }

@@ -4,7 +4,9 @@ import { isOrdered, parseDateField, type DateStyle, type ParsedDate } from './da
 import { textFields, type TextField } from './fields';
 import { renderedHeadings, templateTextFacts, trackingFor, type Tracking } from './template-facts';
 import type { Language } from '../i18n/languages';
-import { en as ENGLISH_UI } from '../../i18n/messages/en';
+import { text, type AnalysisText } from '../i18n/analysis-text';
+import { englishText } from '../../i18n/analysis';
+import { at, entry, loc, personal, reference, section } from './locations';
 import type { AtsCheck, AtsDetection, AtsFinding, AtsLocation, AtsRuleId, AtsStatus } from './types';
 
 // Ten deterministic checks. Each is conservative: it reports only what the data (or
@@ -24,18 +26,29 @@ export interface AtsInput {
 
 type Draft = Omit<AtsFinding, 'id'>;
 
-// The English rule pack names templates with their English display name (the app catalog's source text).
-const ENGLISH_TEMPLATE_TEXT = ENGLISH_UI.templates as unknown as Record<string, { name?: string } | undefined>;
-const englishTemplateName = (id: string) => ENGLISH_TEMPLATE_TEXT[id]?.name ?? id;
+// Every sentence is a message code (analysis.ats.* in the app catalog) plus parameters;
+// `message`, `title`, `summary` and location `label` are the English rendering of the
+// same codes, kept for the English rule pack's callers and tests.
 
-function check(rule: AtsRuleId, title: string, findings: Draft[], readable: string, withFindings: string): AtsCheck {
+const draft = (status: Draft['status'], value: AnalysisText, location?: AtsLocation): Draft => ({
+  status,
+  message: englishText(value),
+  messageText: value,
+  ...(location ? { location } : {}),
+});
+const ats = (key: string, params?: Record<string, string | number | AnalysisText>) => text(`analysis.ats.${key}`, params);
+
+/** A check's title and its readable / with-findings summaries are codes under analysis.ats.<rule>. */
+function check(rule: AtsRuleId, key: string, findings: Draft[], titleParams?: Record<string, AnalysisText>, readableParams?: Record<string, string>, readableKey = 'readable'): AtsCheck {
   const withIds: AtsFinding[] = findings.map((f, i) => ({ ...f, id: `${rule}:${i}` }));
   const status: AtsStatus = withIds.some((f) => f.status === 'issue') ? 'issue' : withIds.length ? 'check' : 'readable';
-  return { rule, title, status, summary: withIds.length ? withFindings : readable, findings: withIds };
+  const titleText = ats(`${key}.title`, titleParams);
+  const summaryText = withIds.length ? ats(`${key}.withFindings`) : ats(`${key}.${readableKey}`, readableParams);
+  return { rule, title: englishText(titleText), titleText, status, summary: englishText(summaryText), summaryText, findings: withIds };
 }
 
-const personal = (label: string): AtsLocation => ({ section: 'personal', label });
-const quote = (s: string) => `"${s.length > 40 ? `${s.slice(0, 37)}…` : s}"`;
+/** User text shown inside a message, shortened (the quotes are part of each message). */
+const clip = (s: string) => (s.length > 40 ? `${s.slice(0, 37)}…` : s);
 const codePoint = (c: string) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`;
 
 // --- 1. contact ---
@@ -47,68 +60,65 @@ export function contactCheck({ data }: AtsInput): { check: AtsCheck; detected: A
   const c = data.contact;
   const f: Draft[] = [];
   const name = data.name.trim();
-  if (!name) f.push({ status: 'issue', message: 'No name detected.', location: personal('Full Name') });
-  else if (/[@\d]/.test(name)) f.push({ status: 'check', message: `The name ${quote(name)} contains digits or "@"; a parser may not read it as a name.`, location: personal('Full Name') });
+  if (!name) f.push(draft('issue', ats('contact.noName'), personal('name')));
+  else if (/[@\d]/.test(name)) f.push(draft('check', ats('contact.nameHasDigits', { value: clip(name) }), personal('name')));
 
   const email = c.email.trim();
-  if (!email) f.push({ status: 'issue', message: 'No email address detected.', location: personal('Email') });
-  else if (!EMAIL.test(email)) f.push({ status: 'issue', message: `${quote(email)} does not look like an email address.`, location: personal('Email') });
+  if (!email) f.push(draft('issue', ats('contact.noEmail'), personal('email')));
+  else if (!EMAIL.test(email)) f.push(draft('issue', ats('contact.badEmail', { value: clip(email) }), personal('email')));
 
   const phone = c.phone.trim();
   const digits = phone.replace(/\D/g, '').length;
-  if (!phone) f.push({ status: 'check', message: 'No phone number detected.', location: personal('Phone') });
+  if (!phone) f.push(draft('check', ats('contact.noPhone'), personal('phone')));
   else if (!PHONE_CHARS.test(phone) || digits < 7 || digits > 15) {
-    f.push({ status: 'check', message: `${quote(phone)} may not be read as a phone number (use digits, spaces, +, - or parentheses).`, location: personal('Phone') });
+    f.push(draft('check', ats('contact.badPhone', { value: clip(phone) }), personal('phone')));
   }
 
-  if (!c.location.trim()) f.push({ status: 'check', message: 'No location detected; some searches filter by city or region.', location: personal('Location') });
+  if (!c.location.trim()) f.push(draft('check', ats('contact.noLocation'), personal('location')));
 
-  for (const [key, label] of [['linkedin', 'LinkedIn'], ['website', 'Website']] as const) {
+  for (const key of ['linkedin', 'website'] as const) {
     const value = c[key].trim();
-    if (value && /\s/.test(value)) f.push({ status: 'issue', message: `The ${label} address contains a space, so it will not be read as one link.`, location: personal(label) });
-    else if (value && !/\.[a-z]{2,}/i.test(value)) f.push({ status: 'check', message: `${quote(value)} does not look like a web address.`, location: personal(label) });
+    if (value && /\s/.test(value)) f.push(draft('issue', ats(`contact.${key}HasSpace`), personal(key)));
+    else if (value && !/\.[a-z]{2,}/i.test(value)) f.push(draft('check', ats('contact.badUrl', { value: clip(value) }), personal(key)));
   }
 
   const detected: AtsDetection[] = [
-    { label: 'Name', detected: Boolean(name) },
-    { label: 'Email', detected: EMAIL.test(email) },
-    { label: 'Phone', detected: Boolean(phone) && digits >= 7 && digits <= 15 },
-    { label: 'Location', detected: Boolean(c.location.trim()) },
-    { label: 'LinkedIn or website', detected: Boolean(c.linkedin.trim() || c.website.trim()) },
+    detection('name', Boolean(name)),
+    detection('email', EMAIL.test(email)),
+    detection('phone', Boolean(phone) && digits >= 7 && digits <= 15),
+    detection('location', Boolean(c.location.trim())),
+    detection('linkOrWebsite', Boolean(c.linkedin.trim() || c.website.trim())),
   ];
-  return {
-    check: check('contact', 'Contact details', f, 'Name, email, phone and location are present and in readable formats.', 'Some contact details are missing or may not be read correctly.'),
-    detected,
-  };
+  return { check: check('contact', 'contact', f), detected };
 }
 
 // --- 2. sections ---
 
 const hasText = (...values: string[]) => values.some((v) => v.trim() !== '');
 
+function detection(key: string, detected: boolean): AtsDetection {
+  const labelText = ats(`detected.${key}`);
+  return { label: englishText(labelText), labelText, detected };
+}
+
 export function sectionsCheck({ data, language }: AtsInput): { check: AtsCheck; detected: AtsDetection[] } {
   const present = {
-    Summary: hasText(data.summary.tagline, ...data.summary.bullets),
-    Skills: data.summary.skills.some((s) => s.trim()),
-    Experience: data.experience.some((e) => hasText(e.title, e.company, e.summary, ...e.bullets)),
-    Education: data.education.some((e) => hasText(e.degree, e.school)),
-    Certifications: data.certifications.some((c) => hasText(c.name)),
-    Projects: data.projects.some((p) => hasText(p.name, p.description, ...p.bullets)),
-    Awards: data.awards.some((a) => a.trim()),
+    summary: hasText(data.summary.tagline, ...data.summary.bullets),
+    skills: data.summary.skills.some((s) => s.trim()),
+    experience: data.experience.some((e) => hasText(e.title, e.company, e.summary, ...e.bullets)),
+    education: data.education.some((e) => hasText(e.degree, e.school)),
+    certifications: data.certifications.some((c) => hasText(c.name)),
+    projects: data.projects.some((p) => hasText(p.name, p.description, ...p.bullets)),
+    awards: data.awards.some((a) => a.trim()),
   };
   const f: Draft[] = [];
-  if (!present.Experience) f.push({ status: 'issue', message: 'No Experience section detected. Most ATS expect one; add your roles if you have any.', location: { section: 'experience', label: 'Experience' } });
-  if (!present.Education) f.push({ status: 'check', message: 'No Education section detected.', location: { section: 'education', label: 'Education' } });
-  if (!present.Skills) f.push({ status: 'check', message: 'No skills listed; keyword searches often look for them.', location: { section: 'summary', label: 'Skills' } });
+  if (!present.experience) f.push(draft('issue', ats('sections.noExperience'), section('experience', 'experience')));
+  if (!present.education) f.push(draft('check', ats('sections.noEducation'), section('education', 'education')));
+  if (!present.skills) f.push(draft('check', ats('sections.noSkills'), section('summary', 'skills')));
   return {
-    check: check(
-      'sections',
-      'Section headings',
-      f,
-      `Headings use standard names (${renderedHeadings(language).join(', ')}) as plain text.`,
-      `Headings use standard names as plain text, but some core sections are missing.`,
-    ),
-    detected: Object.entries(present).map(([label, detected]) => ({ label: `${label} section`, detected })),
+    // The rendered headings are document text in the resume's language (data here).
+    check: check('sections', 'sections', f, undefined, { headings: renderedHeadings(language).join(', ') }),
+    detected: (Object.keys(present) as (keyof typeof present)[]).map((key) => detection(`${key}Section`, present[key])),
   };
 }
 
@@ -117,38 +127,31 @@ export function sectionsCheck({ data, language }: AtsInput): { check: AtsCheck; 
 export function templateTextCheck({ template, tracking, language }: AtsInput): AtsCheck {
   const facts = templateTextFacts(template, tracking ?? trackingFor(language));
   const f: Draft[] = [];
-  const parts = [facts.nameLetterSpaced ? 'name' : null, facts.headingsLetterSpaced ? 'section headings' : null].filter(Boolean);
-  if (parts.length) {
-    f.push({
-      status: 'issue',
-      message: `In a PDF, this template's letter-spaced ${parts.join(' and ')} can be read as separate letters (for example "S U M M A R Y"). The Word (DOCX) export keeps them as whole words; you can also pick a template without letter-spacing.`,
-    });
-  }
-  return check('template-text', `Template text (${englishTemplateName(template.id)})`, f, 'Name and headings are exported as whole words in PDF and Word.', 'Some text is spaced out in the PDF export.');
+  const parts = facts.nameLetterSpaced && facts.headingsLetterSpaced ? 'both' : facts.nameLetterSpaced ? 'name' : facts.headingsLetterSpaced ? 'headings' : null;
+  if (parts) f.push(draft('issue', ats('templateText.spaced', { parts: ats(`templateText.parts.${parts}`) })));
+  // The template's name is its catalog display name.
+  return check('template-text', 'templateText', f, { template: text(template.nameKey) });
 }
 
 // --- 4. layout ---
 
 export function layoutCheck({ template }: AtsInput): AtsCheck {
   const facts = templateTextFacts(template);
-  const summary = facts.splitHeader
-    ? 'One column. Name and contact sit side by side, and are read in order (name, then contact). Contact details are in the main text, not a page header. Text is real, selectable text.'
-    : 'One column. Contact details are in the main text, not a page header or footer. Text is real, selectable text.';
-  return check('layout', 'Layout', [], summary, summary);
+  return check('layout', 'layout', [], undefined, undefined, facts.splitHeader ? 'readableSplit' : 'readable');
 }
 
 // --- 5. characters ---
 
 /** Ranges that commonly break parsing or render as boxes. Letters of every script are fine. */
 const DECORATIVE: { test: (cp: number) => boolean; status: 'issue' | 'check'; what: string }[] = [
-  { test: (cp) => cp === 0xfffd, status: 'issue', what: 'a broken character (�)' },
-  { test: (cp) => (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0xf0000, status: 'issue', what: 'an icon-font character' },
-  { test: (cp) => cp >= 0x1d400 && cp <= 0x1d7ff, status: 'issue', what: 'styled "fancy" letters (they are not ordinary letters to a parser)' },
-  { test: (cp) => cp >= 0x1f000 && cp <= 0x1faff, status: 'issue', what: 'an emoji' },
-  { test: (cp) => cp >= 0x2600 && cp <= 0x27bf, status: 'check', what: 'a decorative symbol' },
-  { test: (cp) => cp >= 0x25a0 && cp <= 0x25ff, status: 'check', what: 'a decorative shape' },
-  { test: (cp) => cp >= 0x2500 && cp <= 0x259f, status: 'check', what: 'a box-drawing character' },
-  { test: (cp) => cp >= 0xff01 && cp <= 0xff5e, status: 'check', what: 'full-width characters' },
+  { test: (cp) => cp === 0xfffd, status: 'issue', what: 'broken' },
+  { test: (cp) => (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0xf0000, status: 'issue', what: 'iconFont' },
+  { test: (cp) => cp >= 0x1d400 && cp <= 0x1d7ff, status: 'issue', what: 'fancyLetters' },
+  { test: (cp) => cp >= 0x1f000 && cp <= 0x1faff, status: 'issue', what: 'emoji' },
+  { test: (cp) => cp >= 0x2600 && cp <= 0x27bf, status: 'check', what: 'symbol' },
+  { test: (cp) => cp >= 0x25a0 && cp <= 0x25ff, status: 'check', what: 'shape' },
+  { test: (cp) => cp >= 0x2500 && cp <= 0x259f, status: 'check', what: 'boxDrawing' },
+  { test: (cp) => cp >= 0xff01 && cp <= 0xff5e, status: 'check', what: 'fullWidth' },
 ];
 
 export function charactersCheck({ data }: AtsInput): AtsCheck {
@@ -158,11 +161,11 @@ export function charactersCheck({ data }: AtsInput): AtsCheck {
       const cp = char.codePointAt(0)!;
       const hit = DECORATIVE.find((d) => d.test(cp));
       if (!hit) continue;
-      f.push({ status: hit.status, message: `Contains ${hit.what}: "${char}" (${codePoint(char)}).`, location: field.location });
+      f.push(draft(hit.status, ats('characters.contains', { what: ats(`characters.what.${hit.what}`), char, codePoint: codePoint(char) }), field.location));
       break; // one finding per field
     }
   }
-  return check('characters', 'Symbols and special characters', f, 'No emoji, icon-font or decorative characters detected.', 'Some text contains characters a parser may drop or misread.');
+  return check('characters', 'characters', f);
 }
 
 // --- 6. invisible characters ---
@@ -175,24 +178,33 @@ export function invisibleCheck({ data }: AtsInput): AtsCheck {
   for (const field of textFields(data)) {
     const m = INVISIBLE.exec(field.value);
     if (m) {
-      f.push({ status: 'issue', message: `Contains an invisible character (${codePoint(m[0])}) that can split a word for keyword searches.`, location: field.location });
+      f.push(draft('issue', ats('invisible.character', { codePoint: codePoint(m[0]) }), field.location));
     } else if (ONE_LINE_KINDS.includes(field.kind) && /[\r\n]/.test(field.value)) {
-      f.push({ status: 'check', message: 'Contains a line break in a one-line field.', location: field.location });
+      f.push(draft('check', ats('invisible.lineBreak'), field.location));
     }
   }
-  return check('invisible', 'Invisible characters', f, 'No invisible or control characters detected.', 'Some text contains invisible characters or stray line breaks.');
+  return check('invisible', 'invisible', f);
 }
 
 // --- 7. bullets ---
 
 // ">" is not listed: "> 99.9% uptime" means "greater than".
 const MANUAL_BULLET = /^\s*([•◦▪▫●○■□◆◇►▸‣⁃∙·*–—-]|\d{1,2}[.)])\s+/;
-const itemLists = (data: ResumeData): { items: string[]; section: AtsLocation['section']; label: (i: number) => string }[] => [
-  { items: data.summary.bullets, section: 'summary', label: (i) => `Summary bullet ${i + 1}` },
-  { items: data.summary.skills, section: 'summary', label: (i) => `Skill ${i + 1}` },
-  ...data.experience.map((e, n) => ({ items: e.bullets, section: 'experience' as const, label: (i: number) => `Experience ${n + 1} · Accomplishment ${i + 1}` })),
-  ...data.projects.map((p, n) => ({ items: p.bullets, section: 'projects' as const, label: (i: number) => `Project ${n + 1} · Accomplishment ${i + 1}` })),
-  { items: data.awards, section: 'awards', label: (i) => `Award ${i + 1}` },
+/** Each item list with its place (a location) and how a message refers to an item in it. */
+const itemLists = (data: ResumeData): { items: string[]; location: (i: number) => AtsLocation; ref: (i: number) => AnalysisText }[] => [
+  { items: data.summary.bullets, location: (i) => loc('summary', text('analysis.location.summaryBullet', { n: i + 1 })), ref: (i) => reference('summaryBullet', { n: i + 1 }) },
+  { items: data.summary.skills, location: (i) => loc('summary', text('analysis.location.skill', { n: i + 1 })), ref: (i) => reference('skill', { n: i + 1 }) },
+  ...data.experience.map((e, n) => ({
+    items: e.bullets,
+    location: (i: number) => at('experience', n, text('analysis.location.field.accomplishment', { n: i + 1 })),
+    ref: (i: number) => reference('experienceAccomplishment', { entry: n + 1, n: i + 1 }),
+  })),
+  ...data.projects.map((p, n) => ({
+    items: p.bullets,
+    location: (i: number) => at('projects', n, text('analysis.location.field.accomplishment', { n: i + 1 })),
+    ref: (i: number) => reference('projectAccomplishment', { entry: n + 1, n: i + 1 }),
+  })),
+  { items: data.awards, location: (i) => loc('awards', text('analysis.location.award', { n: i + 1 })), ref: (i) => reference('award', { n: i + 1 }) },
 ];
 
 export function bulletsCheck({ data }: AtsInput): AtsCheck {
@@ -200,18 +212,18 @@ export function bulletsCheck({ data }: AtsInput): AtsCheck {
   for (const list of itemLists(data)) {
     const seen = new Map<string, number>();
     list.items.forEach((item, i) => {
-      const location = { section: list.section, label: list.label(i) };
+      const location = list.location(i);
       const glyph = MANUAL_BULLET.exec(item);
-      if (glyph) f.push({ status: 'check', message: `Starts with "${glyph[1]}". The template already adds bullet points, so this shows twice.`, location });
-      if (/[\r\n]/.test(item.trim())) f.push({ status: 'check', message: 'Contains a line break; it will be joined into one line.', location });
+      if (glyph) f.push(draft('check', ats('bullets.manualBullet', { glyph: glyph[1] }), location));
+      if (/[\r\n]/.test(item.trim())) f.push(draft('check', ats('bullets.lineBreak'), location));
       const key = item.replace(MANUAL_BULLET, '').trim().toLowerCase().replace(/\s+/g, ' ');
       if (key) {
-        if (seen.has(key)) f.push({ status: 'check', message: `Repeats ${list.label(seen.get(key)!).toLowerCase()}.`, location });
+        if (seen.has(key)) f.push(draft('check', ats('bullets.repeats', { item: list.ref(seen.get(key)!) }), location));
         else seen.set(key, i);
       }
     });
   }
-  return check('bullets', 'Bullets', f, 'Bullets are plain text, one line each, without repeats.', 'Some bullets have extra bullet characters, line breaks or repeats.');
+  return check('bullets', 'bullets', f);
 }
 
 // --- 8. dates ---
@@ -222,31 +234,31 @@ export function datesCheck({ data }: AtsInput): AtsCheck {
   const parse = (value: string, location: AtsLocation): ParsedDate[] | null => {
     if (!value.trim()) return [];
     const parsed = parseDateField(value);
-    if (!parsed) f.push({ status: 'check', message: `${quote(value.trim())} is not a date format parsers commonly read (for example "Mar 2020", "03/2020" or "2020").`, location });
+    if (!parsed) f.push(draft('check', ats('dates.unreadable', { value: clip(value.trim()) }), location));
     else for (const d of parsed) if (d.style !== 'present') styles.add(d.style);
     return parsed;
   };
   data.experience.forEach((e, i) => {
-    const at = (label: string): AtsLocation => ({ section: 'experience', label: `Experience ${i + 1} · ${label}` });
-    const start = parse(e.start, at('Start Date'));
-    const end = parse(e.end, at('End Date'));
+    const startAt = at('experience', i, text('analysis.location.field.startDate'));
+    const endAt = at('experience', i, text('analysis.location.field.endDate'));
+    const start = parse(e.start, startAt);
+    const end = parse(e.end, endAt);
     const titled = hasText(e.title, e.company);
-    if (titled && !e.start.trim() && !e.end.trim()) f.push({ status: 'check', message: 'No dates for this role.', location: at('Start Date') });
-    else if (e.start.trim() && !e.end.trim()) f.push({ status: 'check', message: 'No end date. Write "Present" if this is your current role.', location: at('End Date') });
-    else if (!e.start.trim() && e.end.trim()) f.push({ status: 'check', message: 'No start date.', location: at('Start Date') });
+    if (titled && !e.start.trim() && !e.end.trim()) f.push(draft('check', ats('dates.noDates'), startAt));
+    else if (e.start.trim() && !e.end.trim()) f.push(draft('check', ats('dates.noEnd'), endAt));
+    else if (!e.start.trim() && e.end.trim()) f.push(draft('check', ats('dates.noStart'), startAt));
     if (start?.length === 1 && end?.length === 1 && !isOrdered(start[0], end[0])) {
-      f.push({ status: 'check', message: 'The start date is after the end date.', location: at('Start Date') });
+      f.push(draft('check', ats('dates.startAfterEnd'), startAt));
     }
   });
   data.education.forEach((e, i) => {
-    const range = parse(e.date, { section: 'education', label: `Education ${i + 1} · Date` });
-    if (range?.length === 2 && !isOrdered(range[0], range[1])) f.push({ status: 'check', message: 'The dates are in reverse order.', location: { section: 'education', label: `Education ${i + 1} · Date` } });
+    const dateAt = at('education', i, text('analysis.location.field.date'));
+    const range = parse(e.date, dateAt);
+    if (range?.length === 2 && !isOrdered(range[0], range[1])) f.push(draft('check', ats('dates.reversed'), dateAt));
   });
-  data.certifications.forEach((c, i) => parse(c.date, { section: 'certifications', label: `Certification ${i + 1} · Date` }));
-  if (styles.has('month-name') && styles.has('numeric')) {
-    f.push({ status: 'check', message: 'Dates mix month names ("Mar 2020") and numbers ("03/2020"); one style is easier to read consistently.' });
-  }
-  return check('dates', 'Dates', f, 'Dates are in recognized formats and in order.', 'Some dates are missing, unusual or inconsistent.');
+  data.certifications.forEach((c, i) => parse(c.date, at('certifications', i, text('analysis.location.field.date'))));
+  if (styles.has('month-name') && styles.has('numeric')) f.push(draft('check', ats('dates.mixedStyles')));
+  return check('dates', 'dates', f);
 }
 
 // --- 9. formatting ---
@@ -260,53 +272,53 @@ export function formattingCheck({ data }: AtsInput): AtsCheck {
     // "**bold**" and "# Heading" only. "__bold__" is not checked: it cannot be told apart
     // from names like Python's "__init__". Markers must stand apart from words ("C#" is fine).
     if (/(^|\s)\*\*[^*\n]+\*\*(?=\s|$|[.,;:!?])|^\s*#{1,6}\s/m.test(v)) {
-      f.push({ status: 'check', message: 'Contains formatting marks ("**" or "#") that show as literal characters.', location: field.location });
+      f.push(draft('check', ats('formatting.marks'), field.location));
       continue;
     }
     if (/([!?*~=_#|])\1{2,}|\.{4,}|-{3,}/.test(v)) {
-      f.push({ status: 'check', message: 'Contains repeated punctuation used as decoration.', location: field.location });
+      f.push(draft('check', ats('formatting.punctuation'), field.location));
       continue;
     }
     if (PROSE_KINDS.includes(field.kind)) {
       const words = v.match(/\p{L}+/gu) ?? [];
       const letters = words.join('');
       if (words.length >= 4 && letters.length >= 20 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) {
-        f.push({ status: 'check', message: 'Written in all capitals; this is harder to read and some parsers treat it as a heading.', location: field.location });
+        f.push(draft('check', ats('formatting.allCaps'), field.location));
       }
     }
   }
-  return check('formatting', 'Formatting', f, 'No stray formatting marks, decorative punctuation or all-capital text detected.', 'Some text has formatting signals that may not read well.');
+  return check('formatting', 'formatting', f);
 }
 
 // --- 10. entries ---
 
 export function entriesCheck({ data }: AtsInput): AtsCheck {
   const f: Draft[] = [];
-  const dup = <T>(items: T[], key: (item: T) => string, message: string, location: (i: number) => AtsLocation) => {
+  const dup = <T>(items: T[], key: (item: T) => string, message: AnalysisText, location: (i: number) => AtsLocation) => {
     const seen = new Set<string>();
     items.forEach((item, i) => {
       const k = key(item).toLowerCase().replace(/\s+/g, ' ').trim();
       if (!k.replace(/\|/g, '')) return;
-      if (seen.has(k)) f.push({ status: 'check', message, location: location(i) });
+      if (seen.has(k)) f.push(draft('check', message, location(i)));
       seen.add(k);
     });
   };
   data.experience.forEach((e, i) => {
     if (!hasText(e.title, e.company)) {
       const empty = !hasText(e.location, e.start, e.end, e.summary, ...e.bullets);
-      f.push({ status: 'issue', message: empty ? 'Empty experience entry; it prints as a blank block.' : 'This experience entry has no job title or company.', location: { section: 'experience', label: `Experience ${i + 1}` } });
+      f.push(draft('issue', ats(empty ? 'entries.emptyExperience' : 'entries.untitledExperience'), entry('experience', i)));
     }
   });
   data.education.forEach((e, i) => {
-    if (!hasText(e.degree, e.school)) f.push({ status: 'issue', message: 'This education entry has no degree or school.', location: { section: 'education', label: `Education ${i + 1}` } });
+    if (!hasText(e.degree, e.school)) f.push(draft('issue', ats('entries.untitledEducation'), entry('education', i)));
   });
   data.projects.forEach((p, i) => {
-    if (!hasText(p.name) && hasText(p.description, ...p.bullets)) f.push({ status: 'check', message: 'This project has no name.', location: { section: 'projects', label: `Project ${i + 1}` } });
+    if (!hasText(p.name) && hasText(p.description, ...p.bullets)) f.push(draft('check', ats('entries.untitledProject'), entry('projects', i)));
   });
   data.certifications.forEach((c, i) => {
-    if (!hasText(c.name) && hasText(c.org, c.date)) f.push({ status: 'check', message: 'This certification has no name.', location: { section: 'certifications', label: `Certification ${i + 1}` } });
+    if (!hasText(c.name) && hasText(c.org, c.date)) f.push(draft('check', ats('entries.untitledCertification'), entry('certifications', i)));
   });
-  dup(data.experience, (e) => `${e.title}|${e.company}|${e.start}`, 'This experience entry repeats an earlier one.', (i) => ({ section: 'experience', label: `Experience ${i + 1}` }));
-  dup(data.education, (e) => `${e.degree}|${e.school}|${e.date}`, 'This education entry repeats an earlier one.', (i) => ({ section: 'education', label: `Education ${i + 1}` }));
-  return check('entries', 'Entries', f, 'Every entry has a title, and none repeats.', 'Some entries are empty, untitled or repeated.');
+  dup(data.experience, (e) => `${e.title}|${e.company}|${e.start}`, ats('entries.repeatedExperience'), (i) => entry('experience', i));
+  dup(data.education, (e) => `${e.degree}|${e.school}|${e.date}`, ats('entries.repeatedEducation'), (i) => entry('education', i));
+  return check('entries', 'entries', f);
 }

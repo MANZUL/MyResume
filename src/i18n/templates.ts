@@ -12,12 +12,11 @@ export interface TemplateText {
 /** A template's display text in the translator's language (unknown ids use the default template). */
 export function templateText(t: Translator['t'], templateId: string): TemplateText {
   const config = getTemplate(templateId);
-  const key = (field: 'name' | 'shortName' | 'description') => `templates.${config.id}.${field}` as MessageKey;
   return {
-    name: t(key('name')),
-    shortName: t(key('shortName')),
-    description: t(key('description')),
-    category: categoryName(t, config.category),
+    name: t(config.nameKey as MessageKey),
+    shortName: t(config.shortNameKey as MessageKey),
+    description: t(config.descriptionKey as MessageKey),
+    category: t(config.categoryKey as MessageKey),
   };
 }
 

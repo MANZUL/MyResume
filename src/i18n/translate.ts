@@ -36,7 +36,20 @@ const RTL_CHARS = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
 const FSI = '\u2068';
 const PDI = '\u2069';
 
-export function createTranslator(language: Language, catalogs: Record<Language, PartialMessages> = CATALOGS): Translator {
+export interface TranslatorOptions {
+  /** Isolate user text in sentences when either side is RTL (default true). */
+  isolate?: boolean;
+  /** Format number parameters for the language (default true). */
+  formatNumbers?: boolean;
+}
+
+export function createTranslator(
+  language: Language,
+  catalogs: Record<Language, PartialMessages> = CATALOGS,
+  options: TranslatorOptions = {},
+): Translator {
+  const isolate = options.isolate ?? true;
+  const formatNumbers = options.formatNumbers ?? true;
   const RTL_UI = directionOf(language) === 'rtl';
   const t = (key: MessageKey, params: MessageParams = {}): string => {
     const own = lookup(catalogs[language], key);
@@ -54,10 +67,10 @@ export function createTranslator(language: Language, catalogs: Record<Language, 
     return text.replace(/\{(\w+)\}/g, (match, name: string) => {
       const param = params[name];
       if (param === undefined) return match;
-      if (typeof param === 'number') return formatNumber(language, param);
+      if (typeof param === 'number') return formatNumbers ? formatNumber(language, param) : String(param);
       // User text (titles, names) inside a sentence is isolated when either side is
       // right-to-left, so punctuation around it keeps its place. English UI with Latin text is unchanged.
-      return RTL_UI || RTL_CHARS.test(param) ? `${FSI}${param}${PDI}` : param;
+      return isolate && (RTL_UI || RTL_CHARS.test(param)) ? `${FSI}${param}${PDI}` : param;
     });
   };
   return { language, t };

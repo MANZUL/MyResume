@@ -1,3 +1,5 @@
+import { englishText } from '../../i18n/analysis';
+import { text as coded, type AnalysisText } from '../i18n/analysis-text';
 import { BULLET_FIELDS, type CoachCategory, type CoachContext, type CoachFinding, type CoachFix, type CoachRuleId } from './types';
 import {
   A_BEFORE_VOWEL_PREFIXES,
@@ -39,9 +41,11 @@ const atSentenceStart = (text: string, index: number) => /^\s*$/.test(text.slice
 
 type RuleFinding = Omit<CoachFinding, 'textKey'>;
 
-function finding(rule: CoachRuleId, category: CoachCategory, start: number, end: number, message: string, fix?: CoachFix): RuleFinding {
-  return { id: `${rule}:${start}:${end}`, rule, category, start, end, message, ...(fix ? { fix } : {}) };
+/** A finding's message is a code (analysis.coach.*); `message` is its English rendering. */
+function finding(rule: CoachRuleId, category: CoachCategory, start: number, end: number, messageText: AnalysisText, fix?: CoachFix): RuleFinding {
+  return { id: `${rule}:${start}:${end}`, rule, category, start, end, message: englishText(messageText), messageText, ...(fix ? { fix } : {}) };
 }
+const msg = (key: string, params?: Record<string, string | number | AnalysisText>) => coded(`analysis.coach.${key}`, params);
 
 type Tense = 'present' | 'past';
 /** Tense of a bullet's first word, or null when unsure. */
@@ -68,7 +72,7 @@ const weakOpener: Rule = (text, context) => {
     // "Responsible for managing…" would need the verb rewritten: not a safe fix, so skip.
     if (!next || /ing$/i.test(next.w)) return [];
     return [
-      finding('weak-opener', 'impact', start, end, `"${m[2]}" is a weak opener. Pick a verb that says what you did; these keep the same level of claim.`, {
+      finding('weak-opener', 'impact', start, end, msg('weakOpener', { word: m[2] }), {
         kind: 'choices',
         options: options.map((option) => matchCase(option, m[2])),
       }),
@@ -81,7 +85,7 @@ const passive: Rule = (text) => {
   const out: RuleFinding[] = [];
   for (const m of text.matchAll(/\b(was|were|is|are|been|being)\s+(?:[a-z]+ly\s+)?([a-z]+)\b/gi)) {
     if (!PASSIVE_PARTICIPLES.has(m[2].toLowerCase()) || /[A-Z]/.test(m[2])) continue;
-    out.push(finding('passive', 'impact', m.index, m.index + m[0].length, `Passive wording ("${m[0]}") hides who did the work. If you did it, start with the action.`));
+    out.push(finding('passive', 'impact', m.index, m.index + m[0].length, msg('passive', { phrase: m[0] })));
   }
   return out;
 };
@@ -94,7 +98,7 @@ const repeatedOpener: Rule = (text, context) => {
   if (!tenseOf(opener, false)) return [];
   const same = context.siblings.filter((s) => s.opener === opener).length;
   if (same < 2) return [];
-  return [finding('repeated-opener', 'impact', first.start, first.end, `${same + 1} bullets in this entry start with "${first.w}". Varying the opening verb reads better.`)];
+  return [finding('repeated-opener', 'impact', first.start, first.end, msg('repeatedOpener', { count: same + 1, word: first.w }))];
 };
 
 // --- measurable ---
@@ -107,7 +111,7 @@ const measurable: Rule = (text, context) => {
   if (!OUTCOME_VERBS.has(lower[0] ?? '')) return [];
   if (/\d|%|\$|€|£/.test(text) || lower.some((w) => QUANTITY_WORDS.has(w))) return [];
   const start = text.length - text.trimStart().length;
-  return [finding('measurable', 'measurable', start, text.trimEnd().length, 'Can you add a measurable result here?')];
+  return [finding('measurable', 'measurable', start, text.trimEnd().length, msg('measurable'))];
 };
 
 // --- concise ---
@@ -123,7 +127,7 @@ const filler: Rule = (text) => {
     const next = all[i + 1];
     if (!next || text.slice(word.end, next.start) !== ' ') return;
     const replacement = sentenceStart ? capitalize(next.w) : next.w;
-    out.push(finding('filler', 'concise', word.start, next.end, `"${word.w}" adds little; removing it keeps the meaning.`, { kind: 'preview', replacement }));
+    out.push(finding('filler', 'concise', word.start, next.end, msg('filler', { word: word.w }), { kind: 'preview', replacement }));
   });
   return out;
 };
@@ -132,18 +136,20 @@ const buzzword: Rule = (text) => {
   const out: RuleFinding[] = [];
   for (const phrase of BUZZWORDS) {
     for (const m of text.matchAll(new RegExp(`(?<![\\w-])${escapeRe(phrase)}(?![\\w-])`, 'gi'))) {
-      out.push(finding('buzzword', 'professional', m.index, m.index + m[0].length, `"${m[0]}" is a generic description; a specific result says more.`));
+      out.push(finding('buzzword', 'professional', m.index, m.index + m[0].length, msg('buzzword', { phrase: m[0] })));
     }
   }
   return out;
 };
 
+const LONG_BULLET_WORDS = 32;
+
 const longBullet: Rule = (text, context) => {
   if (!isBullet(context)) return [];
   const count = text.trim().split(/\s+/).filter(Boolean).length;
-  if (count <= 32) return [];
+  if (count <= LONG_BULLET_WORDS) return [];
   const start = text.length - text.trimStart().length;
-  return [finding('long-bullet', 'concise', start, text.trimEnd().length, `This bullet has ${count} words. Aim for 32 or fewer so the result is easy to scan.`)];
+  return [finding('long-bullet', 'concise', start, text.trimEnd().length, msg('longBullet', { count, max: LONG_BULLET_WORDS }))];
 };
 
 const wordy: Rule = (text) => {
@@ -156,7 +162,7 @@ const wordy: Rule = (text) => {
       const end = start + m[0].length;
       if (taken.some(([a, b]) => start < b && a < end)) continue;
       taken.push([start, end]);
-      out.push(finding('wordy', 'concise', start, end, `"${m[0]}" can be shorter: "${replacement}".`, { kind: 'preview', replacement: matchCase(replacement, m[0]) }));
+      out.push(finding('wordy', 'concise', start, end, msg('wordy', { phrase: m[0], replacement }), { kind: 'preview', replacement: matchCase(replacement, m[0]) }));
     }
   }
   return out;
@@ -180,7 +186,7 @@ const firstPerson: Rule = (text) => {
         fix = { kind: 'preview', replacement: capitalize(verb[1]) };
       }
     }
-    out.push(finding('first-person', 'professional', start, end, `Resumes usually leave out "${word}"; start with the action instead.`, fix));
+    out.push(finding('first-person', 'professional', start, end, msg('firstPerson', { word }), fix));
   }
   return out;
 };
@@ -191,12 +197,12 @@ const spacing: Rule = (text) => {
   const out: RuleFinding[] = [];
   if (!text.trim()) return out;
   const lead = text.length - text.trimStart().length;
-  if (lead > 0) out.push(finding('spacing', 'grammar', 0, lead, 'Extra space at the start.', { kind: 'auto', replacement: '' }));
+  if (lead > 0) out.push(finding('spacing', 'grammar', 0, lead, msg('spacingStart'), { kind: 'auto', replacement: '' }));
   for (const m of text.matchAll(/(?<=\S)[ \t]{2,}(?=\S)/g)) {
-    out.push(finding('spacing', 'grammar', m.index, m.index + m[0].length, 'Extra space between words.', { kind: 'auto', replacement: ' ' }));
+    out.push(finding('spacing', 'grammar', m.index, m.index + m[0].length, msg('spacingBetween'), { kind: 'auto', replacement: ' ' }));
   }
   const trimmedEnd = text.trimEnd().length;
-  if (trimmedEnd < text.length) out.push(finding('spacing', 'grammar', trimmedEnd, text.length, 'Extra space at the end.', { kind: 'auto', replacement: '' }));
+  if (trimmedEnd < text.length) out.push(finding('spacing', 'grammar', trimmedEnd, text.length, msg('spacingEnd'), { kind: 'auto', replacement: '' }));
   return out;
 };
 
@@ -204,7 +210,7 @@ const capitalization: Rule = (text) => {
   const first = words(text)[0];
   if (!first || !atSentenceStart(text, first.start) || first.start !== text.length - text.trimStart().length) return [];
   if (first.w !== first.w.toLowerCase() || !CAPITALIZABLE_FIRST_WORDS.has(first.w)) return [];
-  return [finding('capitalization', 'grammar', first.start, first.start + 1, 'Start with a capital letter.', { kind: 'auto', replacement: first.w[0].toUpperCase() })];
+  return [finding('capitalization', 'grammar', first.start, first.start + 1, msg('capitalization'), { kind: 'auto', replacement: first.w[0].toUpperCase() })];
 };
 
 const finalPeriod: Rule = (text, context) => {
@@ -213,11 +219,11 @@ const finalPeriod: Rule = (text, context) => {
   if (!trimmed) return [];
   const end = trimmed.length;
   if (context.siblings.every((s) => s.endsWithPeriod) && /[A-Za-z0-9)]$/.test(trimmed)) {
-    return [finding('final-period', 'grammar', end, end, 'The other bullets in this entry end with a period.', { kind: 'auto', replacement: '.' })];
+    return [finding('final-period', 'grammar', end, end, msg('periodAdd'), { kind: 'auto', replacement: '.' })];
   }
   const abbreviation = /\b(etc|inc|ltd|co|jr|sr|e\.g|i\.e|u\.s)\.$/i.test(trimmed);
   if (context.siblings.every((s) => !s.endsWithPeriod) && /[^.]\.$/.test(trimmed) && !abbreviation) {
-    return [finding('final-period', 'grammar', end - 1, end, 'The other bullets in this entry do not end with a period.', { kind: 'auto', replacement: '' })];
+    return [finding('final-period', 'grammar', end - 1, end, msg('periodRemove'), { kind: 'auto', replacement: '' })];
   }
   return [];
 };
@@ -229,7 +235,7 @@ const repeatedWord: Rule = (text) => {
     if (m[1].toLowerCase() !== m[3].toLowerCase() || ALLOWED_REPEATS.has(m[1].toLowerCase())) continue;
     if (isUpperStart(m[3])) continue; // "Walla Walla", names
     const start = m.index + m[1].length;
-    out.push(finding('repeated-word', 'grammar', start, start + m[2].length + m[3].length, `"${m[3]}" is repeated.`, { kind: 'auto', replacement: '' }));
+    out.push(finding('repeated-word', 'grammar', start, start + m[2].length + m[3].length, msg('repeatedWord', { word: m[3] }), { kind: 'auto', replacement: '' }));
   }
   return out;
 };
@@ -246,7 +252,7 @@ const aAn: Rule = (text) => {
     if (lower === 'a' && vowelStart) replacement = 'an';
     if (lower === 'an' && consonantStart) replacement = 'a';
     if (!replacement) continue;
-    out.push(finding('a-an', 'grammar', m.index, m.index + article.length, `Use "${replacement}" before "${next}".`, { kind: 'auto', replacement: matchCase(replacement, article) }));
+    out.push(finding('a-an', 'grammar', m.index, m.index + article.length, msg('article', { article: replacement, next }), { kind: 'auto', replacement: matchCase(replacement, article) }));
   }
   return out;
 };
@@ -261,7 +267,7 @@ const tense: Rule = (text, context) => {
   if (theirs.some((t) => t === null)) return []; // unsure about a sibling
   if (!theirs.every((t) => t !== mine)) return [];
   return [
-    finding('tense', 'grammar', first.start, first.end, `The other bullets in this entry use the ${theirs[0]} tense; this one starts with "${first.w}" (${mine} tense).`),
+    finding('tense', 'grammar', first.start, first.end, msg('tense', { theirs: msg(`tenses.${theirs[0]}`), word: first.w, mine: msg(`tenses.${mine}`) })),
   ];
 };
 

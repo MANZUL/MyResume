@@ -4,7 +4,8 @@
 
 export type TemplateCategory = 'Corporate' | 'Tech' | 'Creative' | 'Healthcare' | 'Academic' | 'Trades';
 
-export type TemplateConfig = {
+/** One template design. Defined once for every language. */
+type TemplateDefinition = {
   /** Stable id: stored with each resume and shared by every language. */
   id: string;
   /** Stable category id; its display name is localized. */
@@ -26,7 +27,15 @@ export type TemplateConfig = {
   headerRuleVariant?: 'thin' | 'hairline' | 'thick';
 };
 
-export const TEMPLATES: TemplateConfig[] = [
+/** A template with the catalog keys of its display text (the same keys in every language). */
+export type TemplateConfig = TemplateDefinition & {
+  nameKey: `templates.${string}.name`;
+  shortNameKey: `templates.${string}.shortName`;
+  descriptionKey: `templates.${string}.description`;
+  categoryKey: `templates.categories.${TemplateCategory}`;
+};
+
+const DEFINITIONS: TemplateDefinition[] = [
   {
     id: 'corporate-boardroom',
     category: 'Corporate',
@@ -249,6 +258,14 @@ export const TEMPLATES: TemplateConfig[] = [
     skillsStyle: 'pills'
   }
 ];
+
+export const TEMPLATES: TemplateConfig[] = DEFINITIONS.map((definition) => ({
+  ...definition,
+  nameKey: `templates.${definition.id}.name`,
+  shortNameKey: `templates.${definition.id}.shortName`,
+  descriptionKey: `templates.${definition.id}.description`,
+  categoryKey: `templates.categories.${definition.category}`,
+}));
 
 export function getTemplate(id: string): TemplateConfig {
   return TEMPLATES.find((template) => template.id === id) ?? TEMPLATES[0];

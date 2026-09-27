@@ -40,7 +40,7 @@ export function analyzeJobMatch(input: ResumeData, jobDescription: string, langu
     for (const line of field.value.split(/\r?\n/)) {
       for (const hit of findHits(line, { skillEntry: field.kind === 'skill' })) {
         const list = evidence.get(hit.termId) ?? [];
-        if (!list.some((e) => e.label === field.location.label)) list.push({ section: field.location.section, label: field.location.label });
+        if (!list.some((e) => e.label === field.location.label)) list.push({ section: field.location.section, label: field.location.label, labelText: field.location.labelText });
         evidence.set(hit.termId, list);
       }
     }
@@ -72,7 +72,7 @@ export function analyzeJobMatch(input: ResumeData, jobDescription: string, langu
     for (const field of fields) {
       if (field.kind === 'item' || field.kind === 'skill' || field.kind === 'date') continue;
       if (regex.test(field.value) && !where.some((w) => w.label === field.location.label)) {
-        where.push({ section: field.location.section, label: field.location.label });
+        where.push({ section: field.location.section, label: field.location.label, labelText: field.location.labelText });
       }
     }
     title = { text: detected.text, core: detected.core, resume: where };

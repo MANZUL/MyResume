@@ -7,6 +7,7 @@ import type { EditorSection } from '../../domain/resume/sections';
 import { Card, colors, Muted, styles } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useT } from '../../services/i18n/localization';
+import { renderText } from '../../i18n/analysis';
 import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
 const STATUS_COLOR: Record<AtsStatus, string> = { readable: colors.success, check: colors.warn, issue: colors.danger };
@@ -52,8 +53,8 @@ export function AtsTool({
       <Card style={{ gap: 6 }}>
         <Text style={styles.sectionTitle}>{t('ats.parts')}</Text>
         {report.detected.map((d) => (
-          <View key={d.label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.text, fontSize: 15 }}>{d.label}</Text>
+          <View key={d.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ color: colors.text, fontSize: 15 }}>{renderText(t, d.labelText)}</Text>
             <Text style={{ color: d.detected ? colors.success : colors.muted, fontWeight: '600' }}>
               {d.detected ? `✓ ${t('ats.detected')}` : t('ats.notDetected')}
             </Text>
@@ -64,23 +65,23 @@ export function AtsTool({
       {report.checks.map((c) => (
         <Card key={c.rule} style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-            <Text style={{ flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' }}>{c.title}</Text>
+            <Text style={{ flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' }}>{renderText(t, c.titleText)}</Text>
             <Text style={{ color: STATUS_COLOR[c.status], fontWeight: '600' }}>{status(c.status)}</Text>
           </View>
-          <Muted>{c.summary}</Muted>
+          <Muted>{renderText(t, c.summaryText)}</Muted>
           {c.findings.map((f) => (
             <View key={f.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontSize: 15, lineHeight: 21 }}>
                   <Text style={{ color: STATUS_COLOR[f.status], fontWeight: '600' }}>{t('ats.statusPrefix', { status: status(f.status) })}</Text>
-                  {f.message}
+                  {renderText(t, f.messageText)}
                 </Text>
-                {f.location ? <Text style={[styles.muted, { fontSize: 13 }]}>{f.location.label}</Text> : null}
+                {f.location ? <Text style={[styles.muted, { fontSize: 13 }]}>{renderText(t, f.location.labelText)}</Text> : null}
               </View>
               {f.location ? (
                 <Pressable
                   accessibilityRole="link"
-                  accessibilityLabel={t('check.improveA11y', { action: t('ats.improve'), message: f.message })}
+                  accessibilityLabel={t('check.improveA11y', { action: t('ats.improve'), message: renderText(t, f.messageText) })}
                   onPress={() => onImprove(f.location!.section)}
                   hitSlop={8}
                 >

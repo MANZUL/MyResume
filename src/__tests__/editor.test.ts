@@ -49,7 +49,8 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
   const warnings = (data: Parameters<typeof scoreResume>[0]) => scoreResume(data, 'en').warnings.map((w) => `${w.id}→${w.section}`);
 
   it('sample resume', () => {
-    expect(scoreResume(SAMPLE_RESUME, 'en')).toEqual({
+    const { strengthTexts, categories, ...result } = scoreResume(SAMPLE_RESUME, 'en');
+    expect({ ...result, categories: categories.map(({ label, status }) => ({ label, status })) }).toEqual({
       support: { kind: 'native', language: 'en' },
       score: 100,
       strengths: ['Clear contact information', 'Focused summary', 'Experience has useful detail', 'Education section is present', 'Skills are easy to find'],
@@ -61,6 +62,13 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
         { label: 'ATS readability', status: 'Strong' },
       ],
     });
+    expect(strengthTexts.map((s) => s.code)).toEqual([
+      'analysis.score.strengths.contact', 'analysis.score.strengths.summary', 'analysis.score.strengths.experience',
+      'analysis.score.strengths.education', 'analysis.score.strengths.skills',
+    ]);
+    expect(categories.map((c) => c.labelText.code)).toEqual([
+      'analysis.score.categories.content', 'analysis.score.categories.structure', 'analysis.score.categories.writing', 'analysis.score.categories.ats',
+    ]);
   });
 
   it('empty resume', () => {

@@ -1,11 +1,15 @@
+import { englishText } from '../../i18n/analysis';
 import { analysisSupport, type LanguageSupport } from '../i18n/analysis-support';
+import { text, type AnalysisText } from '../i18n/analysis-text';
 import type { Language } from '../i18n/languages';
 import type { EditorSection } from '../resume/sections';
 import type { ResumeData } from '../resume/types';
 
 export type ResumeScoreWarning = {
   id: string;
+  /** English rendering of `messageText`. */
   message: string;
+  messageText: AnalysisText;
   /** The editor section the "Improve" link opens. */
   section: Extract<EditorSection, 'personal' | 'summary' | 'experience' | 'education' | 'projects'>;
 };
@@ -14,9 +18,26 @@ export type ResumeScore = {
   /** Which rules produced this score for the resume's language. */
   support: LanguageSupport;
   score: number;
+  /** English renderings of `strengthTexts`. */
   strengths: string[];
+  strengthTexts: AnalysisText[];
   warnings: ResumeScoreWarning[];
-  categories: { label: string; status: 'Strong' | 'Needs attention' }[];
+  categories: { label: string; labelText: AnalysisText; status: 'Strong' | 'Needs attention' }[];
+};
+
+// Messages are codes (analysis.score.* in the app catalog); the English strings are
+// rendered from the same entries.
+const W = (key: string, params?: Record<string, number>) => text(`analysis.score.warnings.${key}`, params);
+const S = (key: string) => text(`analysis.score.strengths.${key}`);
+const warning = (id: string, value: AnalysisText, section: ResumeScoreWarning['section']): ResumeScoreWarning => ({
+  id,
+  message: englishText(value),
+  messageText: value,
+  section,
+});
+const category = (key: string, status: 'Strong' | 'Needs attention') => {
+  const labelText = text(`analysis.score.categories.${key}`);
+  return { label: englishText(labelText), labelText, status };
 };
 
 const actionVerbs = new Set([
@@ -31,7 +52,8 @@ const actionVerbs = new Set([
  */
 export function scoreResume(data: ResumeData, language: Language): ResumeScore {
   const warnings: ResumeScoreWarning[] = [];
-  const strengths: string[] = [];
+  const strengthTexts: AnalysisText[] = [];
+  const strengths = { push: (key: string) => strengthTexts.push(S(key)) };
   let score = 0;
 
   const contactFields = [
@@ -41,8 +63,8 @@ export function scoreResume(data: ResumeData, language: Language): ResumeScore {
     data.contact.linkedin || data.contact.website,
   ].filter(Boolean).length;
   score += Math.min(contactFields * 4, 16);
-  if (contactFields >= 3) strengths.push('Clear contact information');
-  else warnings.push({ id: 'contact', message: 'Add a reliable email, phone, and location.', section: 'personal' });
+  if (contactFields >= 3) strengths.push('contact');
+  else warnings.push(warning('contact', W('contact'), 'personal'));
 
   const summaryText = [
     data.summary.tagline,
@@ -50,12 +72,12 @@ export function scoreResume(data: ResumeData, language: Language): ResumeScore {
   ].filter(Boolean).join(' ');
   if (summaryText.length >= 80) {
     score += 10;
-    strengths.push('Focused summary');
+    strengths.push('summary');
   } else if (summaryText) {
     score += 5;
-    warnings.push({ id: 'summary-length', message: 'The summary could be more specific and complete.', section: 'summary' });
+    warnings.push(warning('summary-length', W('summaryLength'), 'summary'));
   } else {
-    warnings.push({ id: 'summary', message: 'Add a short summary that positions you for the role.', section: 'summary' });
+    warnings.push(warning('summary', W('summary'), 'summary'));
   }
 
   if (data.experience.length > 0) {
@@ -67,30 +89,26 @@ export function scoreResume(data: ResumeData, language: Language): ResumeScore {
     );
     if (bulletCount >= 3) score += 5;
     if (vagueCount > 0) {
-      warnings.push({
-        id: 'short-bullets',
-        message: `${vagueCount} experience bullet${vagueCount === 1 ? '' : 's'} could be stronger.`,
-        section: 'experience',
-      });
+      warnings.push(warning('short-bullets', W('shortBullets', { count: vagueCount }), 'experience'));
     } else {
-      strengths.push('Experience has useful detail');
+      strengths.push('experience');
     }
   } else {
-    warnings.push({ id: 'experience', message: 'Add at least one experience entry if applicable.', section: 'experience' });
+    warnings.push(warning('experience', W('experience'), 'experience'));
   }
 
   if (data.education.length > 0) {
     score += 8;
-    strengths.push('Education section is present');
+    strengths.push('education');
   } else {
-    warnings.push({ id: 'education', message: 'Add education or training if relevant to this role.', section: 'education' });
+    warnings.push(warning('education', W('education'), 'education'));
   }
 
   if (data.summary.skills.filter(Boolean).length >= 3) {
     score += 10;
-    strengths.push('Skills are easy to find');
+    strengths.push('skills');
   } else {
-    warnings.push({ id: 'skills', message: 'Add several relevant skills you genuinely have.', section: 'summary' });
+    warnings.push(warning('skills', W('skills'), 'summary'));
   }
 
   if (data.projects.length > 0) score += 5;
@@ -106,47 +124,36 @@ export function scoreResume(data: ResumeData, language: Language): ResumeScore {
     bullets.every((bullet) => bullet.trim().split(/\s+/).length <= 32);
   if (bullets.length > 0 && verbCount / bullets.length >= 0.4) {
     score += 8;
-    strengths.push('Good use of action verbs');
+    strengths.push('actionVerbs');
   } else if (bullets.length > 0) {
-    warnings.push({ id: 'action-verbs', message: 'Several bullets could start with clearer action verbs.', section: 'experience' });
+    warnings.push(warning('action-verbs', W('actionVerbs'), 'experience'));
   }
 
   if (bullets.length > 0 && bullets.every((bullet) => bullet.trim().split(/\s+/).length <= 32)) {
     score += 8;
-    strengths.push('Readable bullet length');
+    strengths.push('bulletLength');
   } else if (bullets.length > 0) {
-    warnings.push({ id: 'long-bullets', message: 'Shorten long bullets so key outcomes are easier to scan.', section: 'experience' });
+    warnings.push(warning('long-bullets', W('longBullets'), 'experience'));
   }
 
   score += 15; // Standard headings and the plain-text template system are ATS-friendly by design.
-  strengths.push('ATS-friendly structure');
+  strengths.push('structure');
 
+  const shownStrengths = strengthTexts.filter((s, i) => strengthTexts.findIndex((o) => o.code === s.code) === i).slice(0, 5);
   return {
     support: analysisSupport('resumeScore', language),
     score: Math.min(score, 100),
-    strengths: Array.from(new Set(strengths)).slice(0, 5),
+    strengths: shownStrengths.map((s) => englishText(s)),
+    strengthTexts: shownStrengths,
     warnings: warnings.slice(0, 6),
     categories: [
-      {
-        label: 'Content',
-        status: contactFields >= 3 && summaryText.length >= 80 && data.experience.length > 0
-          ? 'Strong'
-          : 'Needs attention',
-      },
-      {
-        label: 'Structure',
-        status: data.experience.length > 0 && data.education.length > 0 && data.summary.skills.filter(Boolean).length >= 3
-          ? 'Strong'
-          : 'Needs attention',
-      },
-      {
-        label: 'Writing',
-        status: writingReady ? 'Strong' : 'Needs attention',
-      },
-      {
-        label: 'ATS readability',
-        status: 'Strong',
-      },
+      category('content', contactFields >= 3 && summaryText.length >= 80 && data.experience.length > 0 ? 'Strong' : 'Needs attention'),
+      category(
+        'structure',
+        data.experience.length > 0 && data.education.length > 0 && data.summary.skills.filter(Boolean).length >= 3 ? 'Strong' : 'Needs attention',
+      ),
+      category('writing', writingReady ? 'Strong' : 'Needs attention'),
+      category('ats', 'Strong'),
     ],
   };
 }

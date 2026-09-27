@@ -7,22 +7,28 @@ import type { Browser } from 'playwright-core';
 import { checkAtsReadability } from '../domain/ats/ats';
 import { scoreResume } from '../domain/check/resume-score';
 import { analyzeText, buildCoachContext } from '../domain/coach/coach';
+import { COACH_LIMITS, CoachFixRejectedError, CoachInputError, CoachStaleFindingError } from '../domain/coach/types';
+import type { AnalysisText } from '../domain/i18n/analysis-text';
 import { analysisSupport, RULE_LANGUAGES, type AnalysisEngine } from '../domain/i18n/analysis-support';
 import { formatDate, formatNumber } from '../domain/i18n/format';
 import { DEFAULT_LANGUAGE, directionOf, LANGUAGES, resolveLanguage, toLanguage, type Language } from '../domain/i18n/languages';
 import { pluralCategory } from '../domain/i18n/plural';
-import { RESUME_LABELS, resumeLabels } from '../domain/i18n/resume-labels';
+import { resumeLabels } from '../domain/i18n/resume-labels';
 import { typographyFor } from '../domain/i18n/typography';
 import { analyzeJobMatch } from '../domain/job-match/job-match';
+import { JOB_DESCRIPTION_MAX, JobDescriptionTooLongError } from '../domain/job-match/types';
 import { generateCoverLetter } from '../domain/letter/cover-letter';
 import { parseResumeText } from '../domain/parse/parse-text';
 import { buildResumeDocxBase64 } from '../domain/render/export-docx';
 import { renderResumeHtml, WATERMARK_TILE_URL } from '../domain/render/render-html';
+import { normalizeResumeData } from '../domain/resume/normalize';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyResume, type ResumeData, type StoredResume } from '../domain/resume/types';
 import { fileSafeName } from '../domain/shared/text';
+import { templateSampleHtml } from '../domain/templates/sample-preview';
 import { TEMPLATES } from '../domain/templates/templates';
-import { CATALOGS, ENGLISH, type PartialMessages } from '../i18n/catalog';
+import { englishText, errorText, renderText } from '../i18n/analysis';
+import { CATALOGS, ENGLISH, type MessageKey, type PartialMessages } from '../i18n/catalog';
 import { en } from '../i18n/messages/en';
 import { templateText } from '../i18n/templates';
 import { createTranslator, hasTranslation } from '../i18n/translate';
@@ -37,6 +43,9 @@ import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase } from '../services/storage/sqlite/database';
 import { migrate } from '../services/storage/sqlite/migrate';
 import { MIGRATIONS } from '../services/storage/sqlite/schema';
+import { EDGE as ATS_EDGE, STRONG as ATS_STRONG, WEAK as ATS_WEAK } from './fixtures/ats-corpus';
+import { STRONG as COACH_STRONG, WEAK as COACH_WEAK } from './fixtures/coach-corpus';
+import { JDS, RESUMES as JOB_RESUMES } from './fixtures/job-corpus';
 import { ManualTimers, openTestDatabase, tempDir, testId, type TestDatabase } from './helpers/node-sqlite';
 
 // Localization architecture (five launch languages; app language ≠ resume language).
@@ -62,6 +71,28 @@ const docxText = async (language: Language, data: ResumeData = SAMPLE_RESUME) =>
   const zip = await JSZip.loadAsync(Buffer.from(await buildResumeDocxBase64({ data, accent: '#1B2B47', templateName: 'X', language }), 'base64'));
   return zip.file('word/document.xml')!.async('string');
 };
+/** Runs `fn` with a temporary translation for one language (test-only; always restored). */
+function withCatalog<T>(language: Language, messages: PartialMessages, fn: () => T): T {
+  const saved = CATALOGS[language];
+  CATALOGS[language] = messages;
+  let result: T;
+  try {
+    result = fn();
+  } catch (error) {
+    CATALOGS[language] = saved;
+    throw error;
+  }
+  if (result instanceof Promise) return result.finally(() => (CATALOGS[language] = saved)) as T;
+  CATALOGS[language] = saved;
+  return result;
+}
+/** Source files (not tests) under a directory. */
+const uiFilesOf = (dir: string): string[] =>
+  readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return uiFilesOf(path);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+  });
 const headingsIn = (page: string) => [...page.matchAll(/<h2 class="[^"]*">([^<]*)<\/h2>/g)].map((m) => m[1]);
 
 // --- 1. app language and resume language are independent ---
@@ -247,16 +278,12 @@ describe('resume labels', () => {
   });
 
   it('a translated label reaches both exports (proves the shared source)', async () => {
-    const saved = { ...RESUME_LABELS.de };
-    try {
-      RESUME_LABELS.de.experience = 'Berufserfahrung';
+    await withCatalog('de', { resume: { labels: { experience: 'Berufserfahrung' } } }, async () => {
       expect(headingsIn(html('de'))).toContain('Berufserfahrung');
       expect(await docxText('de')).toContain('>BERUFSERFAHRUNG<');
       // Missing translations fall back per label.
       expect(headingsIn(html('de'))).toContain('Education');
-    } finally {
-      RESUME_LABELS.de = saved;
-    }
+    });
   });
 
   it('the watermark text is a resume label', () => {
@@ -457,14 +484,10 @@ describe('analysis engine contracts', () => {
   });
 
   it('ATS reads what the export for that language contains (headings, no Arabic tracking)', () => {
-    const saved = { ...RESUME_LABELS.de };
-    try {
-      RESUME_LABELS.de.summary = 'Profil';
+    withCatalog('de', { resume: { labels: { summary: 'Profil' } } }, () => {
       const sections = checkAtsReadability(SAMPLE_RESUME, 'tech-builder', 'de').checks.find((c) => c.rule === 'sections')!;
       expect(sections.summary).toContain('Profil');
-    } finally {
-      RESUME_LABELS.de = saved;
-    }
+    });
   });
 
   it('premium tools pass the language and still check the entitlement first', async () => {
@@ -558,7 +581,7 @@ describe('translator', () => {
     expect([0, 1, 2].map((n) => pluralCategory('fr', n))).toEqual(['one', 'one', 'other']);
     expect([0, 1, 2, 3, 10, 11, 99, 100, 102].map((n) => pluralCategory('ar', n))).toEqual(['zero', 'one', 'two', 'few', 'few', 'many', 'many', 'other', 'other']);
     expect(pluralCategory('es', 1_000_000)).toBe('many');
-    const custom: Record<Language, PartialMessages> = { ...CATALOGS, ar: { ats: { toCheck: '{count} x', issues: { zero: 'z', one: 'o', two: 't', few: 'f', many: 'm', other: 'x' } } } };
+    const custom: Record<Language, PartialMessages> = { ...CATALOGS, ar: { ats: { toCheck: { other: '{count} x' }, issues: { zero: 'z', one: 'o', two: 't', few: 'f', many: 'm', other: 'x' } } } };
     const { t } = createTranslator('ar', custom);
     expect([0, 1, 2, 3, 11, 100].map((count) => t('ats.issues', { count }))).toEqual(['z', 'o', 't', 'f', 'm', 'x']);
     expect(createTranslator('en').t('ats.issues', { count: 1 })).toBe('1 potential issue');
@@ -585,6 +608,306 @@ describe('translator', () => {
     expect(resolveLanguage(['ja-JP'])).toBe('en');
     expect(resolveLanguage([])).toBe('en');
   });
+});
+
+// --- Phase 13A: English catalog hardening ---
+
+/** Every coded text in a value (recursively, including coded parameters). */
+const codesIn = (value: unknown, out: AnalysisText[] = []): AnalysisText[] => {
+  if (Array.isArray(value)) for (const v of value) codesIn(v, out);
+  else if (value && typeof value === 'object') {
+    if (typeof (value as AnalysisText).code === 'string') {
+      out.push(value as AnalysisText);
+      for (const p of Object.values((value as AnalysisText).params ?? {})) codesIn(p, out);
+    } else for (const v of Object.values(value)) codesIn(v, out);
+  }
+  return out;
+};
+/** Each `{ x, xText }` pair in a report: the English string next to its code. */
+const pairsIn = (value: unknown, out: [string, AnalysisText][] = []): [string, AnalysisText][] => {
+  if (Array.isArray(value)) for (const v of value) pairsIn(v, out);
+  else if (value && typeof value === 'object' && typeof (value as AnalysisText).code !== 'string') {
+    const record = value as Record<string, unknown>;
+    for (const [key, v] of Object.entries(record)) {
+      if (key === 'strengthTexts') (v as AnalysisText[]).forEach((s, i) => out.push([(record.strengths as string[])[i], s]));
+      else if (key.endsWith('Text') && v && typeof v === 'object') out.push([record[key.slice(0, -4)] as string, v as AnalysisText]);
+      else pairsIn(v, out);
+    }
+  }
+  return out;
+};
+const englishLeaf = (code: string) => code.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en);
+
+describe('English catalog hardening', () => {
+  const reports = () => {
+    const resumes = [SAMPLE_RESUME, emptyResume(), ...Object.values(ATS_STRONG), ...Object.values(ATS_WEAK), ...Object.values(ATS_EDGE), ...Object.values(JOB_RESUMES)];
+    const out: unknown[] = [];
+    for (const data of resumes) {
+      out.push(scoreResume(normalizeResumeData(data), 'en'));
+      for (const t of TEMPLATES) out.push(checkAtsReadability(data, t.id, 'en'));
+    }
+    for (const data of Object.values(JOB_RESUMES)) for (const jd of Object.values(JDS)) out.push(analyzeJobMatch(data, jd, 'en'));
+    for (const entry of [...COACH_STRONG, ...COACH_WEAK]) out.push(analyzeText(entry.text, buildCoachContext(entry.field, 'en', entry.siblings ?? [])));
+    return out;
+  };
+
+  it('every code the engines emit exists in the English catalog, and renders to the English they return', () => {
+    const all = reports();
+    const codes = new Set(codesIn(all).map((c) => c.code));
+    expect(codes.size).toBeGreaterThan(80);
+    for (const code of codes) {
+      const leaf = englishLeaf(code);
+      expect(typeof leaf === 'string' || (typeof leaf === 'object' && leaf !== null && 'other' in leaf), code).toBe(true);
+    }
+    const pairs = pairsIn(all);
+    expect(pairs.length).toBeGreaterThan(1000);
+    for (const [message, coded] of pairs) {
+      expect(englishText(coded), coded.code).toBe(message);
+      expect(message, coded.code).not.toMatch(/\{\w+\}/);
+    }
+  });
+
+  it('coded errors render the exact English message', () => {
+    const errors: { error: Error & { messageText: AnalysisText }; formatNumbers?: boolean }[] = [];
+    try {
+      analyzeJobMatch(SAMPLE_RESUME, 'x'.repeat(JOB_DESCRIPTION_MAX + 1), 'en');
+    } catch (error) {
+      errors.push({ error: error as JobDescriptionTooLongError, formatNumbers: true });
+    }
+    for (const run of [() => analyzeText('x'.repeat(COACH_LIMITS.maxTextLength + 1), buildCoachContext('tagline', 'en')), () => analyzeText(1 as unknown as string, buildCoachContext('tagline', 'en'))]) {
+      try {
+        run();
+      } catch (error) {
+        errors.push({ error: error as CoachInputError });
+      }
+    }
+    errors.push({ error: new CoachStaleFindingError() }, { error: new CoachFixRejectedError('no_fix') });
+    expect(errors).toHaveLength(5);
+    expect(errors[0].error.message).toContain('25,000');
+    for (const { error, formatNumbers } of errors) {
+      expect(typeof englishLeaf(error.messageText.code), error.messageText.code).not.toBe('undefined');
+      expect(englishText(error.messageText, { formatNumbers })).toBe(error.message);
+    }
+    // The UI shows the code in the app language, else the error's own text.
+    const { t } = createTranslator('en');
+    expect(errorText(t, new CoachStaleFindingError(), 'coach.failed')).toBe(new CoachStaleFindingError().message);
+    expect(errorText(t, new Error('Disk full'), 'coach.failed')).toBe('Disk full');
+    expect(errorText(t, 'boom', 'coach.failed')).toBe(t('coach.failed'));
+  });
+
+  it('analysis codes follow the analysis/errors namespaces; parameters are values or codes, never English sentences', () => {
+    // English words the rules used to splice into sentences are now codes of their own.
+    const sentences = new Set(JSON.stringify(en.analysis).match(/"[^"{}]*\s[^"{}]*"/g)!.map((v) => v.slice(1, -1)));
+    for (const coded of codesIn(reports())) {
+      expect(coded.code, coded.code).toMatch(/^(analysis|errors|templates)\./);
+      for (const param of Object.values(coded.params ?? {})) {
+        if (typeof param === 'string') expect(sentences.has(param), `${coded.code}: ${param}`).toBe(false);
+      }
+    }
+  });
+
+  it('keys are unique; a value is shared only where the context differs (pinned)', () => {
+    const leaves = (node: unknown, prefix = ''): [string, string][] =>
+      typeof node === 'object' && node !== null && !('other' in node)
+        ? Object.entries(node).flatMap(([k, v]) => leaves(v, `${prefix}${k}.`))
+        : [[prefix.slice(0, -1), JSON.stringify(node)]];
+    const all = leaves(en);
+    expect(new Set(all.map(([k]) => k)).size).toBe(all.length);
+    const byValue = new Map<string, string[]>();
+    for (const [key, value] of all) byValue.set(value, [...(byValue.get(value) ?? []), key]);
+    const shared = [...byValue.values()].filter((keys) => keys.length > 1).map((keys) => keys.join(' | ')).sort();
+    // Document labels, editor fields and analysis locations are separate contexts: a
+    // translation may word them differently (e.g. a PDF heading vs. a form label).
+    expect(shared).toEqual([
+      'analysis.location.field.name | analysis.ats.detected.name',
+      'ats.separator | match.separator',
+      'check.attention | check.status.needsAttention',
+      'check.improve | ats.improve',
+      'editor.fields.certifications.date | analysis.location.field.date',
+      'editor.fields.certifications.org | analysis.location.field.organization',
+      'editor.fields.education.degree | analysis.location.field.degree',
+      'editor.fields.education.school | analysis.location.field.school',
+      'editor.fields.experience.bullets | editor.fields.projects.bullets',
+      'editor.fields.experience.bulletsAdd | editor.fields.projects.bulletsAdd',
+      'editor.fields.experience.company | letter.company | analysis.location.field.company',
+      'editor.fields.experience.end | analysis.location.field.endDate',
+      'editor.fields.experience.start | analysis.location.field.startDate',
+      'editor.fields.experience.title | analysis.location.field.jobTitle',
+      'editor.fields.personal.email | analysis.location.email | analysis.ats.detected.email',
+      'editor.fields.personal.linkedin | analysis.location.linkedin',
+      'editor.fields.personal.location | editor.fields.experience.location | editor.fields.education.location | analysis.location.location | analysis.location.field.location | analysis.ats.detected.location',
+      'editor.fields.personal.name | analysis.location.name',
+      'editor.fields.personal.phone | analysis.location.phone | analysis.ats.detected.phone',
+      'editor.fields.personal.website | analysis.location.website',
+      'editor.fields.projects.description | analysis.location.field.shortDescription',
+      'editor.fields.projects.name | analysis.location.field.projectName',
+      'editor.fields.summary.skills | analysis.location.section.skills',
+      'home.templateA11y | gallery.cardA11y',
+      'match.jdLabel | match.sections.general',
+      'nav.import | home.importText',
+      'nav.preview | editor.preview',
+      'nav.tools | editor.tools',
+      'preview.tryAgain | paywall.tryAgain',
+      'resume.labels.awards | editor.sections.awards',
+      'resume.labels.certifications | editor.sections.certifications',
+      'resume.labels.education | editor.sections.education | analysis.location.section.education',
+      'resume.labels.experience | editor.sections.experience | analysis.location.section.experience',
+      'resume.labels.projects | editor.sections.projects',
+    ]);
+  });
+
+  it('template metadata: 12 designs, each with id, categoryKey, nameKey and descriptionKey in the catalog', () => {
+    expect(TEMPLATES).toHaveLength(12);
+    const { t } = createTranslator('en');
+    for (const template of TEMPLATES) {
+      expect(template.nameKey).toBe(`templates.${template.id}.name`);
+      expect(template.shortNameKey).toBe(`templates.${template.id}.shortName`);
+      expect(template.descriptionKey).toBe(`templates.${template.id}.description`);
+      expect(template.categoryKey).toBe(`templates.categories.${template.category}`);
+      for (const key of [template.nameKey, template.shortNameKey, template.descriptionKey, template.categoryKey]) {
+        expect(typeof englishLeaf(key), key).toBe('string');
+        expect(t(key as MessageKey)).not.toBe(key);
+      }
+    }
+    // No per-language template definitions: one registry, display text only in catalogs.
+    expect(read('domain/templates/templates.ts')).not.toMatch(/\b(de|fr|es|ar):\s*\{/);
+  });
+
+  it('counts go through plural messages; no manual English plural concatenation remains', () => {
+    const sources = [...uiFilesOf(join(SRC, 'features')), ...uiFilesOf(join(SRC, 'domain')), ...uiFilesOf(join(SRC, 'app'))];
+    for (const file of sources) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, relative(SRC, file)).not.toMatch(/===?\s*1\s*\?\s*(''|"")\s*:\s*['"]s['"]|!==?\s*1\s*\?\s*['"]s['"]/);
+    }
+    const plural = (key: MessageKey) => englishLeaf(key) as Record<string, string>;
+    for (const key of ['ats.toCheck', 'ats.issues', 'match.alsoFound', 'match.mentionLines', 'analysis.score.warnings.shortBullets', 'analysis.coach.repeatedOpener', 'analysis.coach.longBullet', 'errors.jobDescriptionTooLong', 'errors.coachTextTooLong'] as MessageKey[]) {
+      expect(Object.keys(plural(key)).sort(), key).toEqual(['one', 'other']);
+    }
+    const { t } = createTranslator('en');
+    expect(t('match.mentionLines', { count: 1 })).toBe(' (1 line)');
+    expect(t('match.mentionLines', { count: 3 })).toBe(' (3 lines)');
+  });
+
+  it('app-generated numbers are formatted by the app language; user text is not', () => {
+    expect(createTranslator('en').t('match.charCount', { count: 1234, max: 25000 })).toBe('1,234 / 25,000');
+    withCatalog('de', { match: { charCount: '{count} / {max}' } }, () => {
+      expect(createTranslator('de').t('match.charCount', { count: 1234, max: 25000 })).toBe('1.234 / 25.000');
+    });
+    expect(createTranslator('de').t('home.deleteBody', { title: 'Jan 2020 – 1234' })).toContain('Jan 2020 – 1234');
+  });
+
+  it('resume labels have one catalog source, shared by PDF and DOCX', async () => {
+    expect(Object.keys(en.resume.labels).sort()).toEqual(['awards', 'certifications', 'education', 'experience', 'previewWatermark', 'projects', 'resume', 'summary']);
+    expect(resumeLabels('en')).toEqual(en.resume.labels);
+    for (const file of ['domain/render/render-html.ts', 'domain/render/export-docx.ts']) {
+      const source = read(file);
+      expect(source, file).toMatch(/resumeLabels\(/);
+      expect(source, file).not.toMatch(/['"](Professional Summary|Summary|Experience|Education|Certifications|Projects|Awards)['"]/);
+    }
+    expect(read('domain/i18n/resume-labels.ts')).not.toMatch(/'(Summary|Experience|Education)'/);
+    const docx = await docxText('en');
+    for (const key of ['summary', 'experience', 'education', 'certifications', 'projects', 'awards'] as const) {
+      expect(docx).toContain(`>${en.resume.labels[key].toUpperCase()}<`);
+    }
+  });
+
+  it('Case A — app German, resume English: UI from the German catalog (English fallback); document stays English', async () => {
+    await withCatalog('de', { home: { create: 'Lebenslauf erstellen' }, analysis: { score: { categories: { content: 'Inhalt' } } } }, async () => {
+      const { t } = createTranslator('de');
+      expect(t('home.create')).toBe('Lebenslauf erstellen');
+      expect(t('home.seeAll')).toBe('See all'); // fallback
+      // Analysis of the English resume is shown in the app language.
+      const report = scoreResume(SAMPLE_RESUME, 'en');
+      expect(report.categories.map((c) => renderText(t, c.labelText))[0]).toBe('Inhalt');
+      const page = html('en');
+      expect(page).toContain('<html lang="en" dir="ltr">');
+      expect(headingsIn(page)).toEqual(['Summary', 'Experience', 'Education', 'Certifications', 'Projects', 'Awards']);
+      expect(await docxText('en')).toContain('>EXPERIENCE<');
+    });
+  });
+
+  it('Case B — app English, resume German: UI English; document labels from the German catalog (English fallback)', async () => {
+    await withCatalog('de', { resume: { labels: { experience: 'Berufserfahrung' } }, home: { create: 'Lebenslauf erstellen' } }, async () => {
+      expect(createTranslator('en').t('home.create')).toBe('Create my resume');
+      const page = html('de');
+      expect(page).toContain('<html lang="de" dir="ltr">');
+      expect(headingsIn(page)).toEqual(['Summary', 'Berufserfahrung', 'Education', 'Certifications', 'Projects', 'Awards']);
+      const docx = await docxText('de');
+      expect(docx).toContain('>BERUFSERFAHRUNG<');
+      expect(docx).toContain('>EDUCATION<');
+    });
+    // No German translations ship in this phase.
+    expect(CATALOGS.de).toEqual({});
+  });
+
+  it('migration v4 leaves local_profile untouched and is idempotent', async () => {
+    const dir = tempDir();
+    const db = openTestDatabase(dir.file('app.db'));
+    await migrate(db, MIGRATIONS.slice(0, 3), { now: 1, legacyResumesJson: null });
+    db.raw.prepare('INSERT OR REPLACE INTO local_profile (id, name, email, phone, location, headline, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?)').run('Ada', 'a@b.c', '1', 'Paris', 'Engineer', 7);
+    db.raw.prepare(
+      'INSERT INTO resumes (id, title, template_id, accent, data_json, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('a', 'First', 'tech-builder', '#3B5168', JSON.stringify(SAMPLE_RESUME), 1, 10, 20);
+    const profile = db.raw.prepare('SELECT * FROM local_profile').all();
+    const snapshot = () => ({
+      resumes: db.raw.prepare('SELECT * FROM resumes ORDER BY id').all(),
+      profile: db.raw.prepare('SELECT * FROM local_profile').all(),
+      settings: db.raw.prepare('SELECT * FROM app_settings').all(),
+    });
+    expect((await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).applied).toEqual([4]);
+    const after = snapshot();
+    expect(after.profile).toEqual(profile);
+    // Re-running is a no-op and changes nothing.
+    expect(await migrate(db, MIGRATIONS, { now: 2, legacyResumesJson: null })).toEqual({ from: 4, to: 4, applied: [] });
+    expect(snapshot()).toEqual(after);
+    await db.close();
+    dir.cleanup();
+  });
+
+  it('the 12 gallery thumbnails are the committed images, unchanged', () => {
+    // sha256 of each PNG as captured at commit 5b9e5db (before localization).
+    const PNG: Record<string, string> = {
+      'academic-researcher': 'de5fbe4e12f0337a9bdc31f7ac2614747c6e175790ed5c9d723a45b8da40e40e',
+      'academic-scholar': 'fb75e838f3df2d5c0bcf9cf4821d1533973469f4530eebd9dff3ebdedbb992d0',
+      'corporate-boardroom': 'cc7c7a1f851ac43797d067b3de62d4c7e32c124fd9c8d43ab7f12d03efe0b3b1',
+      'corporate-partner': '7adf19126cbc5a54c900b367f0be9b964949c04aa547cf0c1a4cf9d2b9307d99',
+      'creative-editorial': '417fec9d37ce8a0968da5306eb4fc9e52ffc6ce0be88561b9877315005ee5bda',
+      'creative-studio': 'c9d6f181a636240e92d878feb38897689e9d44790e02fc05969758ebc78f9f15',
+      'healthcare-educator': 'fb8b47bcc3c67b46db5940f7c367dd4bd5144b6208cb91ccde4394c9a2ee24c9',
+      'healthcare-practitioner': '588466fadec88895bedb9b76da481108d46fb2c0bc4c7ccfbe7737a45f67e1bb',
+      'tech-architect': 'e0da2dc4457c2104ccccb42bd23237e20e61490484ee4ecc658eb319825cbd70',
+      'tech-builder': 'eff1094acec28e8ede0bee899da9cbb12a8e8bdb7fe207e67b904826f4530f48',
+      'trades-foreman': 'fa1a497df8e276b46a557308f8563c13930f37ce9ddf751a4a3ab0d5cc0842dd',
+      'trades-operator': 'a60daf9afb9d1ab46494313603f2064e4e0a04331a372a7d316e691612f895dc',
+    };
+    expect(Object.keys(PNG).sort()).toEqual(TEMPLATES.map((t) => t.id).sort());
+    for (const [id, sha] of Object.entries(PNG)) {
+      expect(createHash('sha256').update(readFileSync(join(SRC, '..', 'assets', 'templates', `${id}.png`))).digest('hex'), id).toBe(sha);
+    }
+  });
+
+  const CHROMIUM = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  it.skipIf(!existsSync(CHROMIUM))(
+    'in a real engine: the current English template renders are pixel-identical to the committed thumbnails',
+    async () => {
+      const { chromium } = await import('playwright-core');
+      const browser: Browser = await chromium.launch({ executablePath: CHROMIUM });
+      try {
+        // Same capture settings as `npm run thumbnails`.
+        const page = await browser.newPage({ viewport: { width: 848, height: 1200 }, deviceScaleFactor: 0.625 });
+        for (const template of TEMPLATES) {
+          await page.setContent(templateSampleHtml(template.id), { waitUntil: 'load' });
+          const box = (await page.locator('.page').boundingBox())!;
+          const shot = await page.screenshot({ clip: { x: box.x, y: box.y, width: box.width, height: Math.round((box.width * 11) / 8.5) } });
+          const committed = readFileSync(join(SRC, '..', 'assets', 'templates', `${template.id}.png`));
+          expect(Buffer.compare(shot, committed), template.id).toBe(0);
+        }
+      } finally {
+        await browser.close();
+      }
+    },
+    120_000,
+  );
 });
 
 // --- architecture: one translation source for app UI ---
@@ -617,6 +940,76 @@ describe('no hard-coded UI text in screens', () => {
       for (const m of source.matchAll(/\btitle:\s*['"`][A-Za-z]/g)) problems.push(`${where}: ${m[0]}`);
     }
     expect(problems).toEqual([]);
+  });
+
+  // Literal-level guard: every string literal in UI code must be a catalog key, a technical
+  // identifier (route, style key, color, asset, enum value) or developer-only text.
+  const literalSources = [
+    ...uiFilesOf(join(SRC, 'features')),
+    ...uiFilesOf(join(SRC, 'ui')),
+    ...uiFilesOf(join(SRC, 'app')),
+    join(SRC, 'services', 'storage', 'database-context.tsx'),
+    join(SRC, 'services', 'i18n', 'localization.tsx'),
+  ];
+  const stripComments = (s: string) =>
+    s
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+      .replace(/(^|[^:'"`\\])\/\/.*$/gm, (m, p: string) => p + ' '.repeat(m.length - p.length));
+  /** Returns the user-visible English literals the guard would reject in `source`. */
+  const visibleLiterals = (source: string): string[] => {
+    const code = stripComments(source);
+    const found: string[] = [];
+    for (const m of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g)) {
+      const value = m[2];
+      const before = code.slice(Math.max(0, m.index! - 60), m.index);
+      const plain = value.replace(/\$\{[^}]*\}/g, ' ').trim();
+      if (!/[A-Za-z]{2,}/.test(plain)) continue;
+      if (/\b(from|import|require)\s*\(?\s*$/.test(before)) continue; // module specifiers and assets
+      if (/\bt\(\s*$/.test(before)) continue; // catalog keys
+      if (/\b(name|href|pathname|testID|key|nativeID)=\{?\s*$/.test(before)) continue; // routes and ids
+      if (/\b(console\.\w+|throw new Error)\(\s*$/.test(before)) continue; // developer-only text
+      if (/[!=]==\s*$|\bcase\s+$/.test(before)) continue; // enum comparisons
+      if (/^#[0-9A-Fa-f]{3,8}$/.test(plain) || /^(about:blank|data:|https?:\/\/)/.test(plain)) continue; // colors, URLs
+      // Technical identifiers: keys, style names, paths, CSS values — one lowercase/camel token.
+      if (/^[\w.\-/:[\]@ ]*$/.test(plain) && !/[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(plain) && !/^([A-Z][a-z]+|[A-Z]{2,})$/.test(plain)) continue;
+      found.push(value);
+    }
+    return found;
+  };
+
+  it('UI code has no user-visible English string literals', () => {
+    const problems = literalSources.flatMap((file) => visibleLiterals(readFileSync(file, 'utf8')).map((v) => `${relative(SRC, file)}: ${JSON.stringify(v)}`));
+    expect(problems).toEqual([]);
+  });
+
+  it('the literal guard catches injected English and ignores technical strings', () => {
+    const injected = [
+      `<Button title={saving ? 'Saving…' : t('common.save')} />`,
+      `Alert.alert(t('x'), 'Are you sure?')`,
+      `setError('Something went wrong')`,
+      `<Stack.Screen options={{ title: 'Settings' }} />`,
+      `const empty = 'No resumes yet';`,
+      `<TextInput placeholder={'Job title'} />`,
+      `accessibilityLabel={\`Delete \${name}\`}`,
+      `const label = 'OK';`,
+    ];
+    for (const line of injected) expect(visibleLiterals(line), line).not.toEqual([]);
+    const technical = [
+      `import { View } from 'react-native';`,
+      `const thumb = require('../../../assets/templates/corporate-boardroom.png');`,
+      `<Stack.Screen name="resume/[id]/index" />`,
+      `router.push('/resume/new');`,
+      `const color = '#A3A6AC';`,
+      `if (status === 'ready') {}`,
+      `t('editor.sections.summary')`,
+      `style={styles[\`button_\${variant}\`]}`,
+      `console.warn('[storage]', error);`,
+      `throw new Error('useDatabase must be used inside DatabaseProvider');`,
+      `const uri = 'about:blank';`,
+      `const url = 'https://example.com/privacy';`,
+      `// 'A comment with words'`,
+    ];
+    for (const line of technical) expect(visibleLiterals(line), line).toEqual([]);
   });
 
   it('the old English copy modules are gone', () => {
