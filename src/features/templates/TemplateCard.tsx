@@ -43,10 +43,15 @@ export function AtsReadyBadge() {
   );
 }
 
-/** Gallery card: tap to see the large preview; "Use template" creates the resume. */
+/**
+ * Gallery card: tap to see the large preview; "Use template" creates the resume.
+ * Layout: content on top, button pinned to the bottom with a fixed gap. No text has a
+ * fixed height (Android font scaling would push it under the button), and cards in a
+ * row stretch to the same height, so their buttons line up.
+ */
 export function TemplateCard({ template, onUse }: { template: TemplateConfig; onUse: (templateId: string) => void }) {
   return (
-    <View style={{ flex: 1, gap: 8 }}>
+    <View style={{ flex: 1, gap: 12, justifyContent: 'space-between' }}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${template.name}, ${template.category}. Opens a larger preview.`}

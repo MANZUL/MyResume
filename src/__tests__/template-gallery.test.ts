@@ -190,3 +190,23 @@ describe('gallery thumbnails', () => {
     for (const m of required) expect(m[1]).toBe(m[2]);
   });
 });
+
+// Regression (device, 360dp Android): the card description ran under the "Use this
+// template" button because the text had a fixed height that font scaling overflowed.
+describe('gallery card layout', () => {
+  const card = readFileSync(join(ROOT, 'src', 'features', 'templates', 'TemplateCard.tsx'), 'utf8');
+  const body = card.slice(card.indexOf('export function TemplateCard('));
+
+  it('pins the button below the content with a gap, so cards in a row align', () => {
+    expect(body).toMatch(/<View style=\{\{ flex: 1, gap: \d+, justifyContent: 'space-between' \}\}>/);
+    // The button comes after the pressable content block, not inside or over it.
+    expect(body.indexOf('</Pressable>')).toBeLessThan(body.indexOf('<Button'));
+    expect(body).not.toMatch(/position: 'absolute'[^}]*bottom/);
+  });
+
+  it('gives no card text a fixed height, and shows no description on the card', () => {
+    expect(body).not.toMatch(/<Text style=\{\{[^}]*\bheight:/);
+    expect(body).not.toContain('template.description');
+    expect(body).toMatch(/numberOfLines=\{1\}[\s\S]*\{template\.name\}/);
+  });
+});
