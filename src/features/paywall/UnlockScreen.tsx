@@ -4,18 +4,14 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { PREMIUM_PRICE } from '../../domain/entitlement/subscription';
 import { useEntitlement } from '../../services/entitlement/entitlement';
 import { Button, Card, colors, Muted } from '../../ui/components';
+import { useT } from '../../services/i18n/localization';
 
-const FEATURES = [
-  'Export PDF and Word (.docx) files',
-  'Image export and sharing',
-  'Clean output with no watermark',
-  'Writing Coach, Job Match and Tailoring',
-  'Custom accent colors',
-];
+const FEATURES = ['export', 'image', 'clean', 'tools', 'colors'] as const;
 
 export default function UnlockScreen() {
   const { decision, offer, entitlements, paywall } = useEntitlement();
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null);
+  const t = useT();
 
   const close = () => {
     paywall.dismiss();
@@ -25,8 +21,8 @@ export default function UnlockScreen() {
   if (decision.premium) {
     return (
       <View style={{ flex: 1, padding: 24, gap: 16, justifyContent: 'center' }}>
-        <Text style={{ fontSize: 24, fontWeight: '700', color: colors.text, textAlign: 'center' }}>You have Premium</Text>
-        <Button title="Done" onPress={close} />
+        <Text style={{ fontSize: 24, fontWeight: '700', color: colors.text, textAlign: 'center' }}>{t('paywall.havePremium')}</Text>
+        <Button title={t('paywall.done')} onPress={close} />
       </View>
     );
   }
@@ -43,10 +39,10 @@ export default function UnlockScreen() {
     try {
       const { outcome, resume } = await paywall.subscribe();
       if (outcome === 'subscribed') await finish(resume);
-      else if (outcome === 'pending') Alert.alert('Purchase pending', 'Premium unlocks as soon as the purchase is approved.');
-      else if (outcome !== 'cancelled') Alert.alert('Purchase not completed', 'The purchase could not be verified. Please try again.');
+      else if (outcome === 'pending') Alert.alert(t('paywall.pendingTitle'), t('paywall.pendingBody'));
+      else if (outcome !== 'cancelled') Alert.alert(t('paywall.notCompletedTitle'), t('paywall.notVerified'));
     } catch (error) {
-      Alert.alert('Purchase not completed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(t('paywall.notCompletedTitle'), error instanceof Error ? error.message : t('paywall.tryAgain'));
     } finally {
       setBusy(null);
     }
@@ -57,9 +53,9 @@ export default function UnlockScreen() {
     try {
       const { premium, resume } = await paywall.restore();
       if (premium) await finish(resume);
-      else Alert.alert('Nothing to restore', 'No active Premium subscription was found for this store account.');
+      else Alert.alert(t('paywall.nothingTitle'), t('paywall.nothingBody'));
     } catch (error) {
-      Alert.alert('Restore failed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(t('paywall.restoreFailed'), error instanceof Error ? error.message : t('paywall.tryAgain'));
     } finally {
       setBusy(null);
     }
@@ -70,32 +66,32 @@ export default function UnlockScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>{PREMIUM_PRICE.label}</Text>
-      <Muted>Building and editing stay free. Premium lets you take your resume out of the app.</Muted>
+      <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>{t('paywall.heading', { price: PREMIUM_PRICE.amount })}</Text>
+      <Muted>{t('paywall.intro')}</Muted>
       <Card style={{ gap: 10 }}>
         {FEATURES.map((feature) => (
-          <Text key={feature} style={{ fontSize: 16, color: colors.text }}>✓ {feature}</Text>
+          <Text key={feature} style={{ fontSize: 16, color: colors.text }}>✓ {t(`paywall.features.${feature}`)}</Text>
         ))}
       </Card>
-      <Muted>{`${price} per month. Renews automatically until cancelled; cancel anytime in your store account settings.`}</Muted>
+      <Muted>{t('paywall.terms', { price })}</Muted>
       {decision.reason === 'cache_stale' || decision.reason === 'clock_rollback' ? (
-        <Muted>Connect to the internet so your subscription can be verified, or tap Restore.</Muted>
+        <Muted>{t('paywall.verify')}</Muted>
       ) : null}
       {unavailable ? (
-        <Muted>Purchases are not available in this build.</Muted>
+        <Muted>{t('paywall.unavailable')}</Muted>
       ) : (
         <>
           <Button
-            title={`Subscribe — ${price}/month`}
+            title={t('paywall.subscribe', { price })}
             onPress={buy}
             loading={busy === 'buy'}
             disabled={busy !== null || !offer}
           />
-          {!offer ? <Muted>The store is unavailable right now. Please try again shortly.</Muted> : null}
-          <Button title="Restore purchases" variant="ghost" onPress={doRestore} loading={busy === 'restore'} disabled={busy !== null} />
+          {!offer ? <Muted>{t('paywall.storeUnavailable')}</Muted> : null}
+          <Button title={t('paywall.restore')} variant="ghost" onPress={doRestore} loading={busy === 'restore'} disabled={busy !== null} />
         </>
       )}
-      <Button title="Not now" variant="secondary" onPress={close} />
+      <Button title={t('paywall.notNow')} variant="secondary" onPress={close} />
     </ScrollView>
   );
 }

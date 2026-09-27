@@ -7,9 +7,12 @@ import type { ResumeData } from '../../domain/resume/types';
 import { useEntitlement } from '../../services/entitlement/entitlement';
 import { useTargetJob } from '../../services/storage/use-target-job';
 import { Button, Card, colors, Field, Muted, styles } from '../../ui/components';
-import { countsLine, MATCH_COPY, mentionedUnder } from './match-copy';
+import type { Language } from '../../domain/i18n/languages';
+import { useLocalization } from '../../services/i18n/localization';
+import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
-export function MatchTool({ resumeId, data }: { resumeId: string; data: ResumeData }) {
+export function MatchTool({ resumeId, data, language }: { resumeId: string; data: ResumeData; language: Language }) {
+  const { t } = useLocalization();
   const { description, setDescription, ready } = useTargetJob(resumeId);
   const [result, setResult] = useState<{ report: JobMatchReport; for: string } | null>(null);
   const [error, setError] = useState('');
@@ -19,11 +22,11 @@ export function MatchTool({ resumeId, data }: { resumeId: string; data: ResumeDa
   const compare = async (): Promise<void> => {
     const text = description;
     try {
-      setResult({ report: await tools.jobMatch(data, text), for: text });
+      setResult({ report: await tools.jobMatch(data, text, language), for: text });
       setError('');
     } catch (e) {
       if (e instanceof PremiumRequiredError) paywall.request({ feature: e.feature, run: compare });
-      else setError(e instanceof Error ? e.message : 'Could not compare.');
+      else setError(e instanceof Error ? e.message : t('match.failed'));
     }
   };
 
@@ -33,59 +36,67 @@ export function MatchTool({ resumeId, data }: { resumeId: string; data: ResumeDa
   return (
     <>
       <Field
-        label={MATCH_COPY.jdLabel}
+        label={t('match.jdLabel')}
         value={description}
         onChangeText={setDescription}
         multiline
         maxLength={JOB_DESCRIPTION_MAX}
-        placeholder={MATCH_COPY.jdPlaceholder}
+        placeholder={t('match.jdPlaceholder')}
         editable={ready}
         style={{ minHeight: 180 }}
       />
-      <Muted>{`${description.length.toLocaleString('en-US')} / ${JOB_DESCRIPTION_MAX.toLocaleString('en-US')}`}</Muted>
+      <Muted>{t('match.charCount', { count: description.length, max: JOB_DESCRIPTION_MAX })}</Muted>
       <Button
-        title={decision.premium ? MATCH_COPY.compare : MATCH_COPY.compareLocked}
+        title={decision.premium ? t('match.compare') : t('match.compareLocked')}
         onPress={() => void compare()}
         disabled={!description.trim()}
       />
       {error ? <Muted>{error}</Muted> : null}
       {report ? (
         <>
+          <EnglishRulesNote support={report.support} />
           {report.title ? (
             <Card style={{ gap: 4 }}>
-              <Text style={styles.sectionTitle}>{MATCH_COPY.role}</Text>
+              <Text style={styles.sectionTitle}>{t('match.role')}</Text>
               <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{report.title.text}</Text>
               <Text style={{ color: report.title.resume.length ? colors.success : colors.muted }}>
                 {report.title.resume.length
-                  ? `“${report.title.core}” is mentioned in your resume (${report.title.resume.map((e) => e.label).join(', ')})`
-                  : `“${report.title.core}” is not detected in your resume`}
+                  ? t('match.titleMentioned', { core: report.title.core, where: report.title.resume.map((e) => e.label).join(t('match.listSeparator')) })
+                  : t('match.titleNotDetected', { core: report.title.core })}
               </Text>
             </Card>
           ) : null}
           <Card style={{ gap: 10 }}>
-            <Text style={styles.sectionTitle}>{MATCH_COPY.termsTitle}</Text>
+            <Text style={styles.sectionTitle}>{t('match.termsTitle')}</Text>
             {report.terms.length ? (
               <>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{countsLine(report.counts.inJob, report.counts.alsoInResume)}</Text>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>
+                  {[t('match.termsDetected', { count: report.counts.inJob }), t('match.alsoFound', { count: report.counts.alsoInResume })].join(t('match.separator'))}
+                </Text>
                 {report.terms.map((term) => (
                   <View key={term.id} style={{ gap: 2 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                       <Text style={{ flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' }}>{term.label}</Text>
                       <Text style={{ color: term.resume.length ? colors.success : colors.muted, fontWeight: '600' }}>
-                        {term.resume.length ? `✓ ${MATCH_COPY.detected}` : MATCH_COPY.notDetected}
+                        {term.resume.length ? `✓ ${t('match.detected')}` : t('match.notDetected')}
                       </Text>
                     </View>
-                    <Muted>{mentionedUnder(term.job.sections, term.job.mentions)}</Muted>
-                    {term.resume.length ? <Muted>{`In resume: ${term.resume.map((e) => e.label).join(', ')}`}</Muted> : null}
+                    <Muted>
+                      {t('match.mentionedUnder', { where: term.job.sections.map((s) => t(`match.sections.${s}`)).join(t('match.listSeparator')) }) +
+                        (term.job.mentions > 1 ? t('match.mentionLines', { count: term.job.mentions }) : '')}
+                    </Muted>
+                    {term.resume.length ? (
+                      <Muted>{t('match.inResume', { where: term.resume.map((e) => e.label).join(t('match.listSeparator')) })}</Muted>
+                    ) : null}
                   </View>
                 ))}
-                <Muted>{MATCH_COPY.notDetectedMeaning}</Muted>
+                <Muted>{t('match.notDetectedMeaning')}</Muted>
               </>
             ) : (
-              <Muted>{MATCH_COPY.noTerms}</Muted>
+              <Muted>{t('match.noTerms')}</Muted>
             )}
           </Card>
-          <Muted>{MATCH_COPY.disclaimer}</Muted>
+          <Muted>{t('match.disclaimer')}</Muted>
         </>
       ) : null}
     </>

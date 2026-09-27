@@ -3,15 +3,18 @@ import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors, Muted } from '../../ui/components';
 import { TEMPLATE_CATEGORIES, TEMPLATES, type TemplateCategory } from '../../domain/templates/templates';
 import { TemplateCard } from './TemplateCard';
+import { categoryName } from '../../i18n/templates';
+import { useT } from '../../services/i18n/localization';
 import { useCreateFromTemplate } from './use-create-from-template';
 
-type Filter = 'All' | TemplateCategory;
-const FILTERS: readonly Filter[] = ['All', ...TEMPLATE_CATEGORIES];
+type Filter = 'all' | TemplateCategory;
+const FILTERS: readonly Filter[] = ['all', ...TEMPLATE_CATEGORIES];
 
 export default function TemplateGalleryScreen() {
-  const [filter, setFilter] = useState<Filter>('All');
+  const t = useT();
+  const [filter, setFilter] = useState<Filter>('all');
   const startFromTemplate = useCreateFromTemplate();
-  const templates = useMemo(() => (filter === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.category === filter)), [filter]);
+  const templates = useMemo(() => (filter === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.category === filter)), [filter]);
 
   return (
     <FlatList
@@ -23,7 +26,7 @@ export default function TemplateGalleryScreen() {
       contentContainerStyle={{ padding: 16, gap: 22, paddingBottom: 48 }}
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
-          <Muted>Pick a design to start. You can switch templates any time from Preview.</Muted>
+          <Muted>{t('gallery.intro')}</Muted>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {FILTERS.map((f) => {
               const selected = f === filter;
@@ -42,7 +45,9 @@ export default function TemplateGalleryScreen() {
                     backgroundColor: selected ? colors.text : colors.card,
                   }}
                 >
-                  <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600' }}>{f}</Text>
+                  <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600' }}>
+                    {f === 'all' ? t('gallery.all') : categoryName(t, f)}
+                  </Text>
                 </Pressable>
               );
             })}

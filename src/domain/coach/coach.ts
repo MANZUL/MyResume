@@ -1,3 +1,5 @@
+import { analysisSupport } from '../i18n/analysis-support';
+import { isLanguage, type Language } from '../i18n/languages';
 import { isGrounded } from './grounding';
 import { RULES } from './rules';
 import {
@@ -20,9 +22,10 @@ import {
 //   3. the result must pass the grounding check (no new fact), or nothing changes.
 
 /** Summarises the other bullets of the entry for context-aware rules (read-only: first word + final period). */
-export function buildCoachContext(field: CoachField, siblings: readonly string[] = []): CoachContext {
+export function buildCoachContext(field: CoachField, language: Language, siblings: readonly string[] = []): CoachContext {
   return {
     field,
+    language,
     siblings: siblings
       .filter((s) => typeof s === 'string' && s.trim())
       .map((s) => ({
@@ -47,7 +50,9 @@ const contextLength = (siblings: readonly SiblingSummary[]) => siblings.reduce((
 function validate(text: unknown, context: CoachContext): asserts text is string {
   if (typeof text !== 'string') throw new CoachInputError('invalid_context');
   if (text.length > COACH_LIMITS.maxTextLength) throw new CoachInputError('text_too_long');
-  if (!context || !COACH_FIELDS.includes(context.field) || !Array.isArray(context.siblings)) throw new CoachInputError('invalid_context');
+  if (!context || !COACH_FIELDS.includes(context.field) || !isLanguage(context.language) || !Array.isArray(context.siblings)) {
+    throw new CoachInputError('invalid_context');
+  }
   for (const s of context.siblings) {
     if (typeof s?.opener !== 'string' || typeof s.endsWithPeriod !== 'boolean' || s.opener.length > COACH_LIMITS.maxOpenerLength) {
       throw new CoachInputError('invalid_context');
@@ -58,12 +63,15 @@ function validate(text: unknown, context: CoachContext): asserts text is string 
 
 export function analyzeText(text: string, context: CoachContext): CoachReport {
   validate(text, context);
+  const support = analysisSupport('writingCoach', context.language);
+  // No English wording rules on other languages: an explicit empty report, never guesses.
+  if (support.kind === 'unavailable') return { text, field: context.field, support, findings: [] };
   const key = textKey(text);
   const findings = RULES.flatMap((rule) => rule.run(text, context)).map((f) => ({ ...f, textKey: key }));
   const order = new Map(RULES.map((rule, i) => [rule.id, i]));
   findings.sort((a, b) => a.start - b.start || order.get(a.rule)! - order.get(b.rule)!);
   const unique = findings.filter((f, i) => findings.findIndex((g) => g.id === f.id) === i);
-  return { text, field: context.field, findings: unique };
+  return { text, field: context.field, support, findings: unique };
 }
 
 const sameFinding = (a: CoachFinding, b: CoachFinding) =>

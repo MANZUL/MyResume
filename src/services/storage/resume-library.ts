@@ -1,5 +1,6 @@
 import type { ResumeRepository } from '../../domain/ports/repositories';
 import type { ResumeData, StoredResume } from '../../domain/resume/types';
+import { toLanguage, type Language } from '../../domain/i18n/languages';
 import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
 import { createAutosaver, type Autosaver, type Timers } from './autosave';
 
@@ -8,7 +9,7 @@ import { createAutosaver, type Autosaver, type Timers } from './autosave';
 // autosaver (debounced edits) or immediately (create, duplicate, delete).
 // No React imports, so it is tested directly against SQLite.
 
-export type ResumePatch = Partial<Pick<StoredResume, 'title' | 'templateId' | 'accent' | 'data'>>;
+export type ResumePatch = Partial<Pick<StoredResume, 'title' | 'templateId' | 'accent' | 'language' | 'data'>>;
 
 export interface ResumeLibraryOptions {
   newId: () => string;
@@ -17,7 +18,16 @@ export interface ResumeLibraryOptions {
   delayMs?: number;
   maxWaitMs?: number;
   onError?: (operation: string, error: unknown) => void;
+  /**
+   * Language of new resumes when none is given: the app language at the moment of
+   * creation (read on every create). Existing resumes never follow later changes.
+   */
+  defaultLanguage?: () => Language;
+  /** Stored default titles, in the app language. */
+  titles?: { untitled: () => string; copyOf: (title: string) => string };
 }
+
+const ENGLISH_TITLES = { untitled: () => 'Untitled resume', copyOf: (title: string) => `${title} (copy)` };
 
 export class ResumeLibrary {
   private resumes: StoredResume[] = [];
@@ -86,16 +96,18 @@ export class ResumeLibrary {
   /**
    * Adds a resume and stores it right away. Returns the new record synchronously.
    * The template (default: the first one) sets the initial template and its default
-   * accent; an unknown id falls back to the default template.
+   * accent; an unknown id falls back to the default template. The language defaults to
+   * `defaultLanguage()` (the app language), then English.
    */
-  create(data: ResumeData, title?: string, templateId?: string): StoredResume {
+  create(data: ResumeData, title?: string, templateId?: string, language?: Language): StoredResume {
     const template = templateId ? getTemplate(templateId) : TEMPLATES[0];
     const now = this.now();
     const resume: StoredResume = {
       id: this.options.newId(),
-      title: title || data.name || 'Untitled resume',
+      title: title || data.name || (this.options.titles ?? ENGLISH_TITLES).untitled(),
       templateId: template.id,
       accent: template.defaultAccent,
+      language: toLanguage(language ?? this.options.defaultLanguage?.()),
       data,
       createdAt: now,
       updatedAt: now,
@@ -123,7 +135,7 @@ export class ResumeLibrary {
     const copy: StoredResume = {
       ...source,
       id: this.options.newId(),
-      title: `${source.title} (copy)`,
+      title: (this.options.titles ?? ENGLISH_TITLES).copyOf(source.title),
       data: JSON.parse(JSON.stringify(source.data)) as ResumeData,
       createdAt: now,
       updatedAt: now,

@@ -1,3 +1,5 @@
+import { analysisSupport, type LanguageSupport } from '../i18n/analysis-support';
+import type { Language } from '../i18n/languages';
 import type { EditorSection } from '../resume/sections';
 import type { ResumeData } from '../resume/types';
 
@@ -9,6 +11,8 @@ export type ResumeScoreWarning = {
 };
 
 export type ResumeScore = {
+  /** Which rules produced this score for the resume's language. */
+  support: LanguageSupport;
   score: number;
   strengths: string[];
   warnings: ResumeScoreWarning[];
@@ -21,7 +25,11 @@ const actionVerbs = new Set([
   'implemented', 'delivered', 'analyzed', 'organized', 'partnered', 'coordinated',
 ]);
 
-export function scoreResume(data: ResumeData): ResumeScore {
+/**
+ * Resume Score. The rules (action verbs, summary length, bullet length) and messages are
+ * English; for other resume languages they still run, reported as 'english-rules'.
+ */
+export function scoreResume(data: ResumeData, language: Language): ResumeScore {
   const warnings: ResumeScoreWarning[] = [];
   const strengths: string[] = [];
   let score = 0;
@@ -114,6 +122,7 @@ export function scoreResume(data: ResumeData): ResumeScore {
   strengths.push('ATS-friendly structure');
 
   return {
+    support: analysisSupport('resumeScore', language),
     score: Math.min(score, 100),
     strengths: Array.from(new Set(strengths)).slice(0, 5),
     warnings: warnings.slice(0, 6),

@@ -7,6 +7,8 @@ import { emptyResume } from '../domain/resume/types';
 import { templateSampleHtml } from '../domain/templates/sample-preview';
 import { findTemplate, getTemplate, TEMPLATE_CATEGORIES, TEMPLATES } from '../domain/templates/templates';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
+import { templateText } from '../i18n/templates';
+import { createTranslator } from '../i18n/translate';
 import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase } from '../services/storage/sqlite/database';
 import { ManualTimers, openTestDatabase, tempDir, testId, type TestDatabase } from './helpers/node-sqlite';
@@ -39,9 +41,12 @@ describe('template registry for the gallery', () => {
   it('has the 12 existing templates with the web categories', () => {
     expect(TEMPLATES).toHaveLength(12);
     expect(Object.fromEntries(TEMPLATES.map((t) => [t.id, t.category]))).toEqual(WEB_TAXONOMY);
-    for (const t of TEMPLATES) {
-      expect(t.name.trim(), t.id).not.toBe('');
-      expect(t.description.trim(), t.id).not.toBe('');
+    // Display text comes from the app catalog, by template id.
+    const { t } = createTranslator('en');
+    for (const template of TEMPLATES) {
+      const text = templateText(t, template.id);
+      expect(text.name.trim(), template.id).not.toBe('');
+      expect(text.description.trim(), template.id).not.toBe('');
     }
   });
 
@@ -55,7 +60,8 @@ describe('template registry for the gallery', () => {
   });
 
   it('findTemplate returns undefined for an unknown id; getTemplate falls back to the default', () => {
-    expect(findTemplate('tech-builder')?.name).toBe('The Builder');
+    expect(findTemplate('tech-builder')?.id).toBe('tech-builder');
+    expect(templateText(createTranslator('en').t, 'tech-builder').name).toBe('The Builder');
     expect(findTemplate('nope')).toBeUndefined();
     expect(findTemplate('')).toBeUndefined();
     expect(getTemplate('nope').id).toBe(TEMPLATES[0].id);
@@ -207,6 +213,6 @@ describe('gallery card layout', () => {
   it('gives no card text a fixed height, and shows no description on the card', () => {
     expect(body).not.toMatch(/<Text style=\{\{[^}]*\bheight:/);
     expect(body).not.toContain('template.description');
-    expect(body).toMatch(/numberOfLines=\{1\}[\s\S]*\{template\.name\}/);
+    expect(body).toMatch(/numberOfLines=\{1\}[\s\S]*\{text\.name\}/);
   });
 });

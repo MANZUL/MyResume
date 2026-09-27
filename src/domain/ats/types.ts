@@ -1,3 +1,4 @@
+import type { LanguageSupport } from '../i18n/analysis-support';
 import type { EditorSection } from '../resume/sections';
 
 // ATS Readability Checker (FREE, owner-approved step 9). Deterministic checks of
@@ -49,6 +50,8 @@ export interface AtsDetection {
 
 export interface AtsReport {
   templateId: string;
+  /** Which rules produced this report for the resume's language. */
+  support: LanguageSupport;
   checks: AtsCheck[];
   detected: AtsDetection[];
 }

@@ -9,10 +9,10 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import type { Language } from '../domain/i18n/languages';
+import { contentTextStyle } from './direction';
 import { useStableKeys } from './entry-keys';
 
-/** Shown in an empty string list (web editor copy). */
-export const EMPTY_LIST_HINT = 'Nothing added. Leave this empty if you do not need it.';
 
 export const colors = {
   bg: '#F4F2EE',
@@ -118,8 +118,13 @@ export function LockIcon({ color = colors.text, size = 14 }: { color?: string; s
 
 export function Field({
   label,
+  contentLanguage,
   ...props
-}: TextInputProps & { label: string }) {
+}: TextInputProps & {
+  label: string;
+  /** For resume content: typing direction and alignment follow the resume's language. */
+  contentLanguage?: Language;
+}) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -127,7 +132,7 @@ export function Field({
         placeholderTextColor="#A3A6AC"
         accessibilityLabel={label}
         {...props}
-        style={[styles.input, props.multiline && styles.multiline, props.style]}
+        style={[styles.input, props.multiline && styles.multiline, contentLanguage && contentTextStyle(contentLanguage), props.style]}
       />
     </View>
   );
@@ -197,14 +202,23 @@ export function StringListEditor({
   items,
   onChange,
   placeholder,
-  addLabel = 'Add',
+  addLabel,
+  emptyHint,
+  itemLabel,
+  removeLabel,
+  contentLanguage,
   renderAction,
 }: {
   label: string;
   items: string[];
   onChange: (items: string[]) => void;
   placeholder?: string;
-  addLabel?: string;
+  /** All visible and accessibility text comes from the caller (the app catalog). */
+  addLabel: string;
+  emptyHint: string;
+  itemLabel: (index: number) => string;
+  removeLabel: (index: number) => string;
+  contentLanguage?: Language;
   /** Optional per-row action shown under the row (e.g. the Writing Coach). */
   renderAction?: (item: string, index: number) => ReactNode;
 }) {
@@ -213,7 +227,7 @@ export function StringListEditor({
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      {items.length === 0 ? <Text style={styles.emptyHint}>{EMPTY_LIST_HINT}</Text> : null}
+      {items.length === 0 ? <Text style={styles.emptyHint}>{emptyHint}</Text> : null}
       {items.map((item, index) => (
         <View key={keys[index]}>
           <View style={styles.listRow}>
@@ -222,13 +236,13 @@ export function StringListEditor({
             multiline
             placeholder={placeholder}
             placeholderTextColor="#A3A6AC"
-            accessibilityLabel={`${label} ${index + 1}`}
+            accessibilityLabel={itemLabel(index)}
             onChangeText={(text) => onChange(items.map((v, i) => (i === index ? text : v)))}
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, { flex: 1 }, contentLanguage && contentTextStyle(contentLanguage)]}
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${label} ${index + 1}`}
+            accessibilityLabel={removeLabel(index)}
             onPress={() => {
               applyKeys({ type: 'remove', index });
               onChange(items.filter((_, i) => i !== index));

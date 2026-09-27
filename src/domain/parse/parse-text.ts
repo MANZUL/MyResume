@@ -1,3 +1,4 @@
+import type { Language } from '../i18n/languages';
 import {
   emptyCertification,
   emptyEducation,
@@ -83,7 +84,14 @@ function splitList(text: string): string[] {
     .filter((s) => s.length > 0 && s.length <= 60);
 }
 
-export function parseResumeText(raw: string): ResumeData {
+/**
+ * Sorts pasted resume text into sections for a resume in `language`. Only English section
+ * headings are recognised today (analysisSupport('import', language)); for other languages
+ * the same rules run, and contact details, bullets and English headings are still found.
+ * The language is never guessed from the text.
+ */
+export function parseResumeText(raw: string, language: Language): ResumeData {
+  void language; // One English rule set today; per-language heading tables plug in here.
   const resume = emptyResume();
   const lines = raw
     .replace(/\r\n?/g, '\n')

@@ -3,7 +3,9 @@ import { PAPER_POINTS, renderResumeHtml, type PaperSize } from '../../domain/ren
 import type { StoredResume } from '../../domain/resume/types';
 import { newId } from '../../domain/shared/id';
 import { fileSafeName } from '../../domain/shared/text';
-import { getTemplate } from '../../domain/templates/templates';
+import { DEFAULT_LANGUAGE, type Language } from '../../domain/i18n/languages';
+import { templateText } from '../../i18n/templates';
+import { createTranslator } from '../../i18n/translate';
 import type { ExportArtifact, ExportPlatform, ShareGuard, ShareResult } from './export-service';
 import { RasterizerError, type Rasterizer } from './rasterizer/rasterizer-bridge';
 
@@ -11,8 +13,8 @@ import { RasterizerError, type Rasterizer } from './rasterizer/rasterizer-bridge
 // share sheet), so the logic runs in tests without a device. Expo adapters are
 // in expo-export-platform.ts. Only ExportService calls this platform.
 //
-// Layout: <private cache>/exports/<artifact id>/<Readable_Name>.pdf|docx|png
-// (multi-page images: <Readable_Name>_page-N.png). Every failure removes the
+// Layout: <private cache>/exports/<artifact id>/<readable-name>.pdf|docx|png
+// (multi-page images: <readable-name>-page-N.png). Every failure removes the
 // artifact's folder, so no partial or paid file is left behind.
 
 /** Internal file reference. Never leaves services/export. */
@@ -64,12 +66,14 @@ export interface FileExportPlatformDeps {
   share: ShareAdapter;
   /** Turns the export PDF into PNG pages (image export). */
   rasterizer?: Rasterizer;
+  /** The app language, for share-sheet titles (app UI, not document content). */
+  uiLanguage?: () => Language;
   newId?: () => string;
 }
 
 export function exportFileName(resume: StoredResume, extension: 'pdf' | 'docx' | 'png', page?: { index: number; count: number }): string {
   const base = fileSafeName(resume.data.name || resume.title);
-  return page && page.count > 1 ? `${base}_page-${page.index + 1}.${extension}` : `${base}.${extension}`;
+  return page && page.count > 1 ? `${base}-page-${page.index + 1}.${extension}` : `${base}.${extension}`;
 }
 
 /** The exact HTML the PDF is printed from: the shared renderer, PDF mode, never watermarked. */
@@ -78,21 +82,25 @@ export function pdfHtml(resume: StoredResume, paper: PaperSize): string {
     templateId: resume.templateId,
     accent: resume.accent,
     mode: 'pdf',
+    language: resume.language,
     watermark: false,
     paper,
   });
 }
 
+/** DOCX from the same label source as the PDF, in the resume's language. */
 export function docxBase64(resume: StoredResume): Promise<string> {
   return buildResumeDocxBase64({
     data: resume.data,
     accent: resume.accent,
-    templateName: getTemplate(resume.templateId).name,
+    templateName: templateText(createTranslator(resume.language).t, resume.templateId).name,
+    language: resume.language,
   });
 }
 
 export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPlatform & { purgeAll(): void } {
   const { fs, print, share, rasterizer } = deps;
+  const ui = () => createTranslator(deps.uiLanguage?.() ?? DEFAULT_LANGUAGE).t;
   const makeId = deps.newId ?? newId;
   const artifacts = new Map<string, ArtifactRecord>();
 
@@ -127,7 +135,7 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
         printed = await printPdf(resume, paper);
         const file = fs.prepareFile(id, exportFileName(resume, 'pdf'));
         await fs.moveInto(printed.uri, file);
-        artifacts.set(id, { files: [file], mimeType: 'application/pdf', dialogTitle: 'Share resume PDF', uti: 'com.adobe.pdf' });
+        artifacts.set(id, { files: [file], mimeType: 'application/pdf', dialogTitle: ui()('share.pdf'), uti: 'com.adobe.pdf' });
         return { id };
       } catch (error) {
         if (printed) deleteQuietly(printed.uri);
@@ -150,7 +158,7 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
           fs.writeBase64(file, page.pngBase64);
           return file;
         });
-        artifacts.set(id, { files, mimeType: PNG_MIME, dialogTitle: 'Share resume image', uti: 'public.png' });
+        artifacts.set(id, { files, mimeType: PNG_MIME, dialogTitle: ui()('share.image'), uti: 'public.png' });
         return { id };
       } catch (error) {
         cleanup(id);
@@ -166,7 +174,7 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
         const base64 = await docxBase64(resume);
         const file = fs.prepareFile(id, exportFileName(resume, 'docx'));
         fs.writeBase64(file, base64);
-        artifacts.set(id, { files: [file], mimeType: DOCX_MIME, dialogTitle: 'Share resume (Word)', uti: 'org.openxmlformats.wordprocessingml.document' });
+        artifacts.set(id, { files: [file], mimeType: DOCX_MIME, dialogTitle: ui()('share.docx'), uti: 'org.openxmlformats.wordprocessingml.document' });
         return { id };
       } catch (error) {
         cleanup(id);
@@ -185,7 +193,10 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
       let result: ShareResult | void = undefined;
       for (const [index, file] of record.files.entries()) {
         if (index > 0 && guard) await guard();
-        const title = record.files.length > 1 ? `${record.dialogTitle} (page ${index + 1} of ${record.files.length})` : record.dialogTitle;
+        const title =
+          record.files.length > 1
+            ? ui()('share.page', { title: record.dialogTitle, index: index + 1, count: record.files.length })
+            : record.dialogTitle;
         result = await share.share(file.uri, { mimeType: record.mimeType, dialogTitle: title, uti: record.uti });
         if (result === 'dismissed') return result;
       }

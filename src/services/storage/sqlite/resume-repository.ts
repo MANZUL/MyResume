@@ -8,12 +8,13 @@ interface ResumeRow {
   title: string;
   template_id: string;
   accent: string;
+  language: string;
   data_json: string;
   created_at: number;
   updated_at: number;
 }
 
-const COLUMNS = 'id, title, template_id, accent, data_json, created_at, updated_at';
+const COLUMNS = 'id, title, template_id, accent, language, data_json, created_at, updated_at';
 
 export class SqliteResumeRepository implements ResumeRepository {
   constructor(
@@ -37,6 +38,7 @@ export class SqliteResumeRepository implements ResumeRepository {
         title: row.title,
         templateId: row.template_id,
         accent: row.accent,
+        language: row.language,
         data,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -57,16 +59,16 @@ export class SqliteResumeRepository implements ResumeRepository {
 
   async create(resume: StoredResume): Promise<void> {
     await this.db.run(
-      `INSERT INTO resumes (id, title, template_id, accent, data_json, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-      [resume.id, resume.title, resume.templateId, resume.accent, JSON.stringify(resume.data), resume.createdAt, resume.updatedAt],
+      `INSERT INTO resumes (id, title, template_id, accent, language, data_json, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [resume.id, resume.title, resume.templateId, resume.accent, resume.language, JSON.stringify(resume.data), resume.createdAt, resume.updatedAt],
     );
   }
 
   async save(resume: StoredResume): Promise<boolean> {
     const result = await this.db.run(
-      `UPDATE resumes SET title = ?, template_id = ?, accent = ?, data_json = ?, updated_at = ? WHERE id = ?`,
-      [resume.title, resume.templateId, resume.accent, JSON.stringify(resume.data), resume.updatedAt, resume.id],
+      `UPDATE resumes SET title = ?, template_id = ?, accent = ?, language = ?, data_json = ?, updated_at = ? WHERE id = ?`,
+      [resume.title, resume.templateId, resume.accent, resume.language, JSON.stringify(resume.data), resume.updatedAt, resume.id],
     );
     return result.changes > 0;
   }

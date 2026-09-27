@@ -13,7 +13,8 @@ import { EDITOR_SECTIONS } from '../domain/resume/sections';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyResume, type ResumeData } from '../domain/resume/types';
 import { TEMPLATES } from '../domain/templates/templates';
-import { ATS_COPY, countsLine, STATUS_LABELS } from '../features/ats/ats-copy';
+import { en } from '../i18n/messages/en';
+import { createTranslator } from '../i18n/translate';
 import { pdfHtml } from '../services/export/file-export-platform';
 import { EDGE, STRONG, WEAK } from './fixtures/ats-corpus';
 
@@ -22,7 +23,7 @@ const read = (path: string) => readFileSync(join(SRC, path), 'utf8');
 /** Template without letter-spacing, so template-text findings do not mix into rule tests. */
 const PLAIN = 'tech-architect';
 
-const report = (data: ResumeData, templateId = PLAIN) => checkAtsReadability(data, templateId);
+const report = (data: ResumeData, templateId = PLAIN) => checkAtsReadability(data, templateId, 'en');
 const findingsOf = (rule: AtsRuleId, data: ResumeData, templateId = PLAIN) =>
   report(data, templateId).checks.find((c) => c.rule === rule)!.findings;
 const messages = (rule: AtsRuleId, data: ResumeData) => findingsOf(rule, data).map((f) => `${f.status}: ${f.message}`);
@@ -112,7 +113,7 @@ describe('template text (letter-spacing)', () => {
       'academic-researcher', 'academic-scholar', 'corporate-boardroom', 'corporate-partner', 'creative-editorial',
       'healthcare-educator', 'tech-builder', 'trades-foreman', 'trades-operator',
     ]);
-    const message = (id: string) => templateTextCheck({ data: base, template: TEMPLATES.find((t) => t.id === id)!, tracking: OLD }).findings[0].message;
+    const message = (id: string) => templateTextCheck({ data: base, template: TEMPLATES.find((t) => t.id === id)!, language: 'en', tracking: OLD }).findings[0].message;
     expect(message('trades-foreman')).toMatch(/letter-spaced name and section headings/);
     expect(message('corporate-boardroom')).toMatch(/letter-spaced name can/);
     expect(message('tech-builder')).toMatch(/letter-spaced section headings can/);
@@ -363,17 +364,24 @@ describe('properties', () => {
   it('has no score, percentage or pass/fail claim', () => {
     for (const data of inputs.slice(0, 40)) {
       const r = report(data);
-      expect(Object.keys(r).sort()).toEqual(['checks', 'detected', 'templateId']);
+      expect(Object.keys(r).sort()).toEqual(['checks', 'detected', 'support', 'templateId']);
+      expect(r.support).toEqual({ kind: 'native', language: 'en' });
       const text = JSON.stringify(r);
       expect(text).not.toMatch(/"score"|compatib|guarantee|will pass|\bpass(es)? ATS/i);
     }
-    const copy = JSON.stringify({ ATS_COPY, STATUS_LABELS });
+    const copy = JSON.stringify(en.ats);
     expect(copy).not.toMatch(/\d+ ?%|will pass|guaranteed|compatible/i);
-    expect(ATS_COPY.disclaimer).toContain('no ATS guarantee is implied');
-    expect(Object.values(STATUS_LABELS)).toEqual(['Readable', 'Check this', 'Potential issue']);
-    expect(countsLine(0, 0)).toBe('No issues detected.');
-    expect(countsLine(1, 2)).toBe('1 potential issue · 2 to check');
-    expect(countsLine(2, 0)).toBe('2 potential issues');
+    expect(en.ats.disclaimer).toContain('no ATS guarantee is implied');
+    expect(Object.values(en.ats.status)).toEqual(['Readable', 'Check this', 'Potential issue']);
+    // The counts line as AtsTool builds it from the catalog.
+    const { t } = createTranslator('en');
+    const counts = (issues: number, checks: number) =>
+      !issues && !checks
+        ? t('ats.allReadable')
+        : [issues ? t('ats.issues', { count: issues }) : null, checks ? t('ats.toCheck', { count: checks }) : null].filter(Boolean).join(t('ats.separator'));
+    expect(counts(0, 0)).toBe('No issues detected.');
+    expect(counts(1, 2)).toBe('1 potential issue · 2 to check');
+    expect(counts(2, 0)).toBe('2 potential issues');
   });
 });
 
@@ -382,7 +390,7 @@ describe('properties', () => {
 describe('template claims match the DOCX export', () => {
   it('headings and name are whole words in DOCX; no page header, footer or table', async () => {
     for (const t of TEMPLATES) {
-      const zip = await JSZip.loadAsync(Buffer.from(await buildResumeDocxBase64({ data: base, accent: t.defaultAccent, templateName: t.name }), 'base64'));
+      const zip = await JSZip.loadAsync(Buffer.from(await buildResumeDocxBase64({ data: base, accent: t.defaultAccent, templateName: t.id, language: 'en' }), 'base64'));
       const names = Object.keys(zip.files);
       expect(names.filter((n) => /word\/(header|footer)\d*\.xml/.test(n)), t.id).toEqual([]);
       const xml = await zip.file('word/document.xml')!.async('string');
@@ -411,7 +419,7 @@ describe.skipIf(!existsSync(CHROMIUM))('template claims match a real PDF (Chromi
 
   async function pdfText(templateId: string): Promise<string> {
     const t = TEMPLATES.find((x) => x.id === templateId)!;
-    await page.setContent(pdfHtml({ id: 'r', title: 't', templateId, accent: t.defaultAccent, data: base, createdAt: 1, updatedAt: 1 }, 'letter'));
+    await page.setContent(pdfHtml({ id: 'r', title: 't', templateId, accent: t.defaultAccent, language: 'en', data: base, createdAt: 1, updatedAt: 1 }, 'letter'));
     const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const doc = await pdfjs.getDocument({ data: new Uint8Array(pdf) }).promise;
@@ -462,8 +470,14 @@ const valueSpecs = (source: string) => [...source.matchAll(/^import\s+(?!type\s)
 describe('architecture', () => {
   it('domain/ats is pure: only domain imports', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'ats'))) {
-      // Pure domain only; the renderer is read for its tracking constants (step 9a).
-      for (const spec of specs(read(relative(SRC, file)))) expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$|^\.\.\/render\/render-html$/);
+      // Pure domain only; the renderer is read for its tracking constants (step 9a); the
+      // language contract, labels and typography say what the export contains per resume
+      // language; the English rule pack names templates with the English catalog text.
+      for (const spec of specs(read(relative(SRC, file)))) {
+        expect(spec, relative(SRC, file)).toMatch(
+          /^\.\/[\w-]+$|^\.\.\/(resume|templates)\/[\w-]+$|^\.\.\/render\/render-html$|^\.\.\/i18n\/(analysis-support|languages|resume-labels|typography)$|^\.\.\/\.\.\/i18n\/messages\/en$/,
+        );
+      }
     }
   });
 
@@ -481,8 +495,8 @@ describe('architecture', () => {
       .map((f) => relative(SRC, f));
     expect(users).toEqual([join('features', 'ats', 'AtsTool.tsx')]);
     const tools = read('features/tools/ToolsScreen.tsx');
-    expect(tools).toMatch(/\['check', 'Check'\],\s*\['ats', 'ATS'\],/);
-    expect(tools).toMatch(/<AtsTool data=\{resume\.data\} templateId=\{resume\.templateId\}/);
+    expect(tools).toMatch(/\['check', 'ats', 'match', 'letter'\]/);
+    expect(tools).toMatch(/<AtsTool data=\{resume\.data\} templateId=\{resume\.templateId\} language=\{resume\.language\}/);
     expect(read('domain/check/resume-score.ts')).not.toMatch(/ats\//);
     expect(read('features/check/CheckTool.tsx')).not.toMatch(/Ats|ats\//);
   });

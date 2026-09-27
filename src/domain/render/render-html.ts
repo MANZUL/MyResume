@@ -1,3 +1,6 @@
+import type { Language } from '../i18n/languages';
+import { resumeLabels, type ResumeLabels } from '../i18n/resume-labels';
+import { ARABIC_FONT_FAMILIES, typographyFor, type Typography } from '../i18n/typography';
 import { normalizeResumeData } from '../resume/normalize';
 import { getTemplate, type TemplateConfig } from '../templates/templates';
 import { escapeHtml, isHexColor, tintHex } from '../shared/text';
@@ -45,17 +48,30 @@ const RULE_PX = 8;
  * above the content (so no screenshot crop is clean) at low opacity (so the
  * resume stays readable). It exists only in preview mode, never in a PDF.
  */
-const WATERMARK_TILE =
-  "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='190'>" +
-  "<text x='150' y='95' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30 150 95)' " +
-  "font-family='Helvetica, Arial, sans-serif' font-size='46' font-weight='700' letter-spacing='6' " +
-  "fill='#111111' fill-opacity='0.08'>PREVIEW</text></svg>";
-export const WATERMARK_TILE_URL = `data:image/svg+xml,${encodeURIComponent(WATERMARK_TILE)}`;
+function watermarkTileUrl(label: string, typography: Typography): string {
+  const latin = typography.script === 'latin';
+  const tile =
+    "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='190'>" +
+    "<text x='150' y='95' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30 150 95)' " +
+    (typography.direction === 'rtl' ? "direction='rtl' " : '') +
+    `font-family='${latin ? 'Helvetica, Arial, sans-serif' : `${ARABIC_FONT_FAMILIES.replace(/'/g, '')}, sans-serif`}' ` +
+    `font-size='46' font-weight='700' letter-spacing='${typography.letterSpacing ? 6 : 0}' ` +
+    `fill='#111111' fill-opacity='0.08'>${escapeHtml(label)}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(tile)}`;
+}
+
+/** The English watermark tile (the resume-language tile is built per render). */
+export const WATERMARK_TILE_URL = watermarkTileUrl(resumeLabels('en').previewWatermark, typographyFor('en'));
 
 export interface RenderOptions {
   templateId: string;
   accent: string;
   mode: RenderMode;
+  /**
+   * The resume's own language (not the app language). It selects the document labels,
+   * the text direction (dir/lang on the page) and the typography rules.
+   */
+  language: Language;
   /**
    * Adds the repeating "PREVIEW" watermark. Honored only in preview mode; a PDF is
    * never watermarked. Decided by PreviewService, not by screens.
@@ -63,6 +79,16 @@ export interface RenderOptions {
   watermark?: boolean;
   /** Page size for the preview sheet and the PDF. Defaults to US Letter. */
   paper?: PaperSize;
+}
+
+/** Per-document language context: labels, direction and typography. */
+interface DocContext {
+  labels: ResumeLabels;
+  typography: Typography;
+}
+
+function docContext(language: Language): DocContext {
+  return { labels: resumeLabels(language), typography: typographyFor(language) };
 }
 
 const e = escapeHtml;
@@ -76,11 +102,16 @@ export function renderResumeHtml(input: ResumeData, options: RenderOptions): str
   const paper: PaperSize = options.paper === 'a4' ? 'a4' : 'letter';
   const preview = options.mode === 'preview';
   const watermark = preview && options.watermark === true;
+  const doc = docContext(options.language);
+  const { typography } = doc;
 
   const css = [
     `/*shared*/${sharedCss(config, accent)}/*/shared*/`,
     `/*geometry*/${geometryCss(options.mode, paper)}/*/geometry*/`,
-    watermark ? `/*watermark*/${WATERMARK_CSS}/*/watermark*/` : '',
+    watermark ? `/*watermark*/${watermarkCss(watermarkTileUrl(doc.labels.previewWatermark, typography))}/*/watermark*/` : '',
+    // Only for non-Latin scripts and right-to-left documents; Latin LTR output is unchanged.
+    ...(typography.script !== 'latin' ? [`/*script*/${scriptCss(config)}/*/script*/`] : []),
+    ...(typography.direction === 'rtl' ? [`/*rtl*/${RTL_CSS}/*/rtl*/`] : []),
   ].join('\n');
 
   // Preview: a fixed-width viewport (page + gutter) makes iOS and Android WebViews
@@ -88,13 +119,15 @@ export function renderResumeHtml(input: ResumeData, options: RenderOptions): str
   const viewport = preview ? '<meta name="viewport" content="width=848, maximum-scale=4">' : '';
   const overlay = watermark ? '<div class="watermark" aria-hidden="true"></div>' : '';
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">${viewport}<title>${e(data.name || 'Resume')}</title><style>${css}</style></head><body${
+  return `<!DOCTYPE html><html lang="${options.language}" dir="${typography.direction}"><head><meta charset="utf-8">${viewport}<title>${e(data.name || doc.labels.resume)}</title><style>${css}</style></head><body${
     preview ? ' style="padding:16px"' : ''
-  }><div class="page"><!--content-->${renderContent(data, config)}<!--/content-->${overlay}</div></body></html>`;
+  }><div class="page"><!--content-->${renderContent(data, config, options.language)}<!--/content-->${overlay}</div></body></html>`;
 }
 
 /** Everything inside the page margins. Identical in the preview and the PDF. */
-export function renderContent(data: ResumeData, config: TemplateConfig): string {
+export function renderContent(data: ResumeData, config: TemplateConfig, language: Language): string {
+  const doc = docContext(language);
+  const { labels } = doc;
   const parts: string[] = [];
   const markClass =
     config.decorativeMark === 'quarter-circle' ? ' has-qc' : config.decorativeMark === 'rule' ? ' has-rule' : '';
@@ -103,23 +136,23 @@ export function renderContent(data: ResumeData, config: TemplateConfig): string 
   if (config.decorativeMark === 'rule') parts.push('<div class="mark-rule" aria-hidden="true"></div>');
 
   parts.push('<div class="stack">');
-  parts.push(renderHeader(data, config));
+  parts.push(renderHeader(data, config, doc));
   const summaryBullets = nonEmpty(data.summary.bullets);
   const skills = nonEmpty(data.summary.skills);
   if (data.summary.tagline.trim() || summaryBullets.length || skills.length) {
     parts.push(
-      section('Summary', config, [
+      section(labels.summary, config, [
         data.summary.tagline.trim() ? `<p class="italic" style="font-size:11pt;font-weight:500">${e(data.summary.tagline)}</p>` : '',
         list(summaryBullets),
-        skills.length ? `<div style="margin-top:4px">${renderSkills(skills, config)}</div>` : '',
+        skills.length ? `<div style="margin-top:4px">${renderSkills(skills, config, doc)}</div>` : '',
       ].join('')),
     );
   }
 
   if (data.experience.length) {
     parts.push(
-      section('Experience', config, `<div class="entries">${data.experience.map((exp) => {
-        const dates = [exp.start, exp.end].filter((v) => v.trim()).map(e).join(' – ');
+      section(labels.experience, config, `<div class="entries">${data.experience.map((exp) => {
+        const dates = [exp.start, exp.end].filter((v) => v.trim()).map((v) => isolate(doc, v)).join(' – ');
         const titleWeight = config.jobTitleWeight === 'bold' ? 700 : 600;
         const where = [exp.company, exp.location].filter((v) => v.trim()).map(e).join(', ');
         return `<div class="entry">
@@ -139,9 +172,9 @@ export function renderContent(data: ResumeData, config: TemplateConfig): string 
 
   if (data.education.length) {
     parts.push(
-      section('Education', config, `<div class="entries">${data.education.map((edu) => `
+      section(labels.education, config, `<div class="entries">${data.education.map((edu) => `
         <div class="entry">
-          <div class="row"><span style="font-weight:700;font-size:10.5pt">${e(edu.degree)}</span><span class="date">${e(edu.date)}</span></div>
+          <div class="row"><span style="font-weight:700;font-size:10.5pt">${e(edu.degree)}</span><span class="date">${isolate(doc, edu.date)}</span></div>
           <div>${[edu.school, edu.location].filter((v) => v.trim()).map(e).join(', ')}</div>
           ${edu.honors.trim() ? `<p class="italic small soft">${e(edu.honors)}</p>` : ''}
         </div>`).join('')}</div>`),
@@ -150,17 +183,17 @@ export function renderContent(data: ResumeData, config: TemplateConfig): string 
 
   if (data.certifications.length) {
     parts.push(
-      section('Certifications', config, `<div class="entries" style="gap:6px">${data.certifications.map((cert) => `
+      section(labels.certifications, config, `<div class="entries" style="gap:6px">${data.certifications.map((cert) => `
         <div class="row">
           <span style="font-weight:500">${e(cert.name)}${cert.org.trim() ? ` <span class="soft" style="font-weight:400">— ${e(cert.org)}</span>` : ''}</span>
-          <span class="date">${e(cert.date)}</span>
+          <span class="date">${isolate(doc, cert.date)}</span>
         </div>`).join('')}</div>`),
     );
   }
 
   if (data.projects.length) {
     parts.push(
-      section('Projects', config, `<div class="entries">${data.projects.map((project) => `
+      section(labels.projects, config, `<div class="entries">${data.projects.map((project) => `
         <div class="entry">
           <span style="font-weight:700;font-size:10.5pt">${e(project.name)}</span>
           ${project.description.trim() ? `<p class="italic small muted">${e(project.description)}</p>` : ''}
@@ -170,7 +203,7 @@ export function renderContent(data: ResumeData, config: TemplateConfig): string 
   }
 
   const awards = nonEmpty(data.awards);
-  if (awards.length) parts.push(section('Awards', config, list(awards)));
+  if (awards.length) parts.push(section(labels.awards, config, list(awards)));
 
   parts.push('</div>');
   parts.push('</div>');
@@ -244,39 +277,90 @@ function geometryCss(mode: RenderMode, paper: PaperSize): string {
   `;
 }
 
-const WATERMARK_CSS = `
+const watermarkCss = (tileUrl: string) => `
     .watermark {
       position: absolute; inset: 0; z-index: 5; pointer-events: none;
-      background-image: url("${WATERMARK_TILE_URL}"); background-repeat: repeat; background-size: 300px 190px;
+      background-image: url("${tileUrl}"); background-repeat: repeat; background-size: 300px 190px;
     }
     .content { -webkit-user-select: none; user-select: none; }
   `;
 
-function renderHeader(data: ResumeData, config: TemplateConfig): string {
-  const contact = contactParts(data);
+/**
+ * Non-Latin scripts (Arabic): no template uppercase, small caps or tracking (they break
+ * cursive joins and do not exist in the script), and a named Arabic font ahead of each
+ * template font. `!important` also overrides the inline name tracking.
+ */
+function scriptCss(config: TemplateConfig): string {
+  const arabicFirst = (kind: 'serif' | 'sans') => `${ARABIC_FONT_FAMILIES}, ${kind === 'serif' ? SERIF : SANS}`;
+  return `
+    .upper, h1, h2 { text-transform: none !important; }
+    h1, h2, .h-banner, .h-underline, .h-small-caps, .h-small-caps-rule, .h-plain { letter-spacing: 0 !important; font-variant: normal !important; }
+    .content { font-family: ${arabicFirst(config.fontBody)}; }
+    h1 { font-family: ${arabicFirst(config.fontName)}; }
+    h2 { font-family: ${arabicFirst(config.fontHeadings)}; }
+  `;
+}
+
+/**
+ * Right-to-left documents. Reading-order properties follow the direction (list indent,
+ * pill spacing; flex rows and start/end text alignment follow dir="rtl" by themselves, so
+ * dates sit at the end of their row). Decorative marks are NOT mirrored: they are part of
+ * each template's identity and keep their reserved band, which never overlaps text.
+ */
+const RTL_CSS = `
+    ul { padding-left: 0; padding-right: 18px; }
+    .pill { margin: 0 0 4px 4px; }
+  `;
+
+/**
+ * Text whose direction can differ from the document's (dates, skills, contact parts) is
+ * isolated in a right-to-left document, so its punctuation and digits keep their order.
+ * `dir` forces a direction for strings that are always left-to-right (email, URL, phone).
+ * Left-to-right documents are rendered exactly as before.
+ */
+function isolate(doc: DocContext, text: string, dir?: 'ltr'): string {
+  if (doc.typography.direction === 'ltr') return e(text);
+  return `<bdi${dir ? ` dir="${dir}"` : ''}>${e(text)}</bdi>`;
+}
+
+/** The start and end sides of a line in this document's direction. */
+const startSide = (doc: DocContext) => (doc.typography.direction === 'rtl' ? 'right' : 'left');
+const endSide = (doc: DocContext) => (doc.typography.direction === 'rtl' ? 'left' : 'right');
+
+function renderHeader(data: ResumeData, config: TemplateConfig, doc: DocContext): string {
+  const contact = contactParts(data, doc);
   const upper = config.nameCase === 'uppercase';
   if (config.nameAlign === 'split') {
     return `<header class="row" style="border-bottom:1px solid var(--accent);padding-bottom:8px">
       <h1 style="color:var(--accent);${upper ? 'text-transform:uppercase;' : ''}">${e(data.name)}</h1>
-      <div style="text-align:right;font-size:8.5pt;display:flex;flex-direction:column;gap:1px">${contact.map((p) => `<span>${e(p)}</span>`).join('')}</div>
+      <div style="text-align:${endSide(doc)};font-size:8.5pt;display:flex;flex-direction:column;gap:1px">${contact.map((p) => `<span>${p}</span>`).join('')}</div>
     </header>`;
   }
-  const align = config.nameAlign === 'center' ? 'center' : 'left';
+  const align = config.nameAlign === 'center' ? 'center' : startSide(doc);
   const rule = config.id === 'corporate-partner' || config.id === 'healthcare-educator'
     ? '<div style="height:1px;background:var(--accent);margin-bottom:6px"></div>'
     : '';
   return `<header style="text-align:${align}">
     <h1 style="${upper ? `text-transform:uppercase;letter-spacing:${NAME_TRACKING_EM}em;` : ''}">${e(data.name)}</h1>
     ${rule}
-    <div style="font-size:9.5pt;text-align:${config.contactAlign === 'center' ? 'center' : 'left'}">${contact.map(e).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>
+    <div style="font-size:9.5pt;text-align:${config.contactAlign === 'center' ? 'center' : startSide(doc)}">${contact.join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>
   </header>`;
 }
 
-function contactParts(data: ResumeData): string[] {
+/** Contact parts as escaped HTML; phone, email and links are always left-to-right. */
+function contactParts(data: ResumeData, doc: DocContext): string[] {
   const c = data.contact;
-  return [c.phone, c.email, c.location, c.linkedin.replace(/^https?:\/\//, ''), c.website.replace(/^https?:\/\//, '')]
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const parts: [string, 'ltr' | undefined][] = [
+    [c.phone, 'ltr'],
+    [c.email, 'ltr'],
+    [c.location, undefined],
+    [c.linkedin.replace(/^https?:\/\//, ''), 'ltr'],
+    [c.website.replace(/^https?:\/\//, ''), 'ltr'],
+  ];
+  return parts
+    .map(([value, dir]) => [value.trim(), dir] as const)
+    .filter(([value]) => value)
+    .map(([value, dir]) => isolate(doc, value, dir));
 }
 
 function section(title: string, config: TemplateConfig, body: string): string {
@@ -289,15 +373,16 @@ function list(items: string[]): string {
   return `<ul>${items.map((item) => `<li>${e(item)}</li>`).join('')}</ul>`;
 }
 
-function renderSkills(skills: string[], config: TemplateConfig): string {
+function renderSkills(skills: string[], config: TemplateConfig, doc: DocContext): string {
+  const items = skills.map((skill) => isolate(doc, skill));
   switch (config.skillsStyle) {
     case 'dash':
-      return `<span class="small" style="font-weight:500">${skills.map(e).join(' - ')}</span>`;
+      return `<span class="small" style="font-weight:500">${items.join(' - ')}</span>`;
     case 'comma':
-      return `<span class="small">${skills.map(e).join(', ')}</span>`;
+      return `<span class="small">${items.join(', ')}</span>`;
     case 'mono':
-      return `<span style="font-size:8.5pt;font-family:${MONO};color:#444">${skills.map(e).join(' • ')}</span>`;
+      return `<span style="font-size:8.5pt;font-family:${MONO};color:#444">${items.join(' • ')}</span>`;
     case 'pills':
-      return `<div>${skills.map((s) => `<span class="pill">${e(s)}</span>`).join('')}</div>`;
+      return `<div>${items.map((s) => `<span class="pill">${s}</span>`).join('')}</div>`;
   }
 }

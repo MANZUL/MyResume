@@ -7,6 +7,8 @@ import { Button, colors, Muted } from '../../ui/components';
 import { templateSampleHtml } from '../../domain/templates/sample-preview';
 import { findTemplate } from '../../domain/templates/templates';
 import { CategoryTag } from './TemplateCard';
+import { templateText } from '../../i18n/templates';
+import { useT } from '../../services/i18n/localization';
 import { useCreateFromTemplate } from './use-create-from-template';
 
 /** Large template preview: the sample resume through the existing renderer (no watermark). */
@@ -16,19 +18,21 @@ export default function TemplatePreviewScreen() {
   const html = useMemo(() => (template ? templateSampleHtml(template.id) : ''), [template]);
   const startFromTemplate = useCreateFromTemplate();
   const insets = useSafeAreaInsets();
+  const t = useT();
 
   if (!template) {
     return (
       <View style={{ flex: 1, padding: 24, gap: 16, justifyContent: 'center' }}>
-        <Muted>This template is not available.</Muted>
-        <Button title="Browse templates" onPress={() => router.replace('/templates')} />
+        <Muted>{t('templatePreview.notAvailable')}</Muted>
+        <Button title={t('templatePreview.browse')} onPress={() => router.replace('/templates')} />
       </View>
     );
   }
 
+  const text = templateText(t, template.id);
   return (
     <View style={{ flex: 1 }}>
-      <Stack.Screen options={{ title: template.name }} />
+      <Stack.Screen options={{ title: text.name }} />
       <WebView
         originWhitelist={['about:blank']}
         source={{ html }}
@@ -39,7 +43,7 @@ export default function TemplatePreviewScreen() {
         allowFileAccess={false}
         setSupportMultipleWindows={false}
         textInteractionEnabled={false}
-        accessibilityLabel={`${template.name} template preview with sample content`}
+        accessibilityLabel={t('templatePreview.a11y', { name: text.name })}
       />
       <View
         style={{
@@ -53,12 +57,12 @@ export default function TemplatePreviewScreen() {
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>{template.name}</Text>
-          <CategoryTag label={template.category} />
+          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>{text.name}</Text>
+          <CategoryTag label={text.category} />
         </View>
-        <Muted>{template.description}</Muted>
-        <Muted>Shown with sample content. Your resume starts blank.</Muted>
-        <Button title="Use this template" onPress={() => startFromTemplate(template.id)} style={{ marginTop: 4 }} />
+        <Muted>{text.description}</Muted>
+        <Muted>{t('templatePreview.sampleNote')}</Muted>
+        <Button title={t('templatePreview.use')} onPress={() => startFromTemplate(template.id)} style={{ marginTop: 4 }} />
       </View>
     </View>
   );

@@ -170,7 +170,7 @@ describe('resume library on SQLite (edits survive navigation, restart, terminati
     await db.close();
 
     const second = await boot();
-    expect(second.get(r.id)).toMatchObject({ templateId: 'healthcare-educator', accent: '#0F766E', data: SAMPLE_RESUME });
+    expect(second.get(r.id)).toMatchObject({ templateId: 'healthcare-educator', accent: '#0F766E', language: 'en', data: SAMPLE_RESUME });
     expect(second.getActiveId()).toBe(r.id);
   });
 
@@ -223,7 +223,7 @@ describe('resume library on SQLite (edits survive navigation, restart, terminati
 describe('export records are written after the access decision, never used for it', () => {
   // Ported from Step 2: the old runRecordedExport(…, access, …) took a caller-supplied
   // decision; the ExportService now asks EntitlementService itself (Step 3).
-  const resumeRecord = { id: 'r1', title: 'T', templateId: 'tech-builder', accent: '#000000', data: emptyResume(), createdAt: 1, updatedAt: 1 };
+  const resumeRecord = { id: 'r1', title: 'T', templateId: 'tech-builder', accent: '#000000', language: 'en' as const, data: emptyResume(), createdAt: 1, updatedAt: 1 };
   const NOW = 1_700_000_000_000;
 
   const exporter = (premium: boolean, platform: Partial<ExportPlatform>, records: unknown) => {

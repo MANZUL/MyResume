@@ -4,16 +4,7 @@
 export const EDITOR_SECTIONS = ['personal', 'summary', 'experience', 'education', 'certifications', 'projects', 'awards'] as const;
 export type EditorSection = (typeof EDITOR_SECTIONS)[number];
 
-/** Section titles as in the web editor (spec parity). */
-export const SECTION_TITLES: Record<EditorSection, string> = {
-  personal: 'Personal Information',
-  summary: 'Summary & Skills',
-  experience: 'Experience',
-  education: 'Education',
-  certifications: 'Certifications',
-  projects: 'Projects',
-  awards: 'Awards',
-};
+// Section titles are app UI text: "editor.sections.<id>" in the app catalog (src/i18n).
 
 /**
  * Reads the `section` route parameter. Only the seven known section ids are accepted;

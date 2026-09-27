@@ -1,4 +1,7 @@
 import { HEADING_TRACKING_EM, NAME_TRACKING_EM } from '../render/render-html';
+import type { Language } from '../i18n/languages';
+import { resumeLabels } from '../i18n/resume-labels';
+import { typographyFor } from '../i18n/typography';
 import type { TemplateConfig } from '../templates/templates';
 
 // What the renderer does with each template that matters to a parser. These are
@@ -36,5 +39,15 @@ export function templateTextFacts(config: TemplateConfig, tracking: Tracking = R
   };
 }
 
-/** Headings the renderer and the DOCX generator use (fixed text; users cannot rename them). */
-export const RENDERED_HEADINGS = ['Summary', 'Experience', 'Education', 'Certifications', 'Projects', 'Awards'] as const;
+/** The tracking the renderer actually applies for a resume language (none for Arabic). */
+export function trackingFor(language: Language): Tracking {
+  if (typographyFor(language).letterSpacing) return RENDERER_TRACKING;
+  const none = Object.fromEntries(Object.keys(HEADING_TRACKING_EM).map((k) => [k, 0])) as Tracking['headings'];
+  return { headings: none, name: 0 };
+}
+
+/** Headings the renderer and the DOCX generator write for a resume language (fixed text; users cannot rename them). */
+export function renderedHeadings(language: Language): string[] {
+  const labels = resumeLabels(language);
+  return [labels.summary, labels.experience, labels.education, labels.certifications, labels.projects, labels.awards];
+}

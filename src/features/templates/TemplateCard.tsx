@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { Image, Pressable, Text, View, type ViewStyle } from 'react-native';
 import { Button, colors } from '../../ui/components';
+import { templateText } from '../../i18n/templates';
+import { useT } from '../../services/i18n/localization';
 import type { TemplateConfig } from '../../domain/templates/templates';
 import { THUMBNAIL_ASPECT, thumbnailFor } from './thumbnails';
 import { templateHref } from './use-create-from-template';
@@ -36,9 +38,10 @@ export function CategoryTag({ label }: { label: string }) {
 
 /** Every template's text layer is machine-readable (checked by the ATS Readability tests). */
 export function AtsReadyBadge() {
+  const t = useT();
   return (
     <View style={{ alignSelf: 'flex-start', backgroundColor: '#E6F2EA', borderWidth: 1, borderColor: '#CFE6D7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.success, textTransform: 'uppercase' }}>ATS Ready</Text>
+      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.success, textTransform: 'uppercase' }}>{t('gallery.atsReady')}</Text>
     </View>
   );
 }
@@ -50,11 +53,13 @@ export function AtsReadyBadge() {
  * row stretch to the same height, so their buttons line up.
  */
 export function TemplateCard({ template, onUse }: { template: TemplateConfig; onUse: (templateId: string) => void }) {
+  const t = useT();
+  const text = templateText(t, template.id);
   return (
     <View style={{ flex: 1, gap: 12, justifyContent: 'space-between' }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${template.name}, ${template.category}. Opens a larger preview.`}
+        accessibilityLabel={t('gallery.cardA11y', { name: text.name, category: text.category })}
         onPress={() => router.push(templateHref(template.id))}
         style={({ pressed }) => [{ gap: 8 }, pressed && { opacity: 0.8 }]}
       >
@@ -66,17 +71,17 @@ export function TemplateCard({ template, onUse }: { template: TemplateConfig; on
         </View>
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }} numberOfLines={1}>
-            {template.name}
+            {text.name}
           </Text>
-          <CategoryTag label={template.category} />
+          <CategoryTag label={text.category} />
         </View>
       </Pressable>
       <Button
-        title="Use template"
+        title={t('gallery.useTemplate')}
         variant="secondary"
         fit
         style={{ minHeight: 40, paddingHorizontal: 12 }}
-        accessibilityHint={`Creates a new resume with ${template.name}`}
+        accessibilityHint={t('gallery.useTemplateHint', { name: text.name })}
         onPress={() => onUse(template.id)}
       />
     </View>

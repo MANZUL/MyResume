@@ -1,10 +1,14 @@
+// The 12 templates are defined once. Display text (name, short name, description,
+// category name) is not part of a definition: it is localized by id in the app catalog
+// (src/i18n/messages, "templates.<id>.*"), so every language shows the same 12 templates.
+
 export type TemplateCategory = 'Corporate' | 'Tech' | 'Creative' | 'Healthcare' | 'Academic' | 'Trades';
 
 export type TemplateConfig = {
+  /** Stable id: stored with each resume and shared by every language. */
   id: string;
-  name: string;
+  /** Stable category id; its display name is localized. */
   category: TemplateCategory;
-  description: string;
   defaultAccent: string;
   fontBody: 'sans' | 'serif';
   fontHeadings: 'sans' | 'serif';
@@ -25,9 +29,7 @@ export type TemplateConfig = {
 export const TEMPLATES: TemplateConfig[] = [
   {
     id: 'corporate-boardroom',
-    name: 'The Boardroom',
     category: 'Corporate',
-    description: 'Classic executive presentation with a commanding presence.',
     defaultAccent: '#1B2B47',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -45,9 +47,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'corporate-partner',
-    name: 'The Partner',
     category: 'Corporate',
-    description: 'Understated elegance for legal and financial professionals.',
     defaultAccent: '#1B2B47',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -66,9 +66,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'tech-builder',
-    name: 'The Builder',
     category: 'Tech',
-    description: 'Clean, dense, and structured for engineering roles.',
     defaultAccent: '#3B5168',
     fontBody: 'sans',
     fontHeadings: 'sans',
@@ -87,9 +85,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'tech-architect',
-    name: 'The Architect',
     category: 'Tech',
-    description: 'Modern and pill-based styling for full-stack developers.',
     defaultAccent: '#3B5168',
     fontBody: 'sans',
     fontHeadings: 'sans',
@@ -107,9 +103,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'creative-editorial',
-    name: 'The Editorial',
     category: 'Creative',
-    description: 'Asymmetric layout resembling a magazine masthead.',
     defaultAccent: '#A85432',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -127,9 +121,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'creative-studio',
-    name: 'The Studio',
     category: 'Creative',
-    description: 'Generous leading and soft colors for designers.',
     defaultAccent: '#6B7F5C',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -147,9 +139,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'healthcare-practitioner',
-    name: 'The Practitioner',
     category: 'Healthcare',
-    description: 'Reference-style layout for clinicians and specialists.',
     defaultAccent: '#2A6B6E',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -167,9 +157,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'healthcare-educator',
-    name: 'The Educator',
     category: 'Healthcare',
-    description: 'Compact format for academics and medical educators.',
     defaultAccent: '#2A6B6E',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -188,9 +176,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'academic-scholar',
-    name: 'The Scholar',
     category: 'Academic',
-    description: 'Formal and traditional CV styling.',
     defaultAccent: '#6B2737',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -208,9 +194,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'academic-researcher',
-    name: 'The Researcher',
     category: 'Academic',
-    description: 'High-density CV for publications and grants.',
     defaultAccent: '#6B2737',
     fontBody: 'serif',
     fontHeadings: 'serif',
@@ -229,9 +213,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'trades-operator',
-    name: 'The Operator',
     category: 'Trades',
-    description: 'Bold headings and strong underlines for field leadership.',
     defaultAccent: '#2D2D2D',
     fontBody: 'sans',
     fontHeadings: 'sans',
@@ -249,9 +231,7 @@ export const TEMPLATES: TemplateConfig[] = [
   },
   {
     id: 'trades-foreman',
-    name: 'The Foreman',
     category: 'Trades',
-    description: 'Clear, centered structure prioritizing licenses and skills.',
     defaultAccent: '#2D2D2D',
     fontBody: 'sans',
     fontHeadings: 'sans',

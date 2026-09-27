@@ -30,7 +30,7 @@ AWARDS
 `;
 
 describe('parseResumeText (offline, no AI)', () => {
-  const parsed = parseResumeText(SAMPLE);
+  const parsed = parseResumeText(SAMPLE, 'en');
 
   it('extracts name and contact details', () => {
     expect(parsed.name).toBe('Jane Doe');
@@ -70,7 +70,7 @@ describe('parseResumeText (offline, no AI)', () => {
   });
 
   it('handles empty input', () => {
-    expect(parseResumeText('').experience).toEqual([]);
+    expect(parseResumeText('', 'en').experience).toEqual([]);
   });
 
   it('recognizes common headings', () => {

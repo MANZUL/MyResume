@@ -1682,6 +1682,70 @@ A PDF text layer splits both into single letters. The checker reported this hone
 
 **Validation:** `tsc` ✅, `expo lint` ✅, 457 passed + 1 skipped generator (422 before; +33 gallery tests, +2 architecture guards) ✅, iOS and Android bundles ✅ (thumbnails included). Gallery and flow on devices: **NOT RUN**.
 
+### 19.11 Localization architecture (owner decision: 5 launch languages)
+
+**Languages:** English (en), German (de), French (fr), Spanish (es), Arabic (ar, right-to-left). No translations yet: every non-English catalog is empty and falls back to English key by key.
+
+**Two separate languages.**
+- **App language** (buttons, menus, messages): the saved choice (`app_settings`), else the device language on first launch (`Intl` locale, primary subtag), else English. Chosen on the new Language screen (Home, header).
+- **Resume language** (`StoredResume.language`): per resume. New resumes take the app language at creation; Try sample is English (its content is English); imports take the app language (never guessed from the text); changed explicitly in the editor. Existing resumes migrate to English.
+
+**App UI strings.**
+- One source: `src/i18n/messages/en.ts`. `de/fr/es/ar` are typed partial copies (`PartialMessages`) that may only use English keys.
+- `createTranslator(language).t(key, params)` handles English fallback per key, CLDR plurals for all five languages (implemented directly, so Hermes and tests agree), `{param}` interpolation with locale number formatting, and FSI/PDI isolation of user text when either side is RTL.
+- `formatNumber`, `formatDate` and `formatCurrency` use Intl with a safe fallback. Store prices stay as the store formats them.
+- The old per-feature English copy modules are removed. A test fails on any hard-coded JSX text, text prop or `Alert.alert` literal in screens, UI components or routes.
+
+**Renderer contract.**
+- `RenderOptions.language` is required.
+- The page gets `lang` and `dir`.
+- Headings, the "Resume" fallback and the watermark text come from `resumeLabels(language)` (`domain/i18n/resume-labels.ts`). The DOCX generator uses the same source.
+- The old DOCX-only headings ("Certifications & Licenses", "Awards & Honors") are replaced by the one canonical set ("Certifications", "Awards").
+- English output is byte-identical to before apart from `lang`/`dir`. A test holds the sha256 of all 96 English renders from 2fa2063.
+
+**Template metadata.**
+- `TemplateConfig` keeps only structure, a stable `id` and a stable `category` id.
+- Name, short name, description and category name are catalog entries under `templates.<id>` / `templates.categories.<id>`.
+- The 12 templates are defined once; there are no per-language variants.
+
+**RTL foundation.**
+- *App layout:* follows the app language through `I18nManager.allowRTL/forceRTL`, which React Native applies after a restart (the Language screen says so). `allowRTL(false)` keeps a Latin-language app LTR on an RTL device. Rows and left/right mirror automatically in an RTL layout.
+- *Resume content fields:* follow the resume language (`contentTextStyle`: writing direction plus physical alignment), independent of the app layout.
+- *Documents (`dir="rtl"`):*
+  - flex rows put dates on the end side, and header alignment uses start/end sides;
+  - the list indent and pill spacing are mirrored;
+  - dates, skills and location are isolated with `<bdi>`; phone, email and links with `<bdi dir="ltr">`;
+  - decorative marks are deliberately not mirrored (template identity; their reserved band never overlaps text).
+- *DOCX:* bidirectional paragraphs, RTL runs and Unicode isolates.
+- *Latin-script documents:* get none of these rules.
+
+**Typography.**
+- `typographyFor(language)`: Arabic has no template uppercase, small caps or letter-spacing (CSS `!important` overrides, also for the inline name tracking). In the watermark tile and in the DOCX, Arabic text gets no case change and no character spacing.
+- Arabic uses an explicit named font stack: Geeza Pro (iOS), Noto Naskh/Sans Arabic (Android).
+- **Font decision (separate validation task).** Bundle an OFL Arabic family (candidates: Noto Naskh Arabic for serif templates, Noto Sans Arabic for sans). Embed it as a base64 `@font-face` in the shared renderer, so preview, PDF (`expo-print`) and image (rasterised from the PDF) use identical glyphs on both platforms. Register the same files with `expo-font` for the app UI, and set it as the DOCX complex-script font. Validate with PDF text extraction (pdf.js) and device prints. Not added in this phase.
+
+**File names.** `fileSafeName` keeps Unicode letters and digits:
+- explicit, engine-independent ranges; NFC; lower case; "-" separators;
+- zero-width and bidi controls removed;
+- at most 60 characters, never empty, never a Windows-reserved name.
+
+So "Zoë Müller" → `zoë-müller.pdf` and "محمد أحمد" → `محمد-أحمد.pdf`. Multi-page images are `<name>-page-N.png`.
+
+**Analysis engines.**
+- `analysisSupport(engine, language)` states per engine and language: `native`, `english-rules` (runs, English rules and output, with a UI note) or `unavailable`.
+- Today every rule pack is English: Score, ATS, Job Match, Cover Letter and Import are `english-rules` for de/fr/es/ar. The Writing Coach is `unavailable` there (no findings; hidden in the editor with one note).
+- Every engine takes the resume language, and every report carries its `support`: `scoreResume(data, language)`, `checkAtsReadability(data, templateId, language)`, `analyzeJobMatch(data, jd, language)`, `buildCoachContext(field, language, siblings)`, `generateCoverLetter(data, language, input)`, `parseResumeText(text, language)`.
+- The ATS reads what the export for that language contains: rendered headings, and no Arabic tracking.
+
+**Migration v4 (additive).**
+- `resumes.language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en','de','fr','es','ar'))`: existing rows become English and keep all data.
+- New `app_settings (key, value, updated_at)` table.
+- `target_jobs` and `export_records` are untouched (tested).
+
+**Not in this phase:** translations, the sample resume in other languages, per-language rule packs, the bundled Arabic font, device RTL validation.
+
+**Validation:** `tsc` ✅, `expo lint` ✅, 500 passed + 1 skipped generator (459 before) ✅, iOS and Android bundles ✅. Devices: **NOT RUN**.
+
 ## 20. Major risks and failure modes
 
 | # | Risk | Impact | Mitigation |

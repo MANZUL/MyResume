@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { scoreResume } from '../domain/check/resume-score';
-import { EDITOR_SECTIONS, parseSectionParam, SECTION_TITLES } from '../domain/resume/sections';
+import { EDITOR_SECTIONS, parseSectionParam } from '../domain/resume/sections';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyCertification, emptyEducation, emptyExperience, emptyProject, emptyResume } from '../domain/resume/types';
-import { CHECK_COPY, improveHref } from '../features/check/improve-link';
-import { EDITOR_COPY } from '../features/editor/editor-copy';
+import { improveHref } from '../features/check/improve-link';
+import { en } from '../i18n/messages/en';
 import { applyKeyOp, applyListOp, syncKeys, type ListOp } from '../ui/entry-keys';
 
 const SRC = join(__dirname, '..');
@@ -17,7 +17,7 @@ const read = (path: string) => readFileSync(join(SRC, path), 'utf8');
 describe('editor sections and the section route parameter', () => {
   it('has the seven editor sections, in editor order, with the web titles', () => {
     expect(EDITOR_SECTIONS).toEqual(['personal', 'summary', 'experience', 'education', 'certifications', 'projects', 'awards']);
-    expect(Object.values(SECTION_TITLES)).toEqual([
+    expect(EDITOR_SECTIONS.map((s) => en.editor.sections[s])).toEqual([
       'Personal Information', 'Summary & Skills', 'Experience', 'Education', 'Certifications', 'Projects', 'Awards',
     ]);
   });
@@ -46,10 +46,11 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
     education: [],
     experience: [{ ...SAMPLE_RESUME.experience[0], bullets: ['did stuff', 'x '.repeat(80), ' '] }],
   };
-  const warnings = (data: Parameters<typeof scoreResume>[0]) => scoreResume(data).warnings.map((w) => `${w.id}→${w.section}`);
+  const warnings = (data: Parameters<typeof scoreResume>[0]) => scoreResume(data, 'en').warnings.map((w) => `${w.id}→${w.section}`);
 
   it('sample resume', () => {
-    expect(scoreResume(SAMPLE_RESUME)).toEqual({
+    expect(scoreResume(SAMPLE_RESUME, 'en')).toEqual({
+      support: { kind: 'native', language: 'en' },
       score: 100,
       strengths: ['Clear contact information', 'Focused summary', 'Experience has useful detail', 'Education section is present', 'Skills are easy to find'],
       warnings: [],
@@ -63,7 +64,7 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
   });
 
   it('empty resume', () => {
-    const result = scoreResume(emptyResume());
+    const result = scoreResume(emptyResume(), 'en');
     expect(result.score).toBe(15);
     expect(result.strengths).toEqual(['ATS-friendly structure']);
     expect(warnings(emptyResume())).toEqual([
@@ -80,7 +81,7 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
   });
 
   it('partial resume (short, long and blank bullets; the blank one exercises the null-safety guard)', () => {
-    const result = scoreResume(partial);
+    const result = scoreResume(partial, 'en');
     expect(result.score).toBe(48);
     expect(warnings(partial)).toEqual([
       'contact→personal', 'summary→summary', 'short-bullets→experience', 'education→education', 'skills→summary', 'action-verbs→experience',
@@ -96,7 +97,7 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
 
   it('every warning points at a real editor section', () => {
     for (const data of [SAMPLE_RESUME, emptyResume(), partial]) {
-      for (const w of scoreResume(data).warnings) expect(EDITOR_SECTIONS).toContain(w.section);
+      for (const w of scoreResume(data, 'en').warnings) expect(EDITOR_SECTIONS).toContain(w.section);
     }
   });
 });
@@ -105,7 +106,7 @@ describe('Resume Score rules are unchanged (golden outputs)', () => {
 
 describe('"Improve" goes back to the editor on the warning\'s section', () => {
   it('builds an editor href whose section parses back to the same section, with a fresh jump token', () => {
-    for (const w of scoreResume(emptyResume()).warnings) {
+    for (const w of scoreResume(emptyResume(), 'en').warnings) {
       const href = improveHref('r1', w.section, 1000);
       expect(href).toEqual({ pathname: '/resume/[id]', params: { id: 'r1', section: w.section, jump: '1000' } });
       expect(parseSectionParam(href.params.section)).toBe(w.section);
@@ -247,7 +248,7 @@ describe('stable keys stay with their entry (UI only)', () => {
 
 describe('web copy parity', () => {
   it('editor labels, placeholders and add labels match the web editor', () => {
-    expect(EDITOR_COPY).toEqual({
+    expect(en.editor.fields).toEqual({
       personal: { name: 'Full Name', email: 'Email', phone: 'Phone', location: 'Location', linkedin: 'LinkedIn', website: 'Website' },
       summary: {
         tagline: 'Tagline (One short line)', bullets: 'Summary Bullets', bulletsPlaceholder: 'Add a concise summary point',
@@ -267,23 +268,27 @@ describe('web copy parity', () => {
     });
   });
 
-  it('the editor takes its labels from that copy (the resume title field is the only mobile-only label)', () => {
+  it('the editor takes its labels from the catalog (the resume title field is the only mobile-only label)', () => {
     const editor = read('features/editor/EditorScreen.tsx');
-    expect(editor.match(/<(Field|StringListEditor)\s+label="[^"]*"/g)).toEqual(['<Field label="Resume title (only you see this)"']);
+    expect(editor).not.toMatch(/<(Field|StringListEditor)[^>]*\slabel="/);
+    expect(en.editor.resumeTitle).toBe('Resume title (only you see this)');
     // Mobile additions are kept.
-    for (const kept of ['Move up', 'Move down', 'placeholder="Mar 2020"', 'placeholder="Present"', 'placeholder="City, State"']) {
-      expect(editor).toContain(kept);
+    expect([en.editor.moveUp, en.editor.moveDown, en.editor.startPlaceholder, en.editor.endPlaceholder, en.editor.locationPlaceholder]).toEqual([
+      'Move up', 'Move down', 'Mar 2020', 'Present', 'City, State',
+    ]);
+    for (const key of ["t('editor.moveUp')", "t('editor.moveDown')", "t('editor.startPlaceholder')", "t('editor.endPlaceholder')", "t('editor.locationPlaceholder')"]) {
+      expect(editor).toContain(key);
     }
   });
 
   it('empty string lists show the web hint', () => {
-    const source = read('ui/components.tsx');
-    expect(source).toContain("export const EMPTY_LIST_HINT = 'Nothing added. Leave this empty if you do not need it.';");
-    expect(source).toMatch(/items\.length === 0 \? <Text style=\{styles\.emptyHint\}>\{EMPTY_LIST_HINT\}<\/Text> : null/);
+    expect(en.editor.emptyList).toBe('Nothing added. Leave this empty if you do not need it.');
+    expect(read('ui/components.tsx')).toMatch(/items\.length === 0 \? <Text style=\{styles\.emptyHint\}>\{emptyHint\}<\/Text> : null/);
+    expect(read('features/editor/EditorScreen.tsx')).toContain("emptyHint: t('editor.emptyList')");
   });
 
   it('Resume Check uses the web headings, "Improve" and the disclaimer', () => {
-    expect(CHECK_COPY).toEqual({
+    expect({ title: en.check.title, working: en.check.working, attention: en.check.attention, improve: en.check.improve, disclaimer: en.check.disclaimer }).toEqual({
       title: 'Resume Score',
       working: 'What is working',
       attention: 'Needs attention',
@@ -293,7 +298,7 @@ describe('web copy parity', () => {
     const check = read('features/check/CheckTool.tsx');
     expect(check).toMatch(/onPress=\{\(\) => onImprove\(w\.section\)\}/);
     // Web order: score, categories, what is working, needs attention, disclaimer.
-    const order = ['CHECK_COPY.title', 'score.categories', 'CHECK_COPY.working', 'CHECK_COPY.attention', 'CHECK_COPY.disclaimer'].map((s) => check.indexOf(s));
+    const order = ["t('check.title')", 'score.categories', "t('check.working')", "t('check.attention')", "t('check.disclaimer')"].map((s) => check.indexOf(s));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });

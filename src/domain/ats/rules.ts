@@ -2,7 +2,9 @@ import type { ResumeData } from '../resume/types';
 import type { TemplateConfig } from '../templates/templates';
 import { isOrdered, parseDateField, type DateStyle, type ParsedDate } from './dates';
 import { textFields, type TextField } from './fields';
-import { RENDERED_HEADINGS, templateTextFacts, type Tracking } from './template-facts';
+import { renderedHeadings, templateTextFacts, trackingFor, type Tracking } from './template-facts';
+import type { Language } from '../i18n/languages';
+import { en as ENGLISH_UI } from '../../i18n/messages/en';
 import type { AtsCheck, AtsDetection, AtsFinding, AtsLocation, AtsRuleId, AtsStatus } from './types';
 
 // Ten deterministic checks. Each is conservative: it reports only what the data (or
@@ -11,11 +13,20 @@ import type { AtsCheck, AtsDetection, AtsFinding, AtsLocation, AtsRuleId, AtsSta
 export interface AtsInput {
   data: ResumeData;
   template: TemplateConfig;
-  /** Defaults to the renderer's tracking; tests pass other values to exercise the rule. */
+  /**
+   * The resume's language. The rules and messages are English (see analysisSupport), but
+   * what the export contains (heading text, letter-spacing) follows this language.
+   */
+  language: Language;
+  /** Defaults to the renderer's tracking for the language; tests pass other values to exercise the rule. */
   tracking?: Tracking;
 }
 
 type Draft = Omit<AtsFinding, 'id'>;
+
+// The English rule pack names templates with their English display name (the app catalog's source text).
+const ENGLISH_TEMPLATE_TEXT = ENGLISH_UI.templates as unknown as Record<string, { name?: string } | undefined>;
+const englishTemplateName = (id: string) => ENGLISH_TEMPLATE_TEXT[id]?.name ?? id;
 
 function check(rule: AtsRuleId, title: string, findings: Draft[], readable: string, withFindings: string): AtsCheck {
   const withIds: AtsFinding[] = findings.map((f, i) => ({ ...f, id: `${rule}:${i}` }));
@@ -75,7 +86,7 @@ export function contactCheck({ data }: AtsInput): { check: AtsCheck; detected: A
 
 const hasText = (...values: string[]) => values.some((v) => v.trim() !== '');
 
-export function sectionsCheck({ data }: AtsInput): { check: AtsCheck; detected: AtsDetection[] } {
+export function sectionsCheck({ data, language }: AtsInput): { check: AtsCheck; detected: AtsDetection[] } {
   const present = {
     Summary: hasText(data.summary.tagline, ...data.summary.bullets),
     Skills: data.summary.skills.some((s) => s.trim()),
@@ -94,7 +105,7 @@ export function sectionsCheck({ data }: AtsInput): { check: AtsCheck; detected: 
       'sections',
       'Section headings',
       f,
-      `Headings use standard names (${RENDERED_HEADINGS.join(', ')}) as plain text.`,
+      `Headings use standard names (${renderedHeadings(language).join(', ')}) as plain text.`,
       `Headings use standard names as plain text, but some core sections are missing.`,
     ),
     detected: Object.entries(present).map(([label, detected]) => ({ label: `${label} section`, detected })),
@@ -103,8 +114,8 @@ export function sectionsCheck({ data }: AtsInput): { check: AtsCheck; detected: 
 
 // --- 3. template text (letter-spacing) ---
 
-export function templateTextCheck({ template, tracking }: AtsInput): AtsCheck {
-  const facts = templateTextFacts(template, tracking);
+export function templateTextCheck({ template, tracking, language }: AtsInput): AtsCheck {
+  const facts = templateTextFacts(template, tracking ?? trackingFor(language));
   const f: Draft[] = [];
   const parts = [facts.nameLetterSpaced ? 'name' : null, facts.headingsLetterSpaced ? 'section headings' : null].filter(Boolean);
   if (parts.length) {
@@ -113,7 +124,7 @@ export function templateTextCheck({ template, tracking }: AtsInput): AtsCheck {
       message: `In a PDF, this template's letter-spaced ${parts.join(' and ')} can be read as separate letters (for example "S U M M A R Y"). The Word (DOCX) export keeps them as whole words; you can also pick a template without letter-spacing.`,
     });
   }
-  return check('template-text', `Template text (${template.name})`, f, 'Name and headings are exported as whole words in PDF and Word.', 'Some text is spaced out in the PDF export.');
+  return check('template-text', `Template text (${englishTemplateName(template.id)})`, f, 'Name and headings are exported as whole words in PDF and Word.', 'Some text is spaced out in the PDF export.');
 }
 
 // --- 4. layout ---

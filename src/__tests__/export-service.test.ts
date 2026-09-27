@@ -172,7 +172,7 @@ function setup(options: { premium?: boolean; seedRecords?: ExportRecord[] } = {}
 }
 
 const resume = (overrides: Partial<StoredResume> = {}): StoredResume => ({
-  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
+  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
 });
 
 const outcomes = (records: MemoryRecords) => records.added.map((r) => `${r.exportType}:${r.outcome}`);
@@ -223,7 +223,7 @@ describe('PREMIUM PDF', () => {
     expect(call.html).not.toContain('PREVIEW');
     expect(w.share.shared).toHaveLength(1);
     expect(w.share.shared[0].mimeType).toBe('application/pdf');
-    expect(w.share.shared[0].uri).toMatch(/^mem:\/\/cache\/exports\/[^/]+\/eleanor_vance\.pdf$/);
+    expect(w.share.shared[0].uri).toMatch(/^mem:\/\/cache\/exports\/[^/]+\/eleanor-vance\.pdf$/);
     expect(w.fs.tempFiles()).toEqual([]); // print temp file was moved, not copied
     expect(outcomes(w.records)).toEqual(['pdf:succeeded']);
     expect(w.records.added[0].accessReason).toBe('verified');
@@ -268,7 +268,7 @@ describe('PREMIUM DOCX', () => {
     const w = setup();
     await w.service.exportDocx(resume());
     expect(w.share.shared[0].mimeType).toBe(DOCX_MIME);
-    expect(w.share.shared[0].uri).toMatch(/eleanor_vance\.docx$/);
+    expect(w.share.shared[0].uri).toMatch(/eleanor-vance\.docx$/);
     const base64 = w.fs.files.get(w.share.shared[0].uri)!;
     expect(Buffer.from(base64, 'base64').subarray(0, 4).toString('hex')).toBe('504b0304');
 
@@ -567,8 +567,8 @@ describe('image export (PNG, step 6)', () => {
     await w.service.exportImage(resume());
     expect(w.rasterizer.inputs).toEqual(['%PDF-fake 612x792']); // exactly the printed PDF
     expect(w.share.shared.map((s) => s.uri.replace(/exports\/[^/]+\//, 'exports/<id>/'))).toEqual([
-      'mem://cache/exports/<id>/eleanor_vance_page-1.png',
-      'mem://cache/exports/<id>/eleanor_vance_page-2.png',
+      'mem://cache/exports/<id>/eleanor-vance-page-1.png',
+      'mem://cache/exports/<id>/eleanor-vance-page-2.png',
     ]);
     expect(w.share.shared.every((s) => s.mimeType === PNG_MIME)).toBe(true);
     expect(pngFiles(w).map((uri) => w.fs.files.get(uri))).toEqual(['iVBORw0KGgo-page-1', 'iVBORw0KGgo-page-2']);
@@ -582,7 +582,7 @@ describe('image export (PNG, step 6)', () => {
     w.rasterizer.pageCount = 1;
     await w.service.exportImage(resume());
     expect(w.share.shared).toHaveLength(1);
-    expect(w.share.shared[0].uri).toMatch(/\/eleanor_vance\.png$/);
+    expect(w.share.shared[0].uri).toMatch(/\/eleanor-vance\.png$/);
   });
 
   it('uses the shared rendering path: the exact PDF-mode HTML of the PDF export, Letter or A4, never watermarked', async () => {
@@ -598,7 +598,7 @@ describe('image export (PNG, step 6)', () => {
     expect(imgA4).toMatchObject({ width: 595, height: 842, marginPt: 54 });
     expect(imgLetter.html).toBe(pdfHtml(resume(), 'letter'));
     expect(imgLetter.html).toBe(
-      renderResumeHtml(SAMPLE_RESUME, { templateId: 'corporate-boardroom', accent: '#1B2B47', mode: 'pdf', paper: 'letter' }),
+      renderResumeHtml(SAMPLE_RESUME, { templateId: 'corporate-boardroom', accent: '#1B2B47', mode: 'pdf', language: 'en', paper: 'letter' }),
     );
     for (const call of w.print.calls) {
       expect(call.html).not.toContain('class="watermark"');
@@ -609,7 +609,7 @@ describe('image export (PNG, step 6)', () => {
   it('keeps the template, accent and resume content', async () => {
     const w = setup();
     await w.service.exportImage(resume({ templateId: 'creative-editorial', accent: '#0F766E' }));
-    await w.service.exportImage(resume({ templateId: 'trades-foreman', accent: '#B45309', data: { ...SAMPLE_RESUME, name: 'Ada Lovelace' } }));
+    await w.service.exportImage(resume({ templateId: 'trades-foreman', accent: '#B45309', language: 'en', data: { ...SAMPLE_RESUME, name: 'Ada Lovelace' } }));
     const [editorial, foreman] = w.print.calls.map((c) => c.html);
     expect(editorial).toContain('mark-rule');
     expect(editorial).toContain('--accent: #0F766E');
@@ -617,7 +617,7 @@ describe('image export (PNG, step 6)', () => {
     expect(foreman).toContain('--accent: #B45309');
     expect(foreman).toContain('Ada Lovelace');
     for (const heading of ['Summary', 'Experience', 'Education']) expect(foreman).toContain(`>${heading}</h2>`);
-    expect(w.share.shared.at(-1)!.uri).toMatch(/ada_lovelace_page-2\.png$/);
+    expect(w.share.shared.at(-1)!.uri).toMatch(/ada-lovelace-page-2\.png$/);
   });
 
   it('checks the entitlement before generation, before sharing, and again before every further page', async () => {

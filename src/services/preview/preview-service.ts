@@ -17,6 +17,8 @@ export class PreviewService {
       templateId: resume.templateId,
       accent: resume.accent,
       mode: 'preview',
+      // The resume's language, not the app's: labels and direction belong to the document.
+      language: resume.language,
       watermark: watermarked,
     });
     return { html, watermarked };

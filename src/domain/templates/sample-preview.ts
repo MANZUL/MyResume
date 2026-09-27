@@ -1,5 +1,5 @@
 import { renderResumeHtml } from '../render/render-html';
-import { SAMPLE_RESUME } from '../resume/sample-data';
+import { SAMPLE_RESUME, SAMPLE_RESUME_LANGUAGE } from '../resume/sample-data';
 import { getTemplate } from './templates';
 
 // Template discovery (gallery thumbnails and the large template preview) shows the
@@ -14,6 +14,8 @@ export function templateSampleHtml(templateId: string): string {
     mode: 'preview',
     templateId: template.id,
     accent: template.defaultAccent,
+    // The sample content is English; its labels and direction must match it.
+    language: SAMPLE_RESUME_LANGUAGE,
     watermark: false,
   });
 }

@@ -1,3 +1,4 @@
+import { toLanguage } from '../i18n/languages';
 import { isHexColor } from '../shared/text';
 import { getTemplate } from '../templates/templates';
 import type {
@@ -95,6 +96,8 @@ export function normalizeStoredResume(value: unknown, now: number): StoredResume
     title: str(value.title),
     templateId: template.id,
     accent: isHexColor(accent) ? accent : template.defaultAccent,
+    // Records saved before resumes had a language (and unknown values) are English.
+    language: toLanguage(value.language),
     data: normalizeResumeData(value.data),
     createdAt: finiteTime(value.createdAt, updatedAt),
     updatedAt,

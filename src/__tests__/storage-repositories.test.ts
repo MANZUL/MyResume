@@ -37,6 +37,7 @@ const resume = (id: string, createdAt: number, overrides: Partial<StoredResume> 
   title: `Resume ${id}`,
   templateId: 'tech-builder',
   accent: '#3B5168',
+  language: 'en',
   data: emptyResume(),
   createdAt,
   updatedAt: createdAt,

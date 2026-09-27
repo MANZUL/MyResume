@@ -6,7 +6,9 @@ import { WebView } from 'react-native-webview';
 import { Button, colors, LockIcon, Muted } from '../../ui/components';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
 import { freeAccentsFor } from '../../domain/entitlement/palette';
-import { getTemplate, TEMPLATES } from '../../domain/templates/templates';
+import { TEMPLATES } from '../../domain/templates/templates';
+import { templateText } from '../../i18n/templates';
+import { useT } from '../../services/i18n/localization';
 import { useEntitlement } from '../../services/entitlement/entitlement';
 import {
   ExportCancelledError,
@@ -17,9 +19,9 @@ import { useExportService } from '../../services/export/use-export-service';
 import { useResume } from '../../services/storage/resume-store';
 
 const EXPORT_BUTTONS = [
-  { kind: 'pdf', label: 'PDF', variant: 'primary' },
-  { kind: 'docx', label: 'Word', variant: 'secondary' },
-  { kind: 'image', label: 'Image', variant: 'secondary' },
+  { kind: 'pdf', variant: 'primary' },
+  { kind: 'docx', variant: 'secondary' },
+  { kind: 'image', variant: 'secondary' },
 ] as const;
 
 export default function PreviewScreen() {
@@ -27,6 +29,7 @@ export default function PreviewScreen() {
   const { resume, setTemplate, setAccent, flush } = useResume(id);
   const { decision, entitlements, paywall, preview } = useEntitlement();
   const exporter = useExportService();
+  const t = useT();
   const resumeId = resume?.id;
 
   // Template and color changes are saved when the screen loses focus.
@@ -58,7 +61,7 @@ export default function PreviewScreen() {
   }, [resume, preview, decision.premium]);
 
   if (!resume) return null;
-  const template = getTemplate(resume.templateId);
+  const current = templateText(t, resume.templateId);
 
   // Every export goes to the ExportService, which checks premium itself. When it
   // refuses, the paywall remembers this export and runs it again after subscribing.
@@ -72,7 +75,7 @@ export default function PreviewScreen() {
       if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => runExport(kind) });
       else if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
         // Expected outcomes: another export is running, the app left the foreground, or the user cancelled.
-      } else Alert.alert('Export failed', error instanceof Error ? error.message : 'Please try again.');
+      } else Alert.alert(t('preview.exportFailed'), error instanceof Error ? error.message : t('preview.tryAgain'));
     } finally {
       setBusy(null);
     }
@@ -98,7 +101,7 @@ export default function PreviewScreen() {
         allowFileAccess={false}
         setSupportMultipleWindows={false}
         textInteractionEnabled={false}
-        accessibilityLabel="Resume preview"
+        accessibilityLabel={t('preview.a11y')}
       />
       <View
         style={{
@@ -111,15 +114,16 @@ export default function PreviewScreen() {
         }}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-          {TEMPLATES.map((t) => {
-            const selected = t.id === resume.templateId;
+          {TEMPLATES.map((option) => {
+            const selected = option.id === resume.templateId;
+            const text = templateText(t, option.id);
             return (
               <Pressable
-                key={t.id}
+                key={option.id}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                accessibilityLabel={`${t.name} template, ${t.category}`}
-                onPress={() => setTemplate(resume.id, t.id)}
+                accessibilityLabel={t('preview.templateA11y', { name: text.name, category: text.category })}
+                onPress={() => setTemplate(resume.id, option.id)}
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 8,
@@ -129,18 +133,18 @@ export default function PreviewScreen() {
                   backgroundColor: selected ? colors.text : colors.card,
                 }}
               >
-                <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600' }}>{t.name.replace(/^The /, '')}</Text>
+                <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600' }}>{text.shortName}</Text>
               </Pressable>
             );
           })}
         </ScrollView>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4, gap: 10, alignItems: 'center' }}>
-          <Text style={{ color: colors.muted, fontSize: 13 }}>{template.category} · Accent</Text>
+          <Text style={{ color: colors.muted, fontSize: 13 }}>{t('preview.accent', { category: current.category })}</Text>
           {freeAccentsFor(resume.templateId).map((color) => (
             <Pressable
               key={color}
               accessibilityRole="button"
-              accessibilityLabel={`Accent color ${color}`}
+              accessibilityLabel={t('preview.accentA11y', { color })}
               accessibilityState={{ selected: resume.accent === color }}
               onPress={() => void chooseAccent(color)}
               hitSlop={6}
@@ -159,23 +163,26 @@ export default function PreviewScreen() {
           ))}
         </ScrollView>
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
-          {EXPORT_BUTTONS.map(({ kind, label, variant }) => (
+          {EXPORT_BUTTONS.map(({ kind, variant }) => {
+            const format = t(`preview.formats.${kind}`);
+            return (
             <Button
               key={kind}
-              title={decision.premium ? `Export ${label}` : label}
+              title={decision.premium ? t('preview.export', { format }) : format}
               icon={decision.premium ? undefined : <LockIcon color={variant === 'primary' ? colors.primaryText : colors.text} size={13} />}
-              accessibilityLabel={decision.premium ? `Export ${label}` : `${label}, locked. Requires Premium`}
+              accessibilityLabel={decision.premium ? t('preview.export', { format }) : t('preview.locked', { format })}
               variant={variant}
               fit
               loading={busy === kind}
               onPress={() => runExport(kind)}
               style={{ flex: 1, paddingHorizontal: 10 }}
             />
-          ))}
+            );
+          })}
         </View>
         {entitlements.providerId === 'fake' ? (
           <View style={{ paddingHorizontal: 16 }}>
-            <Muted>Development build: purchases use a simulated store.</Muted>
+            <Muted>{t('preview.devStore')}</Muted>
           </View>
         ) : null}
       </View>

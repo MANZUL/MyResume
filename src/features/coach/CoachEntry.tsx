@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
+import type { CoachCategory, CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
 import { useEntitlement } from '../../services/entitlement/entitlement';
 import { colors, styles } from '../../ui/components';
-import { CATEGORY_LABELS, CATEGORY_ORDER, COACH_COPY } from './coach-copy';
+import { analysisSupport } from '../../domain/i18n/analysis-support';
+import type { Language } from '../../domain/i18n/languages';
+import { useT } from '../../services/i18n/localization';
+
+const CATEGORY_ORDER: readonly CoachCategory[] = ['grammar', 'concise', 'professional', 'impact', 'measurable'];
 
 /**
  * Writing Coach link + inline panel under one field (PREMIUM). Everything goes
@@ -15,10 +19,13 @@ export function CoachEntry({
   text,
   field,
   siblings = [],
+  language,
   onApply,
 }: {
   text: string;
   field: CoachField;
+  /** The resume's language: the Coach has English rules only and hides itself for others. */
+  language: Language;
   /** The entry's other bullets (read-only context). */
   siblings?: readonly string[];
   onApply: (next: string) => void;
@@ -26,6 +33,7 @@ export function CoachEntry({
   const { tools, paywall, decision } = useEntitlement();
   const [report, setReport] = useState<CoachReport | null>(null);
   const [message, setMessage] = useState('');
+  const t = useT();
 
   const fail = (error: unknown, retry: () => Promise<void>) => {
     setReport(null);
@@ -33,18 +41,18 @@ export function CoachEntry({
       setMessage('');
       paywall.request({ feature: error.feature, run: retry });
     } else {
-      setMessage(error instanceof Error ? error.message : 'The Coach could not check this text.');
+      setMessage(error instanceof Error ? error.message : t('coach.failed'));
     }
   };
 
   const analyze = async (value: string): Promise<void> => {
     if (!value.trim()) {
       setReport(null);
-      setMessage(COACH_COPY.empty);
+      setMessage(t('coach.empty'));
       return;
     }
     try {
-      setReport(await tools.writingCoach(value, field, siblings));
+      setReport(await tools.writingCoach(value, field, language, siblings));
       setMessage('');
     } catch (error) {
       fail(error, () => analyze(value));
@@ -54,7 +62,7 @@ export function CoachEntry({
   const apply = async (finding: CoachFinding, choice?: number) => {
     if (!report) return;
     try {
-      const next = await tools.applyCoachFix(report.text, field, siblings, finding, choice);
+      const next = await tools.applyCoachFix(report.text, field, language, siblings, finding, choice);
       onApply(next);
       await analyze(next);
     } catch (error) {
@@ -65,6 +73,8 @@ export function CoachEntry({
   // A lapsed subscription closes the panel; text already changed stays the user's text.
   const open = report !== null && decision.premium;
   const stale = open && report.text !== text;
+  // No Coach for languages without its rules; the editor shows one note instead.
+  if (analysisSupport('writingCoach', language).kind === 'unavailable') return null;
 
   return (
     <View style={{ marginTop: -6, marginBottom: 10 }}>
@@ -75,7 +85,7 @@ export function CoachEntry({
         style={{ alignSelf: 'flex-start' }}
       >
         <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>
-          {open ? COACH_COPY.close : decision.premium ? COACH_COPY.open : COACH_COPY.locked}
+          {open ? t('coach.close') : decision.premium ? t('coach.open') : t('coach.locked')}
         </Text>
       </Pressable>
       {message ? <Text style={[styles.muted, { marginTop: 4 }]}>{message}</Text> : null}
@@ -83,18 +93,18 @@ export function CoachEntry({
         <View style={{ marginTop: 8, padding: 12, borderRadius: 10, backgroundColor: '#F7F5F1', gap: 10 }}>
           {stale ? (
             <View style={{ gap: 6 }}>
-              <Text style={styles.muted}>{COACH_COPY.stale}</Text>
-              <LinkText label={COACH_COPY.refresh} onPress={() => void analyze(text)} />
+              <Text style={styles.muted}>{t('coach.stale')}</Text>
+              <LinkText label={t('coach.refresh')} onPress={() => void analyze(text)} />
             </View>
           ) : report.findings.length === 0 ? (
-            <Text style={styles.muted}>{COACH_COPY.none}</Text>
+            <Text style={styles.muted}>{t('coach.none')}</Text>
           ) : (
             CATEGORY_ORDER.map((category) => {
               const items = report.findings.filter((f) => f.category === category);
               if (!items.length) return null;
               return (
                 <View key={category} style={{ gap: 8 }}>
-                  <Text style={styles.sectionTitle}>{CATEGORY_LABELS[category]}</Text>
+                  <Text style={styles.sectionTitle}>{t(`coach.categories.${category}`)}</Text>
                   {items.map((finding) => (
                     <FindingRow key={finding.id} finding={finding} text={report.text} onApply={apply} />
                   ))}
@@ -102,7 +112,7 @@ export function CoachEntry({
               );
             })
           )}
-          <Text style={[styles.muted, { fontSize: 12 }]}>{COACH_COPY.note}</Text>
+          <Text style={[styles.muted, { fontSize: 12 }]}>{t('coach.note')}</Text>
         </View>
       ) : null}
     </View>
@@ -110,6 +120,7 @@ export function CoachEntry({
 }
 
 function FindingRow({ finding, text, onApply }: { finding: CoachFinding; text: string; onApply: (f: CoachFinding, choice?: number) => void }) {
+  const t = useT();
   const fix = finding.fix;
   const before = text.slice(finding.start, finding.end);
   return (
@@ -127,7 +138,7 @@ function FindingRow({ finding, text, onApply }: { finding: CoachFinding; text: s
           ))}
         </View>
       ) : fix ? (
-        <LinkText label={COACH_COPY.apply} onPress={() => onApply(finding)} />
+        <LinkText label={t('coach.apply')} onPress={() => onApply(finding)} />
       ) : null}
     </View>
   );

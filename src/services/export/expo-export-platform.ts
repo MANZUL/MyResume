@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import type { ExportPlatform } from './export-service';
 import { createFileExportPlatform, type ExportFileSystem, type FileRef } from './file-export-platform';
 import { getRasterizerBridge } from './rasterizer/rasterizer-bridge';
+import { getAppLanguage } from '../i18n/app-language';
 
 // Device adapters for the export platform: expo-file-system, expo-print,
 // expo-sharing and the hidden pdf.js WebView (image export, see RasterizerHost).
@@ -52,6 +53,7 @@ export function getExpoExportPlatform(): ExportPlatform {
   platform ??= createFileExportPlatform({
     fs: expoFs,
     rasterizer: getRasterizerBridge(),
+    uiLanguage: getAppLanguage,
     print: {
       printToFile: ({ html, width, height, marginPt }) =>
         Print.printToFileAsync({ html, width, height, margins: { top: marginPt, bottom: marginPt, left: marginPt, right: marginPt } }),

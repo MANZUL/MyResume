@@ -5,7 +5,9 @@ import type { AtsStatus } from '../../domain/ats/types';
 import type { ResumeData } from '../../domain/resume/types';
 import type { EditorSection } from '../../domain/resume/sections';
 import { Card, colors, Muted, styles } from '../../ui/components';
-import { ATS_COPY, countsLine, STATUS_LABELS } from './ats-copy';
+import type { Language } from '../../domain/i18n/languages';
+import { useT } from '../../services/i18n/localization';
+import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
 const STATUS_COLOR: Record<AtsStatus, string> = { readable: colors.success, check: colors.warn, issue: colors.danger };
 
@@ -13,34 +15,47 @@ const STATUS_COLOR: Record<AtsStatus, string> = { readable: colors.success, chec
 export function AtsTool({
   data,
   templateId,
+  language,
   onImprove,
 }: {
   data: ResumeData;
   templateId: string;
+  /** The resume's language (English rules today; see EnglishRulesNote). */
+  language: Language;
   onImprove: (section: EditorSection) => void;
 }) {
-  const report = useMemo(() => checkAtsReadability(data, templateId), [data, templateId]);
+  const t = useT();
+  const report = useMemo(() => checkAtsReadability(data, templateId, language), [data, templateId, language]);
+  const status = (s: AtsStatus) => t(`ats.status.${s}`);
   const findings = report.checks.flatMap((c) => c.findings);
   const issues = findings.filter((f) => f.status === 'issue').length;
   const checks = findings.length - issues;
 
+  const counts =
+    !issues && !checks
+      ? t('ats.allReadable')
+      : [issues ? t('ats.issues', { count: issues }) : null, checks ? t('ats.toCheck', { count: checks }) : null]
+          .filter(Boolean)
+          .join(t('ats.separator'));
+
   return (
     <>
+      <EnglishRulesNote support={report.support} />
       <Card style={{ gap: 4 }}>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>{ATS_COPY.title}</Text>
-        <Muted>{ATS_COPY.intro}</Muted>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>{t('ats.title')}</Text>
+        <Muted>{t('ats.intro')}</Muted>
         <Text style={{ color: issues ? colors.danger : checks ? colors.warn : colors.success, fontWeight: '600', marginTop: 4 }}>
-          {countsLine(issues, checks)}
+          {counts}
         </Text>
       </Card>
 
       <Card style={{ gap: 6 }}>
-        <Text style={styles.sectionTitle}>{ATS_COPY.parts}</Text>
+        <Text style={styles.sectionTitle}>{t('ats.parts')}</Text>
         {report.detected.map((d) => (
           <View key={d.label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ color: colors.text, fontSize: 15 }}>{d.label}</Text>
             <Text style={{ color: d.detected ? colors.success : colors.muted, fontWeight: '600' }}>
-              {d.detected ? `✓ ${ATS_COPY.detected}` : ATS_COPY.notDetected}
+              {d.detected ? `✓ ${t('ats.detected')}` : t('ats.notDetected')}
             </Text>
           </View>
         ))}
@@ -50,14 +65,14 @@ export function AtsTool({
         <Card key={c.rule} style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
             <Text style={{ flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' }}>{c.title}</Text>
-            <Text style={{ color: STATUS_COLOR[c.status], fontWeight: '600' }}>{STATUS_LABELS[c.status]}</Text>
+            <Text style={{ color: STATUS_COLOR[c.status], fontWeight: '600' }}>{status(c.status)}</Text>
           </View>
           <Muted>{c.summary}</Muted>
           {c.findings.map((f) => (
             <View key={f.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontSize: 15, lineHeight: 21 }}>
-                  <Text style={{ color: STATUS_COLOR[f.status], fontWeight: '600' }}>{STATUS_LABELS[f.status]}: </Text>
+                  <Text style={{ color: STATUS_COLOR[f.status], fontWeight: '600' }}>{t('ats.statusPrefix', { status: status(f.status) })}</Text>
                   {f.message}
                 </Text>
                 {f.location ? <Text style={[styles.muted, { fontSize: 13 }]}>{f.location.label}</Text> : null}
@@ -65,11 +80,11 @@ export function AtsTool({
               {f.location ? (
                 <Pressable
                   accessibilityRole="link"
-                  accessibilityLabel={`${ATS_COPY.improve}: ${f.message}`}
+                  accessibilityLabel={t('check.improveA11y', { action: t('ats.improve'), message: f.message })}
                   onPress={() => onImprove(f.location!.section)}
                   hitSlop={8}
                 >
-                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '600' }}>{ATS_COPY.improve}</Text>
+                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '600' }}>{t('ats.improve')}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -77,7 +92,7 @@ export function AtsTool({
         </Card>
       ))}
 
-      <Muted>{ATS_COPY.disclaimer}</Muted>
+      <Muted>{t('ats.disclaimer')}</Muted>
     </>
   );
 }

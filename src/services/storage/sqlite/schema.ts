@@ -110,6 +110,19 @@ const V3_TARGET_JOBS = [
    )`,
 ];
 
+// v4 (localization): each resume's own language, separate from the app language, and a
+// small settings table for the app language. Additive only: existing rows keep all their
+// data and become English ('en'), which is what every existing resume was written in.
+// export_records and target_jobs are not touched.
+const V4_LANGUAGE = [
+  `ALTER TABLE resumes ADD COLUMN language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'de', 'fr', 'es', 'ar'))`,
+  `CREATE TABLE IF NOT EXISTS app_settings (
+     key         TEXT    PRIMARY KEY NOT NULL,
+     value       TEXT    NOT NULL,
+     updated_at  INTEGER NOT NULL
+   )`,
+];
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -131,6 +144,13 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'target_jobs: job description per resume (job match)',
     async up(tx) {
       for (const statement of V3_TARGET_JOBS) await tx.exec(statement);
+    },
+  },
+  {
+    version: 4,
+    name: "resumes.language (existing resumes → 'en') and app_settings (app language)",
+    async up(tx) {
+      for (const statement of V4_LANGUAGE) await tx.exec(statement);
     },
   },
 ];

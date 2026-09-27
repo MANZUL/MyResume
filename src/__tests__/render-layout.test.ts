@@ -41,7 +41,7 @@ const MULTI_PAGE: ResumeData = {
 };
 
 const html = (templateId: string, mode: RenderMode, data: ResumeData = SAMPLE_RESUME, extra: { watermark?: boolean; paper?: PaperSize } = {}) =>
-  renderResumeHtml(data, { templateId, accent: TEMPLATES.find((t) => t.id === templateId)!.defaultAccent, mode, ...extra });
+  renderResumeHtml(data, { templateId, accent: TEMPLATES.find((t) => t.id === templateId)!.defaultAccent, mode, language: 'en', ...extra });
 
 interface Box { x: number; y: number; w: number; h: number }
 

@@ -3,25 +3,32 @@ import { Pressable, Text, View } from 'react-native';
 import { scoreResume } from '../../domain/check/resume-score';
 import type { EditorSection } from '../../domain/resume/sections';
 import { Card, colors, Muted, styles } from '../../ui/components';
-import { CHECK_COPY } from './improve-link';
+import type { Language } from '../../domain/i18n/languages';
+import { useT } from '../../services/i18n/localization';
+import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
 // Resume Check (FREE). Same rules and order as the web tool: score, categories,
 // what is working, what needs attention (each with "Improve"), disclaimer.
 export function CheckTool({
   data,
+  language,
   onImprove,
 }: {
   data: Parameters<typeof scoreResume>[0];
+  /** The resume's language (English rules today; see EnglishRulesNote). */
+  language: Language;
   onImprove: (section: EditorSection) => void;
 }) {
-  const score = useMemo(() => scoreResume(data), [data]);
+  const t = useT();
+  const score = useMemo(() => scoreResume(data, language), [data, language]);
   return (
     <>
+      <EnglishRulesNote support={score.support} />
       <Card style={{ alignItems: 'center', gap: 4 }}>
-        <Muted>{CHECK_COPY.title}</Muted>
+        <Muted>{t('check.title')}</Muted>
         <Text style={{ fontSize: 48, fontWeight: '700', color: colors.text }}>
           {score.score}
-          <Text style={{ fontSize: 18, fontWeight: '400', color: colors.muted }}> / 100</Text>
+          <Text style={{ fontSize: 18, fontWeight: '400', color: colors.muted }}>{t('check.outOf')}</Text>
         </Text>
       </Card>
       <Card style={{ gap: 8 }}>
@@ -29,14 +36,14 @@ export function CheckTool({
           <View key={category.label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ color: colors.text, fontSize: 15 }}>{category.label}</Text>
             <Text style={{ color: category.status === 'Strong' ? colors.success : colors.warn, fontWeight: '600' }}>
-              {category.status}
+              {category.status === 'Strong' ? t('check.status.strong') : t('check.status.needsAttention')}
             </Text>
           </View>
         ))}
       </Card>
       {score.strengths.length ? (
         <Card style={{ gap: 8 }}>
-          <Text style={styles.sectionTitle}>{CHECK_COPY.working}</Text>
+          <Text style={styles.sectionTitle}>{t('check.working')}</Text>
           {score.strengths.map((s) => (
             <Text key={s} style={{ color: colors.text, fontSize: 15 }}>✓ {s}</Text>
           ))}
@@ -44,23 +51,23 @@ export function CheckTool({
       ) : null}
       {score.warnings.length ? (
         <Card style={{ gap: 10 }}>
-          <Text style={styles.sectionTitle}>{CHECK_COPY.attention}</Text>
+          <Text style={styles.sectionTitle}>{t('check.attention')}</Text>
           {score.warnings.map((w) => (
             <View key={w.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
               <Text style={{ flex: 1, color: colors.text, fontSize: 15, lineHeight: 21 }}>⚠︎ {w.message}</Text>
               <Pressable
                 accessibilityRole="link"
-                accessibilityLabel={`${CHECK_COPY.improve}: ${w.message}`}
+                accessibilityLabel={t('check.improveA11y', { action: t('check.improve'), message: w.message })}
                 onPress={() => onImprove(w.section)}
                 hitSlop={8}
               >
-                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '600' }}>{CHECK_COPY.improve}</Text>
+                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '600' }}>{t('check.improve')}</Text>
               </Pressable>
             </View>
           ))}
         </Card>
       ) : null}
-      <Muted>{CHECK_COPY.disclaimer}</Muted>
+      <Muted>{t('check.disclaimer')}</Muted>
     </>
   );
 }

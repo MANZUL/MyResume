@@ -1,3 +1,4 @@
+import type { Language } from '../i18n/languages';
 import type { ExportRecord, NewExportRecord } from '../export/export-record';
 import type { TargetJob } from '../job-match/target-job';
 import type { LocalProfile } from '../profile/local-profile';
@@ -44,4 +45,11 @@ export interface StorageIssue {
   table: string;
   id: string | null;
   problem: string;
+}
+
+/** App-wide settings (currently the app language). */
+export interface SettingsRepository {
+  /** The app language the user chose, or null if none was chosen yet. */
+  getAppLanguage(): Promise<Language | null>;
+  setAppLanguage(language: Language): Promise<void>;
 }

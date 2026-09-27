@@ -18,7 +18,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const JD = 'Senior product manager. Requirements: product strategy, user research, SQL, stakeholder management and analytics.';
 
 const resume = (overrides: Partial<StoredResume> = {}): StoredResume => ({
-  id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#3B5168', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
+  id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#3B5168', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
 });
 
 function world(premium: boolean) {
@@ -72,14 +72,14 @@ describe('feature gates (service layer)', () => {
   });
 
   it('Job Match: FREE refused before running, PREMIUM gets results', async () => {
-    await expect(world(false).tools.jobMatch(SAMPLE_RESUME, JD)).rejects.toBeInstanceOf(PremiumRequiredError);
-    const result = await world(true).tools.jobMatch(SAMPLE_RESUME, JD);
+    await expect(world(false).tools.jobMatch(SAMPLE_RESUME, JD, 'en')).rejects.toBeInstanceOf(PremiumRequiredError);
+    const result = await world(true).tools.jobMatch(SAMPLE_RESUME, JD, 'en');
     expect(result.counts.inJob).toBeGreaterThan(0);
   });
 
   it('Writing Coach: FREE refused before analysis; PREMIUM gets a report (step 8)', async () => {
-    await expect(world(false).tools.writingCoach('Helped with the launch', 'experienceBullet')).rejects.toEqual(new PremiumRequiredError('coach'));
-    const report = await world(true).tools.writingCoach('Helped with the launch', 'experienceBullet');
+    await expect(world(false).tools.writingCoach('Helped with the launch', 'experienceBullet', 'en')).rejects.toEqual(new PremiumRequiredError('coach'));
+    const report = await world(true).tools.writingCoach('Helped with the launch', 'experienceBullet', 'en');
     expect(report.findings.map((f) => f.rule)).toContain('weak-opener');
   });
 

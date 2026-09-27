@@ -5,6 +5,8 @@ import { getTemplate } from '../../domain/templates/templates';
 import { useEntitlement } from '../entitlement/entitlement';
 import { CustomizationService } from '../premium/customization';
 import { newId } from '../../domain/shared/id';
+import type { Language } from '../../domain/i18n/languages';
+import { appTranslator, getAppLanguage } from '../i18n/app-language';
 import { useDatabase } from './database-context';
 import { ResumeLibrary } from './resume-library';
 
@@ -15,7 +17,10 @@ interface StoreState {
   resumes: StoredResume[];
   activeId: string | null;
   /** Creates a resume with the given template (default: the first) and its default accent. */
-  create: (data: ResumeData, title?: string, templateId?: string) => StoredResume;
+  /** New resumes take the current app language unless a language is given. */
+  create: (data: ResumeData, title?: string, templateId?: string, language?: Language) => StoredResume;
+  /** Changes one resume's language (never the app language). */
+  setLanguage: (id: string, language: Language) => void;
   /** Content edits. Colors go through setAccent, which enforces the premium rules. */
   update: (id: string, patch: Partial<Pick<StoredResume, 'title' | 'data'>>) => void;
   /** Switches template and resets the accent to its default (FREE). */
@@ -39,6 +44,12 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
         newId,
         onError: (operation, error) => {
           if (__DEV__) console.warn(`[storage] ${operation} failed`, error);
+        },
+        // Read at each create: the app language at that moment.
+        defaultLanguage: getAppLanguage,
+        titles: {
+          untitled: () => appTranslator().t('resume.untitled'),
+          copyOf: (title) => appTranslator().t('resume.copyOf', { title }),
         },
       }),
     [repository],
@@ -86,7 +97,8 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       ready,
       resumes,
       activeId,
-      create: (data, title, templateId) => library.create(data, title, templateId),
+      create: (data, title, templateId, language) => library.create(data, title, templateId, language),
+      setLanguage: (id, language) => library.update(id, { language }),
       update: (id, patch) => {
         // Only content fields are accepted here; accent/template have their own rules.
         const content: { title?: string; data?: ResumeData } = {};
@@ -130,5 +142,6 @@ export function useResume(id: string | undefined) {
     ready: store.ready,
     flush: store.flush,
     setActive: store.setActive,
+    setLanguage: store.setLanguage,
   };
 }

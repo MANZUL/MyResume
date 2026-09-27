@@ -199,7 +199,7 @@ class BinaryFs implements ExportFileSystem {
 const pngSize = (png: Buffer) => ({ width: png.readUInt32BE(16), height: png.readUInt32BE(20) });
 
 const stored = (overrides: Partial<StoredResume> = {}): StoredResume => ({
-  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
+  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
 });
 
 describe.skipIf(!existsSync(CHROMIUM))('image export end to end (Chromium stands in for expo-print and the WebView)', () => {
@@ -323,7 +323,7 @@ describe.skipIf(!existsSync(CHROMIUM))('image export end to end (Chromium stands
       expect(png.subarray(0, 8).toString('base64')).toBe('iVBORw0KGgo=');
       expect(pngSize(png)).toEqual({ width: 612 * 3, height: 792 * 3 });
     }
-    expect(shared.slice(from).map((s) => s.uri.split('/').pop())).toEqual(pngs.map((_, i) => `eleanor_vance_page-${i + 1}.png`));
+    expect(shared.slice(from).map((s) => s.uri.split('/').pop())).toEqual(pngs.map((_, i) => `eleanor-vance-page-${i + 1}.png`));
     expect(shared.slice(from).every((s) => s.mimeType === 'image/png')).toBe(true);
     expect([...fs.files.keys()].filter((uri) => uri.startsWith('mem://tmp/'))).toEqual([]); // intermediate PDF removed
   }, 60_000);

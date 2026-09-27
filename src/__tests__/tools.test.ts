@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildCoverLetter } from '../domain/letter/cover-letter';
+import { generateCoverLetter } from '../domain/letter/cover-letter';
 import { buildResumeDocxBase64 } from '../domain/render/export-docx';
 import { analyzeJobMatch } from '../domain/job-match/job-match';
 import { renderResumeHtml } from '../domain/render/render-html';
@@ -13,51 +13,53 @@ import { emptyResume } from '../domain/resume/types';
 describe('job match', () => {
   it('reports terms detected and not detected in the resume, deterministically', () => {
     const jd = 'We need a product strategy leader. Product strategy and user research are core. Kubernetes a plus. Kubernetes experience helps.';
-    const result = analyzeJobMatch(SAMPLE_RESUME, jd);
+    const result = analyzeJobMatch(SAMPLE_RESUME, jd, 'en');
     const status = Object.fromEntries(result.terms.map((t) => [t.label, t.resume.length > 0]));
     expect(status).toEqual({ 'Product strategy': true, 'User research': true, Kubernetes: false });
-    expect(result).toEqual(analyzeJobMatch(SAMPLE_RESUME, jd));
+    expect(result).toEqual(analyzeJobMatch(SAMPLE_RESUME, jd, 'en'));
   });
 });
 
 describe('renderResumeHtml', () => {
   it('renders every template', () => {
     for (const template of TEMPLATES) {
-      const html = renderResumeHtml(SAMPLE_RESUME, { templateId: template.id, accent: template.defaultAccent, mode: 'pdf' });
+      const html = renderResumeHtml(SAMPLE_RESUME, { templateId: template.id, accent: template.defaultAccent, mode: 'pdf', language: 'en' });
       expect(html).toContain('Eleanor Vance');
     }
   });
 
   it('escapes user content so it cannot inject markup or script', () => {
     const data = { ...emptyResume(), name: '<img src=x onerror=alert(1)>' };
-    const html = renderResumeHtml(data, { templateId: 'tech-builder', accent: '#000000', mode: 'preview' });
+    const html = renderResumeHtml(data, { templateId: 'tech-builder', accent: '#000000', mode: 'preview', language: 'en' });
     expect(html).not.toContain('<img src=x');
     expect(html).toContain('&lt;img src=x');
   });
 
   it('rejects a non-hex accent to prevent CSS injection', () => {
-    const html = renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: 'red;}</style><script>', mode: 'pdf' });
+    const html = renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: 'red;}</style><script>', mode: 'pdf', language: 'en' });
     expect(html).not.toContain('</style><script>');
   });
 
   it('watermarks the preview only when asked, never the PDF by default', () => {
-    expect(renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: '#000000', mode: 'preview', watermark: true })).toContain('class="watermark"');
-    expect(renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: '#000000', mode: 'pdf' })).not.toContain('class="watermark"');
+    expect(renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: '#000000', mode: 'preview', language: 'en', watermark: true })).toContain('class="watermark"');
+    expect(renderResumeHtml(SAMPLE_RESUME, { templateId: 'tech-builder', accent: '#000000', mode: 'pdf', language: 'en' })).not.toContain('class="watermark"');
   });
 });
 
 describe('exports and tools', () => {
   it('builds a valid DOCX (zip) without a browser', async () => {
-    const base64 = await buildResumeDocxBase64({ data: SAMPLE_RESUME, accent: '#1B2B47', templateName: 'The Boardroom' });
+    const base64 = await buildResumeDocxBase64({ data: SAMPLE_RESUME, accent: '#1B2B47', templateName: 'The Boardroom', language: 'en' });
     expect(Buffer.from(base64, 'base64').subarray(0, 2).toString()).toBe('PK');
   });
 
   it('scores the sample resume', () => {
-    expect(scoreResume(SAMPLE_RESUME).score).toBeGreaterThan(70);
+    expect(scoreResume(SAMPLE_RESUME, 'en').score).toBeGreaterThan(70);
   });
 
   it('builds a cover letter only from resume facts', () => {
-    const letter = buildCoverLetter(SAMPLE_RESUME, { company: 'Globex', role: 'VP Product', hiringManager: '' });
+    const draft = generateCoverLetter(SAMPLE_RESUME, 'en', { company: 'Globex', role: 'VP Product', hiringManager: '' });
+    expect(draft).toMatchObject({ writtenIn: 'en', support: { kind: 'native', language: 'en' } });
+    const letter = draft.text;
     expect(letter).toContain('VP Product position at Globex');
     expect(letter).toContain('Director of Product at Acme Innovation Labs');
     expect(letter).toContain('Eleanor Vance');

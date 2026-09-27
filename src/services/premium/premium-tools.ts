@@ -1,6 +1,7 @@
 import { analyzeText, applyFix, buildCoachContext } from '../../domain/coach/coach';
 import type { CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
 import { PremiumRequiredError } from '../../domain/entitlement/features';
+import type { Language } from '../../domain/i18n/languages';
 import { analyzeJobMatch } from '../../domain/job-match/job-match';
 import type { JobMatchReport } from '../../domain/job-match/types';
 import type { ResumeData } from '../../domain/resume/types';
@@ -22,9 +23,9 @@ export class PremiumTools {
    * Job description → resume match (step 10). Checked before any analysis runs, so FREE
    * users get nothing about the posting or their resume.
    */
-  async jobMatch(data: ResumeData, jobDescription: string): Promise<JobMatchReport> {
+  async jobMatch(data: ResumeData, jobDescription: string, language: Language): Promise<JobMatchReport> {
     await this.gate.require('jobMatch');
-    return analyzeJobMatch(data, jobDescription);
+    return analyzeJobMatch(data, jobDescription, language);
   }
 
   /** Tailoring suggestions arrive in migration step 10; the premium check is already the entry point. */
@@ -37,9 +38,9 @@ export class PremiumTools {
    * Writing Coach analysis (step 8). Checked before any analysis runs, so FREE users
    * get nothing about their text. `siblings` are the entry's other bullets, read-only.
    */
-  async writingCoach(text: string, field: CoachField, siblings: readonly string[] = []): Promise<CoachReport> {
+  async writingCoach(text: string, field: CoachField, language: Language, siblings: readonly string[] = []): Promise<CoachReport> {
     await this.gate.require('coach');
-    return analyzeText(text, buildCoachContext(field, siblings));
+    return analyzeText(text, buildCoachContext(field, language, siblings));
   }
 
   /**
@@ -49,12 +50,13 @@ export class PremiumTools {
   async applyCoachFix(
     text: string,
     field: CoachField,
+    language: Language,
     siblings: readonly string[],
     finding: CoachFinding,
     choice?: number,
   ): Promise<string> {
     await this.gate.require('coach');
-    return applyFix(text, buildCoachContext(field, siblings), finding, choice);
+    return applyFix(text, buildCoachContext(field, language, siblings), finding, choice);
   }
 }
 

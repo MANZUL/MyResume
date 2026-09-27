@@ -1,3 +1,4 @@
+import type { LanguageSupport } from '../i18n/analysis-support';
 import type { EditorSection } from '../resume/sections';
 import type { JdSection } from './segment';
 import type { TermCategory } from './taxonomy';
@@ -33,6 +34,8 @@ export interface RoleTitle {
 }
 
 export interface JobMatchReport {
+  /** English taxonomy today; 'english-rules' for resumes in other languages. */
+  support: LanguageSupport;
   title: RoleTitle | null;
   terms: JobTerm[];
   counts: { inJob: number; alsoInResume: number };

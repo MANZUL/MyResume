@@ -1,3 +1,5 @@
+import type { Language } from '../i18n/languages';
+
 // Mirrors the ResumeData contract of the product specification
 // (MANZUL/Resume lib/api-spec/openapi.yaml).
 export interface Contact {
@@ -60,6 +62,12 @@ export interface StoredResume {
   title: string;
   templateId: string;
   accent: string;
+  /**
+   * The language the resume is written in. Chosen per resume and independent of the app
+   * language: it sets the document labels, direction and typography, and which analysis
+   * rules apply. Never inferred from the text.
+   */
+  language: Language;
   data: ResumeData;
   createdAt: number;
   updatedAt: number;

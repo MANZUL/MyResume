@@ -27,7 +27,7 @@ const content = (html: string) => between(html, '<!--content-->', '<!--/content-
 const shared = (html: string) => between(html, '/*shared*/', '/*/shared*/');
 const geometry = (html: string) => between(html, '/*geometry*/', '/*/geometry*/');
 const render = (options: Partial<RenderOptions> & { mode: RenderOptions['mode'] }, data: ResumeData = SAMPLE_RESUME) =>
-  renderResumeHtml(data, { templateId: 'corporate-boardroom', accent: '#1B2B47', ...options });
+  renderResumeHtml(data, { templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', ...options });
 
 function previewService(premium: boolean) {
   const store = new FakeStoreProvider({ storeNow: () => T });
@@ -36,7 +36,7 @@ function previewService(premium: boolean) {
 }
 
 const stored = (overrides: Partial<StoredResume> = {}): StoredResume => ({
-  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
+  id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
 });
 
 function deepFreeze<T>(value: T): T {
@@ -179,7 +179,7 @@ describe('corrupted, missing and edge-case data', () => {
 
   it('empty resume, unknown template and invalid color fall back safely', () => {
     const html = renderResumeHtml({ ...SAMPLE_RESUME, name: '', experience: [], summary: { tagline: '', bullets: [], skills: [] } }, {
-      templateId: 'does-not-exist', accent: 'red;}</style><script>', mode: 'pdf',
+      templateId: 'does-not-exist', accent: 'red;}</style><script>', mode: 'pdf', language: 'en',
     });
     expect(html).toContain('mark-qc'); // fell back to The Boardroom
     expect(html).toContain('--accent: #1B2B47');

@@ -10,7 +10,8 @@ import { JOB_DESCRIPTION_MAX, JobDescriptionTooLongError, type JobMatchReport } 
 import { EDITOR_SECTIONS } from '../domain/resume/sections';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyResume, type ResumeData } from '../domain/resume/types';
-import { countsLine, MATCH_COPY, mentionedUnder, SECTION_LABELS } from '../features/job-match/match-copy';
+import { en } from '../i18n/messages/en';
+import { createTranslator } from '../i18n/translate';
 import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
 import { EntitlementService } from '../services/entitlement/entitlement-service';
 import { FakeStoreProvider } from '../services/entitlement/fake-store';
@@ -138,14 +139,14 @@ describe('job description sections and title', () => {
 
 describe('corpus', () => {
   it('sections follow the headings ("What you\'ll do" is responsibilities, not requirements)', () => {
-    const se = analyzeJobMatch(emptyResume(), JDS.softwareEngineer).terms;
+    const se = analyzeJobMatch(emptyResume(), JDS.softwareEngineer, 'en').terms;
     expect(se.find((t) => t.id === 'kubernetes')!.job.sections).toEqual(['responsibilities']);
     expect(se.find((t) => t.id === 'typescript')!.job.sections).toEqual(['required', 'responsibilities']);
     expect(se.find((t) => t.id === 'terraform')!.job.sections).toEqual(['preferred']);
   });
 
   it('each posting yields only listed terms, in section order', () => {
-    const out = Object.fromEntries(Object.entries(JDS).map(([name, jd]) => [name, labels(analyzeJobMatch(emptyResume(), jd))]));
+    const out = Object.fromEntries(Object.entries(JDS).map(([name, jd]) => [name, labels(analyzeJobMatch(emptyResume(), jd, 'en'))]));
     expect(out).toEqual({
       softwareEngineer: ['TypeScript', 'JavaScript', 'SQL', 'PostgreSQL', 'React', "Bachelor's degree", 'REST APIs', 'Microservices', 'Node.js', 'Kubernetes', 'Docker', 'GitHub', 'CI/CD', 'Go', 'Rust', 'Kotlin', 'Terraform'],
       dataAnalyst: ['SQL', 'Python', 'pandas', 'Excel', 'Statistics', 'dbt', 'Airflow', 'Tableau', 'Power BI', 'A/B testing', 'BigQuery'],
@@ -161,38 +162,38 @@ describe('corpus', () => {
   });
 
   it('plan regression pairs: SQL, A/B testing, stakeholder management and user research are found; "nice" and "5+" never are', () => {
-    const pm = labels(analyzeJobMatch(emptyResume(), JDS.productManager));
+    const pm = labels(analyzeJobMatch(emptyResume(), JDS.productManager, 'en'));
     for (const term of ['SQL', 'A/B testing', 'Stakeholder management', 'User research']) expect(pm).toContain(term);
     for (const jd of Object.values(JDS)) {
-      for (const label of labels(analyzeJobMatch(emptyResume(), jd))) expect(label).not.toMatch(/nice|5\+|years|team|experience/i);
+      for (const label of labels(analyzeJobMatch(emptyResume(), jd, 'en'))) expect(label).not.toMatch(/nice|5\+|years|team|experience/i);
     }
   });
 
   it('company names, places, people and generic words are never terms; company-only mentions are dropped', () => {
-    const all = Object.values(JDS).flatMap((jd) => labels(analyzeJobMatch(emptyResume(), jd)));
+    const all = Object.values(JDS).flatMap((jd) => labels(analyzeJobMatch(emptyResume(), jd, 'en')));
     for (const word of ['Acme', 'Austin', 'Berlin', 'Chicago', 'Denver', 'Insights', 'communication', 'teamwork', 'ownership']) {
       expect(all.map((l) => l.toLowerCase())).not.toContain(word.toLowerCase());
     }
     // "We run on AWS" appears only under "About Acme".
-    expect(labels(analyzeJobMatch(emptyResume(), JDS.softwareEngineer))).not.toContain('AWS');
+    expect(labels(analyzeJobMatch(emptyResume(), JDS.softwareEngineer, 'en'))).not.toContain('AWS');
     // HubSpot is also a requirement, so it stays (it is in both).
-    expect(analyzeJobMatch(emptyResume(), JDS.marketing).terms[0]).toMatchObject({ label: 'HubSpot', job: { sections: ['required', 'about'] } });
+    expect(analyzeJobMatch(emptyResume(), JDS.marketing, 'en').terms[0]).toMatchObject({ label: 'HubSpot', job: { sections: ['required', 'about'] } });
   });
 
   it('resume evidence: exact, aliases, punctuation and traps', () => {
     const jd = `${JDS.softwareEngineer}\n${JDS.dataAnalyst}`;
-    expect(inResume(analyzeJobMatch(RESUMES.engineer, jd))).toEqual([
+    expect(inResume(analyzeJobMatch(RESUMES.engineer, jd, 'en'))).toEqual([
       'TypeScript', 'PostgreSQL', 'React', "Bachelor's degree", 'REST APIs', 'Microservices', 'Node.js', 'Kubernetes', 'Docker', 'CI/CD',
     ]);
-    expect(inResume(analyzeJobMatch(RESUMES.aliases, jd)).sort()).toEqual(['A/B testing', 'Excel', 'Go', 'Kubernetes', 'Node.js', 'PostgreSQL', 'Power BI', 'React'].sort());
-    expect(inResume(analyzeJobMatch(RESUMES.traps, JDS.traps))).toEqual(['JavaScript', 'MySQL', 'React Native']); // not Java, SQL or React
-    expect(inResume(analyzeJobMatch(RESUMES.unicode, jd))).toEqual(['SQL', 'Python', 'REST APIs']);
-    expect(inResume(analyzeJobMatch(RESUMES.empty, jd))).toEqual([]);
-    expect(inResume(analyzeJobMatch(RESUMES.sample, jd))).toEqual(["Bachelor's degree", 'Microservices']);
+    expect(inResume(analyzeJobMatch(RESUMES.aliases, jd, 'en')).sort()).toEqual(['A/B testing', 'Excel', 'Go', 'Kubernetes', 'Node.js', 'PostgreSQL', 'Power BI', 'React'].sort());
+    expect(inResume(analyzeJobMatch(RESUMES.traps, JDS.traps, 'en'))).toEqual(['JavaScript', 'MySQL', 'React Native']); // not Java, SQL or React
+    expect(inResume(analyzeJobMatch(RESUMES.unicode, jd, 'en'))).toEqual(['SQL', 'Python', 'REST APIs']);
+    expect(inResume(analyzeJobMatch(RESUMES.empty, jd, 'en'))).toEqual([]);
+    expect(inResume(analyzeJobMatch(RESUMES.sample, jd, 'en'))).toEqual(["Bachelor's degree", 'Microservices']);
   });
 
   it('records where in the resume each term appears', () => {
-    const r = analyzeJobMatch(RESUMES.engineer, JDS.softwareEngineer);
+    const r = analyzeJobMatch(RESUMES.engineer, JDS.softwareEngineer, 'en');
     expect(r.terms.find((t) => t.id === 'typescript')!.resume).toEqual([
       { section: 'summary', label: 'Skill 1' },
       { section: 'experience', label: 'Experience 1 · Accomplishment 1' },
@@ -201,7 +202,7 @@ describe('corpus', () => {
   });
 
   it('counts every term once, however often it is mentioned', () => {
-    const r = analyzeJobMatch(RESUMES.engineer, 'SQL\nSQL and SQL\nStrong SQL skills');
+    const r = analyzeJobMatch(RESUMES.engineer, 'SQL\nSQL and SQL\nStrong SQL skills', 'en');
     expect(r.terms).toHaveLength(1);
     expect(r.terms[0].job.mentions).toBe(3);
     expect(r.counts).toEqual({ inJob: 1, alsoInResume: 0 });
@@ -209,7 +210,7 @@ describe('corpus', () => {
 
   it('the name and contact details are not searched', () => {
     const data: ResumeData = { ...emptyResume(), name: 'Python Smith', contact: { ...emptyResume().contact, website: 'golang.dev', email: 'sql@x.io' } };
-    expect(inResume(analyzeJobMatch(data, 'Python, Go and SQL'))).toEqual([]);
+    expect(inResume(analyzeJobMatch(data, 'Python, Go and SQL', 'en'))).toEqual([]);
   });
 });
 
@@ -217,8 +218,9 @@ describe('corpus', () => {
 
 describe('no inference and no score', () => {
   it('the report has only textual facts: title, terms (mentions + evidence), counts', () => {
-    const r = analyzeJobMatch(SAMPLE_RESUME, JDS.productManager);
-    expect(Object.keys(r).sort()).toEqual(['counts', 'terms', 'title']);
+    const r = analyzeJobMatch(SAMPLE_RESUME, JDS.productManager, 'en');
+    expect(Object.keys(r).sort()).toEqual(['counts', 'support', 'terms', 'title']);
+    expect(r.support).toEqual({ kind: 'native', language: 'en' });
     expect(Object.keys(r.terms[0]).sort()).toEqual(['category', 'id', 'job', 'label', 'resume']);
     expect(Object.keys(r.counts).sort()).toEqual(['alsoInResume', 'inJob']);
     // The category name "qualification" (degree level) is a label, not a claim about the user.
@@ -227,12 +229,16 @@ describe('no inference and no score', () => {
   });
 
   it('the screen copy never claims fit, qualification, percentages or outcomes', () => {
-    const copy = JSON.stringify({ MATCH_COPY, SECTION_LABELS });
+    const copy = JSON.stringify(en.match);
     expect(copy).not.toMatch(/%|qualified|strong candidate|will pass|interview|you (don't|do not) have|you lack(?! the skill)/i);
-    expect(MATCH_COPY.notDetectedMeaning).toMatch(/only means these words were not found.*does not mean you lack the skill/i);
-    expect(countsLine(12, 8)).toBe('12 job terms detected · 8 also found in your resume');
-    expect(countsLine(1, 0)).toBe('1 job term detected · 0 also found in your resume');
-    expect(mentionedUnder(['required', 'preferred'], 2)).toBe('Mentioned under Requirements, Nice to have (2 lines)');
+    expect(en.match.notDetectedMeaning).toMatch(/only means these words were not found.*does not mean you lack the skill/i);
+    // The lines as MatchTool builds them from the catalog.
+    const { t } = createTranslator('en');
+    const counts = (inJob: number, also: number) => [t('match.termsDetected', { count: inJob }), t('match.alsoFound', { count: also })].join(t('match.separator'));
+    expect(counts(12, 8)).toBe('12 job terms detected · 8 also found in your resume');
+    expect(counts(1, 0)).toBe('1 job term detected · 0 also found in your resume');
+    const where = (['required', 'preferred'] as const).map((s) => t(`match.sections.${s}`)).join(t('match.listSeparator'));
+    expect(t('match.mentionedUnder', { where }) + t('match.mentionLines', { count: 2 })).toBe('Mentioned under Requirements, Nice to have (2 lines)');
     const screen = read('features/job-match/MatchTool.tsx');
     expect(screen).not.toMatch(/matchPercent|%\s*<|}%/);
   });
@@ -242,19 +248,24 @@ describe('no inference and no score', () => {
 
 describe('limits and edge input', () => {
   it('25,000 characters accepted, 25,001 refused', () => {
-    expect(() => analyzeJobMatch(SAMPLE_RESUME, 'a'.repeat(JOB_DESCRIPTION_MAX))).not.toThrow();
-    expect(() => analyzeJobMatch(SAMPLE_RESUME, 'a'.repeat(JOB_DESCRIPTION_MAX + 1))).toThrow(JobDescriptionTooLongError);
+    expect(() => analyzeJobMatch(SAMPLE_RESUME, 'a'.repeat(JOB_DESCRIPTION_MAX), 'en')).not.toThrow();
+    expect(() => analyzeJobMatch(SAMPLE_RESUME, 'a'.repeat(JOB_DESCRIPTION_MAX + 1), 'en')).toThrow(JobDescriptionTooLongError);
   });
 
   it('empty, whitespace or non-string job descriptions give an empty report', () => {
     for (const jd of ['', '   \n\t ', undefined, null, 42]) {
-      expect(analyzeJobMatch(SAMPLE_RESUME, jd as unknown as string)).toEqual({ title: null, terms: [], counts: { inJob: 0, alsoInResume: 0 } });
+      expect(analyzeJobMatch(SAMPLE_RESUME, jd as unknown as string, 'en')).toEqual({
+        support: { kind: 'native', language: 'en' },
+        title: null,
+        terms: [],
+        counts: { inJob: 0, alsoInResume: 0 },
+      });
     }
   });
 
   it('malformed resume data is repaired first', () => {
     const broken = { summary: { skills: 'x' }, experience: [null, { bullets: ['Python'] }] } as unknown as ResumeData;
-    expect(inResume(analyzeJobMatch(broken, 'Python'))).toEqual(['Python']);
+    expect(inResume(analyzeJobMatch(broken, 'Python', 'en'))).toEqual(['Python']);
   });
 });
 
@@ -279,7 +290,7 @@ describe('properties (fixed-seed generated input)', () => {
   it('never throws; ids are listed and unique; counts agree; evidence points to real sections', () => {
     const known = new Set(TAXONOMY.map((t) => t.id));
     for (const { jd, data } of cases) {
-      const rep = analyzeJobMatch(data, jd);
+      const rep = analyzeJobMatch(data, jd, 'en');
       expect(new Set(rep.terms.map((t) => t.id)).size).toBe(rep.terms.length);
       for (const t of rep.terms) {
         expect(known.has(t.id)).toBe(true);
@@ -305,7 +316,7 @@ describe('properties (fixed-seed generated input)', () => {
   it('is deterministic and does not modify its input', () => {
     for (const { jd, data } of cases.slice(0, 80)) {
       const before = JSON.stringify(data);
-      expect(analyzeJobMatch(data, jd)).toEqual(analyzeJobMatch(data, jd));
+      expect(analyzeJobMatch(data, jd, 'en')).toEqual(analyzeJobMatch(data, jd, 'en'));
       expect(JSON.stringify(data)).toBe(before);
     }
   });
@@ -342,22 +353,22 @@ function world(premium: boolean) {
 describe('PREMIUM gating (plan §4.2: Job Match is PREMIUM)', () => {
   it('FREE: refused before any analysis (even for input the engine would refuse)', async () => {
     const free = world(false);
-    await expect(free.tools.jobMatch(SAMPLE_RESUME, JDS.dataAnalyst)).rejects.toEqual(new PremiumRequiredError('jobMatch'));
-    await expect(free.tools.jobMatch(SAMPLE_RESUME, 'x'.repeat(JOB_DESCRIPTION_MAX + 1))).rejects.toEqual(new PremiumRequiredError('jobMatch'));
+    await expect(free.tools.jobMatch(SAMPLE_RESUME, JDS.dataAnalyst, 'en')).rejects.toEqual(new PremiumRequiredError('jobMatch'));
+    await expect(free.tools.jobMatch(SAMPLE_RESUME, 'x'.repeat(JOB_DESCRIPTION_MAX + 1), 'en')).rejects.toEqual(new PremiumRequiredError('jobMatch'));
   });
 
   it('PREMIUM: one entitlement check, then the report', async () => {
     const paid = world(true);
     const before = paid.store.calls.verify;
-    const report = await paid.tools.jobMatch(SAMPLE_RESUME, JDS.productManager);
+    const report = await paid.tools.jobMatch(SAMPLE_RESUME, JDS.productManager, 'en');
     expect(paid.store.calls.verify - before).toBe(1);
-    expect(report).toEqual(analyzeJobMatch(SAMPLE_RESUME, JDS.productManager));
+    expect(report).toEqual(analyzeJobMatch(SAMPLE_RESUME, JDS.productManager, 'en'));
   });
 
   it('a refused comparison resumes through the existing paywall after subscribing', async () => {
     const w = world(false);
     let report: JobMatchReport | null = null;
-    const run = async () => void (report = await w.tools.jobMatch(SAMPLE_RESUME, JDS.short));
+    const run = async () => void (report = await w.tools.jobMatch(SAMPLE_RESUME, JDS.short, 'en'));
     await run().catch((e) => e instanceof PremiumRequiredError && w.paywall.request({ feature: e.feature, run }));
     expect(w.paywall.pendingFeature()).toBe('jobMatch');
     await (await w.paywall.subscribe()).resume!();
@@ -380,7 +391,7 @@ describe('architecture', () => {
   it('domain/job-match is pure', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'job-match'))) {
       for (const spec of [...read(relative(SRC, file)).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
-        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume)\/[\w-]+$|^\.\.\/ats\/fields$/);
+        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/(resume)\/[\w-]+$|^\.\.\/ats\/fields$|^\.\.\/i18n\/(analysis-support|languages)$/);
       }
     }
   });

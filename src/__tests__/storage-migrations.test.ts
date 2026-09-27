@@ -31,19 +31,19 @@ const columns = (db: TestDatabase, table: string) =>
 
 describe('schema version', () => {
   it('is explicit, starts at 1, and matches the last migration', () => {
-    expect(SCHEMA_VERSION).toBe(3);
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3]);
+    expect(SCHEMA_VERSION).toBe(4);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4]);
   });
 });
 
 describe('fresh install', () => {
-  it('creates exactly the MVP tables (v3 adds target_jobs) and records the schema version', async () => {
+  it('creates exactly the MVP tables (v3 adds target_jobs, v4 app_settings) and records the schema version', async () => {
     const db = openDb();
     expect(await getSchemaVersion(db)).toBe(0);
     const app = await initializeDatabase(db, { newId: testId });
-    expect(app.migration).toEqual({ from: 0, to: SCHEMA_VERSION, applied: [1, 2, 3] });
+    expect(app.migration).toEqual({ from: 0, to: SCHEMA_VERSION, applied: [1, 2, 3, 4] });
     expect(await getSchemaVersion(db)).toBe(SCHEMA_VERSION);
-    expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes', 'target_jobs']);
+    expect(tables(db)).toEqual(['app_settings', 'export_records', 'local_profile', 'resumes', 'target_jobs']);
     expect(await app.resumes.list()).toEqual([]);
   });
 
@@ -71,7 +71,7 @@ describe('repeated migration and restart', () => {
   it('is idempotent: running again applies nothing and keeps data', async () => {
     const db = openDb();
     const first = await initializeDatabase(db, { newId: testId });
-    await first.resumes.create({ id: 'r1', title: 'A', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await first.resumes.create({ id: 'r1', title: 'A', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const again = await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null });
     expect(again).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION, applied: [] });
     expect((await first.resumes.list()).map((r) => r.id)).toEqual(['r1']);
@@ -80,7 +80,7 @@ describe('repeated migration and restart', () => {
   it('survives an app restart (close + reopen) without re-running migrations', async () => {
     const db = openDb();
     const app = await initializeDatabase(db, { newId: testId });
-    await app.resumes.create({ id: 'r1', title: 'Kept', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await app.resumes.create({ id: 'r1', title: 'Kept', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     await db.close();
 
     const reopened = openDb();
@@ -92,8 +92,8 @@ describe('repeated migration and restart', () => {
 
 describe('importing the Step 1 key-value data (existing install)', () => {
   const legacy = JSON.stringify([
-    { id: 'a', title: 'Valid', templateId: 'tech-builder', accent: '#123456', data: SAMPLE_RESUME, updatedAt: 500 },
-    { id: 'b', title: 'Bad shape', templateId: 'nope', accent: 'red', data: { name: 42, experience: 'x' } },
+    { id: 'a', title: 'Valid', templateId: 'tech-builder', accent: '#123456', language: 'en', data: SAMPLE_RESUME, updatedAt: 500 },
+    { id: 'b', title: 'Bad shape', templateId: 'nope', accent: 'red', language: 'en', data: { name: 42, experience: 'x' } },
     { title: 'No id — skipped' },
     'not an object',
     null,
@@ -143,7 +143,7 @@ describe('importing the Step 1 key-value data (existing install)', () => {
       newId: testId,
       readLegacyResumes: async () => {
         reads += 1;
-        return JSON.stringify([{ id: 'late', templateId: 'tech-builder', accent: '#000000', data: {} }]);
+        return JSON.stringify([{ id: 'late', templateId: 'tech-builder', accent: '#000000', language: 'en', data: {} }]);
       },
     });
     expect(reads).toBe(0);
@@ -164,7 +164,7 @@ describe('upgrading an existing database and failure safety', () => {
   it('applies only the pending migrations to a database at an older version, keeping data', async () => {
     const db = openDb();
     const app = await initializeDatabase(db, { newId: testId });
-    await app.resumes.create({ id: 'r1', title: 'Old', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await app.resumes.create({ id: 'r1', title: 'Old', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const result = await migrate(db, [...MIGRATIONS, v2], { now: 1, legacyResumesJson: null });
     expect(result).toEqual({ from: SCHEMA_VERSION, to: NEXT, applied: [NEXT] });
     expect(columns(db, 'resumes')).toContain('note');
@@ -175,7 +175,7 @@ describe('upgrading an existing database and failure safety', () => {
   it('rolls a failed migration back completely and leaves the version unchanged', async () => {
     const db = openDb();
     const app = await initializeDatabase(db, { newId: testId });
-    await app.resumes.create({ id: 'r1', title: 'Safe', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await app.resumes.create({ id: 'r1', title: 'Safe', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     const broken: Migration = {
       version: NEXT,
       name: 'test-only: fails halfway',
@@ -197,7 +197,7 @@ describe('upgrading an existing database and failure safety', () => {
     db.raw.exec('PRAGMA user_version = 7');
     await expect(initializeDatabase(db, { newId: testId })).rejects.toBeInstanceOf(SchemaTooNewError);
     expect(await getSchemaVersion(db)).toBe(7);
-    expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes', 'target_jobs']);
+    expect(tables(db)).toEqual(['app_settings', 'export_records', 'local_profile', 'resumes', 'target_jobs']);
   });
 
   it('v1 → v2 keeps every export record and its indexes, and then accepts image (png) records', async () => {
@@ -210,7 +210,7 @@ describe('upgrading an existing database and failure safety', () => {
     insert.run('e1', 'tech-builder', 'pdf', 'succeeded', 'verified', null, 10);
     insert.run('e2', 'corporate-boardroom', 'docx', 'failed', 'cached', 'Error: disk', 20);
     expect(() => insert.run('e3', 'tech-builder', 'png', 'succeeded', 'verified', null, 30)).toThrow(/CHECK/); // v1 refuses png
-    expect(await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).toEqual({ from: 1, to: SCHEMA_VERSION, applied: [2, 3] });
+    expect(await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).toEqual({ from: 1, to: SCHEMA_VERSION, applied: [2, 3, 4] });
     expect(db.raw.prepare('SELECT id, template_id, export_type, outcome, access_reason, error_message, created_at FROM export_records ORDER BY id').all()).toEqual([
       { id: 'e1', template_id: 'tech-builder', export_type: 'pdf', outcome: 'succeeded', access_reason: 'verified', error_message: null, created_at: 10 },
       { id: 'e2', template_id: 'corporate-boardroom', export_type: 'docx', outcome: 'failed', access_reason: 'cached', error_message: 'Error: disk', created_at: 20 },
@@ -219,7 +219,7 @@ describe('upgrading an existing database and failure safety', () => {
     expect(() => insert.run('e4', 'tech-builder', 'jpeg', 'succeeded', 'verified', null, 40)).toThrow(/CHECK/);
     const indexes = (db.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'export_records' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
     expect(indexes).toEqual(['export_records_created_at', 'export_records_resume']);
-    expect(tables(db)).toEqual(['export_records', 'local_profile', 'resumes', 'target_jobs']);
+    expect(tables(db)).toEqual(['app_settings', 'export_records', 'local_profile', 'resumes', 'target_jobs']);
   });
 
   it('rejects a migration list with gaps', async () => {
@@ -234,7 +234,7 @@ describe('target_jobs (v3, step 10)', () => {
     const db = openDb();
     await migrate(db, MIGRATIONS.slice(0, 2), { now: 1, legacyResumesJson: null });
     db.raw.prepare("INSERT INTO resumes (id, title, template_id, accent, data_json, is_active, created_at, updated_at) VALUES ('r1', 'Old', 'tech-builder', '#000000', '{}', 0, 1, 1)").run();
-    expect(await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).toEqual({ from: 2, to: 3, applied: [3] });
+    expect(await migrate(db, MIGRATIONS, { now: 1, legacyResumesJson: null })).toEqual({ from: 2, to: SCHEMA_VERSION, applied: [3, 4] });
     expect(tables(db)).toContain('target_jobs');
     expect((db.raw.prepare('SELECT count(*) AS n FROM resumes').get() as { n: number }).n).toBe(1);
     expect(columns(db, 'target_jobs')).toEqual(['resume_id', 'title', 'company', 'description', 'updated_at']);
@@ -243,7 +243,7 @@ describe('target_jobs (v3, step 10)', () => {
   it('stores one job description per resume, replaces it on save, and deletes it with the resume', async () => {
     const db = openDb();
     const app = await initializeDatabase(db, { newId: testId, now: () => 5 });
-    await app.resumes.create({ id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await app.resumes.create({ id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     expect(await app.targetJobs.get('r1')).toBeNull();
     expect(await app.targetJobs.save({ resumeId: 'r1', title: 'Data Analyst', company: '', description: 'SQL and Python', updatedAt: 2 })).toBe(true);
     expect(await app.targetJobs.save({ resumeId: 'r1', title: '', company: '', description: 'Updated', updatedAt: 3 })).toBe(true);
@@ -258,7 +258,7 @@ describe('target_jobs (v3, step 10)', () => {
     const db = openDb();
     const app = await initializeDatabase(db, { newId: testId, now: () => 5 });
     expect(await app.targetJobs.save({ resumeId: 'nope', title: '', company: '', description: 'x', updatedAt: 1 })).toBe(false);
-    await app.resumes.create({ id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#000000', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
+    await app.resumes.create({ id: 'r1', title: 'Mine', templateId: 'tech-builder', accent: '#000000', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1 });
     await app.targetJobs.save({ resumeId: 'r1', title: '', company: '', description: 'y'.repeat(30_000), updatedAt: 1 });
     expect((await app.targetJobs.get('r1'))!.description).toHaveLength(25_000);
     expect(() => db.raw.prepare("INSERT OR REPLACE INTO target_jobs (resume_id, description, updated_at) VALUES ('r1', ?, 1)").run('z'.repeat(25_001))).toThrow(/CHECK/);

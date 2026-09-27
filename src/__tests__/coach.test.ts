@@ -1,3 +1,4 @@
+import { en } from '../i18n/messages/en';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -26,7 +27,7 @@ const SRC = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(SRC, path), 'utf8');
 
 const analyze = (text: string, field: CoachField = 'experienceBullet', siblings: string[] = []) =>
-  analyzeText(text, buildCoachContext(field, siblings));
+  analyzeText(text, buildCoachContext(field, 'en', siblings));
 const rulesOf = (text: string, field?: CoachField, siblings?: string[]) => analyze(text, field, siblings).findings.map((f) => f.rule);
 const only = (rule: CoachRuleId, text: string, field?: CoachField, siblings?: string[]) =>
   analyze(text, field, siblings).findings.filter((f) => f.rule === rule);
@@ -189,7 +190,7 @@ function applyAll(entry: CorpusEntry): { text: string; applied: number } {
   let text = entry.text;
   let applied = 0;
   for (let guard = 0; guard < 50; guard++) {
-    const context = buildCoachContext(entry.field, entry.siblings ?? []);
+    const context = buildCoachContext(entry.field, 'en', entry.siblings ?? []);
     const next = analyzeText(text, context).findings.find(fixable);
     if (!next) break;
     text = applyFix(text, context, next, next.fix!.kind === 'choices' ? 0 : undefined);
@@ -199,7 +200,7 @@ function applyAll(entry: CorpusEntry): { text: string; applied: number } {
 }
 
 const findingsIn = (entries: CorpusEntry[], texts?: string[]) =>
-  entries.reduce((n, e, i) => n + analyzeText(texts ? texts[i] : e.text, buildCoachContext(e.field, e.siblings ?? [])).findings.length, 0);
+  entries.reduce((n, e, i) => n + analyzeText(texts ? texts[i] : e.text, buildCoachContext(e.field, 'en', e.siblings ?? [])).findings.length, 0);
 
 describe('corpus', () => {
   it('well-written text produces no findings (no false positives)', () => {
@@ -222,7 +223,7 @@ describe('corpus', () => {
     expect(before).toBe(35);
     expect(after).toBe(11);
     for (const [i, entry] of WEAK.entries()) {
-      const remaining = analyzeText(results[i].text, buildCoachContext(entry.field, entry.siblings ?? [])).findings;
+      const remaining = analyzeText(results[i].text, buildCoachContext(entry.field, 'en', entry.siblings ?? [])).findings;
       expect(remaining.filter(fixable), entry.text).toEqual([]);
     }
   });
@@ -260,7 +261,7 @@ describe('no-fact invariant', () => {
   it('every fix and every choice, on every corpus text: adds no fact and changes only its own span', () => {
     let checked = 0;
     for (const entry of entries) {
-      const context = buildCoachContext(entry.field, entry.siblings ?? []);
+      const context = buildCoachContext(entry.field, 'en', entry.siblings ?? []);
       for (const finding of analyzeText(entry.text, context).findings.filter(fixable)) {
         const choices = finding.fix!.kind === 'choices' ? finding.fix!.options.map((_, i) => i) : [undefined];
         for (const choice of choices) {
@@ -294,7 +295,7 @@ describe('no-fact invariant', () => {
   it('siblings are read-only: a fix returns only the chosen text and never touches another bullet', () => {
     const siblings = Object.freeze(['Built the API.', 'Wrote the docs.']);
     const before = JSON.stringify(siblings);
-    const context = buildCoachContext('experienceBullet', siblings);
+    const context = buildCoachContext('experienceBullet', 'en', siblings);
     const [f] = analyzeText('Shipped the app', context).findings.filter((x) => x.rule === 'final-period');
     expect(applyFix('Shipped the app', context, f)).toBe('Shipped the app.');
     expect(JSON.stringify(siblings)).toBe(before);
@@ -335,7 +336,7 @@ describe('grounding guard rejects any fix that adds a fact', () => {
   });
 
   it('a forged finding cannot even reach the guard through applyFix (it must be reproduced by analysis)', () => {
-    const context = buildCoachContext('experienceBullet');
+    const context = buildCoachContext('experienceBullet', 'en');
     expect(() => applyFix(text, context, forged(text, 0, end, 'Supported billing'))).toThrow(CoachStaleFindingError);
   });
 });
@@ -343,16 +344,16 @@ describe('grounding guard rejects any fix that adds a fact', () => {
 // --- 5. apply semantics ---
 
 describe('applying suggestions', () => {
-  const context = buildCoachContext('experienceBullet');
+  const context = buildCoachContext('experienceBullet', 'en');
 
   it('stale: the text changed, the context changed, or the finding was altered', () => {
     const text = 'Led a analysis of churn';
     const [f] = analyzeText(text, context).findings;
     expect(() => applyFix('Led a analysis of churn drivers', context, f)).toThrow(CoachStaleFindingError);
     expect(() => applyFix(text, context, { ...f, fix: { kind: 'auto', replacement: 'the' } })).toThrow(CoachStaleFindingError);
-    const withSiblings = buildCoachContext('experienceBullet', ['Built the API.', 'Wrote the docs.']);
+    const withSiblings = buildCoachContext('experienceBullet', 'en', ['Built the API.', 'Wrote the docs.']);
     const [period] = analyzeText('Shipped the app', withSiblings).findings;
-    expect(() => applyFix('Shipped the app', buildCoachContext('experienceBullet', ['Built the API', 'Wrote the docs']), period)).toThrow(CoachStaleFindingError);
+    expect(() => applyFix('Shipped the app', buildCoachContext('experienceBullet', 'en', ['Built the API', 'Wrote the docs']), period)).toThrow(CoachStaleFindingError);
   });
 
   it('a stale finding is refused before any analysis runs (even on text the engine would refuse)', () => {
@@ -388,7 +389,7 @@ describe('applying suggestions', () => {
 
   it('is deterministic', () => {
     for (const entry of [...WEAK, ...ADVERSARIAL]) {
-      const context2 = buildCoachContext(entry.field, entry.siblings ?? []);
+      const context2 = buildCoachContext(entry.field, 'en', entry.siblings ?? []);
       expect(analyzeText(entry.text, context2)).toEqual(analyzeText(entry.text, context2));
     }
   });
@@ -408,8 +409,8 @@ describe('limits', () => {
     expect(() => analyze('Led the team', 'experienceBullet', siblings(31))).toThrow(new CoachInputError('context_too_long'));
     const long = `${'a'.repeat(41)} word`;
     expect(() => analyze('Led the team', 'experienceBullet', [long])).toThrow(new CoachInputError('invalid_context'));
-    expect(() => analyzeText('x', { field: 'summaryBullets' as CoachField, siblings: [] })).toThrow(new CoachInputError('invalid_context'));
-    expect(() => analyzeText(42 as unknown as string, buildCoachContext('tagline'))).toThrow(new CoachInputError('invalid_context'));
+    expect(() => analyzeText('x', { field: 'summaryBullets' as CoachField, language: 'en', siblings: [] })).toThrow(new CoachInputError('invalid_context'));
+    expect(() => analyzeText(42 as unknown as string, buildCoachContext('tagline', 'en'))).toThrow(new CoachInputError('invalid_context'));
   });
 });
 
@@ -426,50 +427,50 @@ function world(premium: boolean) {
 describe('entitlement', () => {
   it('FREE: refused before any analysis (even for text the engine would reject)', async () => {
     const free = world(false);
-    await expect(free.tools.writingCoach('Helped with the launch', 'experienceBullet')).rejects.toEqual(new PremiumRequiredError('coach'));
-    await expect(free.tools.writingCoach('x'.repeat(7000), 'experienceBullet')).rejects.toEqual(new PremiumRequiredError('coach'));
+    await expect(free.tools.writingCoach('Helped with the launch', 'experienceBullet', 'en')).rejects.toEqual(new PremiumRequiredError('coach'));
+    await expect(free.tools.writingCoach('x'.repeat(7000), 'experienceBullet', 'en')).rejects.toEqual(new PremiumRequiredError('coach'));
   });
 
   it('FREE: cannot apply a finding obtained earlier', async () => {
     const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet');
-    await expect(world(false).tools.applyCoachFix('Led a analysis', 'experienceBullet', [], report.findings[0])).rejects.toEqual(new PremiumRequiredError('coach'));
+    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
+    await expect(world(false).tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0])).rejects.toEqual(new PremiumRequiredError('coach'));
   });
 
   it('PREMIUM: one check to analyse, another to apply', async () => {
     const paid = world(true);
     const before = paid.store.calls.verify;
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet');
+    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
     expect(paid.store.calls.verify - before).toBe(1);
-    expect(await paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', [], report.findings[0])).toBe('Led an analysis');
+    expect(await paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0])).toBe('Led an analysis');
     expect(paid.store.calls.verify - before).toBe(2);
   });
 
   it('premium lost between analysis and apply → refused, no text returned', async () => {
     const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet');
+    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
     paid.store.refund();
     let result: string | null = null;
     await expect(
-      paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', [], report.findings[0]).then((r) => (result = r)),
+      paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0]).then((r) => (result = r)),
     ).rejects.toEqual(new PremiumRequiredError('coach'));
     expect(result).toBeNull();
   });
 
   it('stale through the service', async () => {
     const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet');
-    await expect(paid.tools.applyCoachFix('Led a analysis of churn', 'experienceBullet', [], report.findings[0])).rejects.toBeInstanceOf(CoachStaleFindingError);
+    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
+    await expect(paid.tools.applyCoachFix('Led a analysis of churn', 'experienceBullet', 'en', [], report.findings[0])).rejects.toBeInstanceOf(CoachStaleFindingError);
   });
 
   it('a refused Coach request resumes through the existing paywall after subscribing', async () => {
     const w = world(false);
     let report: unknown = null;
     try {
-      await w.tools.writingCoach('Led a analysis', 'experienceBullet');
+      await w.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
     } catch (error) {
       if (error instanceof PremiumRequiredError) {
-        w.paywall.request({ feature: error.feature, run: async () => void (report = await w.tools.writingCoach('Led a analysis', 'experienceBullet')) });
+        w.paywall.request({ feature: error.feature, run: async () => void (report = await w.tools.writingCoach('Led a analysis', 'experienceBullet', 'en')) });
       }
     }
     expect(w.paywall.pendingFeature()).toBe('coach');
@@ -491,10 +492,10 @@ const valueImports = (source: string) =>
   [...source.matchAll(/^import\s+(?!type\s)[^;]*?from\s+['"]([^'"]+)['"]/gms)].map((m) => m[1]);
 
 describe('architecture: Editor → PremiumTools → domain/coach', () => {
-  it('domain/coach is pure (imports only itself)', () => {
+  it('domain/coach is pure (imports only itself and the language contract)', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'coach'))) {
       for (const spec of [...read(relative(SRC, file)).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
-        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$/);
+        expect(spec, relative(SRC, file)).toMatch(/^\.\/[\w-]+$|^\.\.\/i18n\/(analysis-support|languages)$/);
       }
     }
   });
@@ -522,9 +523,9 @@ describe('architecture: Editor → PremiumTools → domain/coach', () => {
 
   it('FREE sees only "Coach 🔒": no teaser, and no analysis outside the gated service call', () => {
     const entry = read('features/coach/CoachEntry.tsx');
-    expect(entry).toMatch(/decision\.premium \? COACH_COPY\.open : COACH_COPY\.locked/);
-    expect(read('features/coach/coach-copy.ts')).toContain("locked: 'Coach 🔒'");
-    expect(read('features/coach/coach-copy.ts')).not.toMatch(/\d+ suggestion|found|issues/i);
+    expect(entry).toMatch(/decision\.premium \? t\('coach\.open'\) : t\('coach\.locked'\)/);
+    expect(en.coach.locked).toBe('Coach 🔒');
+    expect(JSON.stringify(en.coach)).not.toMatch(/\d+ suggestion|found|issues/i);
     // The panel only renders for a premium decision.
     expect(entry).toMatch(/const open = report !== null && decision\.premium;/);
   });

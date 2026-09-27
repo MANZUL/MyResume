@@ -13,7 +13,11 @@ import {
 } from '../../ui/components';
 import { applyListOp, useStableKeys, type ListOp } from '../../ui/entry-keys';
 import { useResume } from '../../services/storage/resume-store';
-import { parseSectionParam, SECTION_TITLES, type EditorSection } from '../../domain/resume/sections';
+import { parseSectionParam, type EditorSection } from '../../domain/resume/sections';
+import { analysisSupport } from '../../domain/i18n/analysis-support';
+import { LANGUAGE_NAMES, LANGUAGES, type Language } from '../../domain/i18n/languages';
+import type { MessageKey } from '../../i18n/catalog';
+import { useT } from '../../services/i18n/localization';
 import {
   emptyCertification,
   emptyEducation,
@@ -21,7 +25,6 @@ import {
   emptyProject,
   type ResumeData,
 } from '../../domain/resume/types';
-import { EDITOR_COPY as COPY } from './editor-copy';
 import { CoachEntry } from '../coach/CoachEntry';
 
 type ListKey = 'experience' | 'education' | 'certifications' | 'projects';
@@ -35,7 +38,8 @@ const EMPTY_ITEM: { [K in ListKey]: () => ResumeData[K][number] } = {
 export default function EditorScreen() {
   // `section` + `jump` come from Resume Check's "Improve" link (a new `jump` each time).
   const { id, section, jump } = useLocalSearchParams<{ id: string; section?: string; jump?: string }>();
-  const { resume, update, ready, flush, setActive } = useResume(id);
+  const { resume, update, ready, flush, setActive, setLanguage } = useResume(id);
+  const t = useT();
   const resumeId = resume?.id;
   const data = resume?.data;
 
@@ -132,11 +136,24 @@ export default function EditorScreen() {
   if (!resume || !data) {
     return (
       <View style={{ flex: 1, padding: 24, gap: 12 }}>
-        <Muted>This resume no longer exists.</Muted>
-        <Button title="Back to resumes" onPress={() => router.replace('/')} />
+        <Muted>{t('editor.missing')}</Muted>
+        <Button title={t('editor.back')} onPress={() => router.replace('/')} />
       </View>
     );
   }
+
+  // Resume content follows the resume's language; labels follow the app language.
+  const lang = resume.language;
+  const coachAvailable = analysisSupport('writingCoach', lang).kind !== 'unavailable';
+  const f = (key: string) => t(`editor.fields.${key}` as MessageKey);
+  const sectionTitle = (key: EditorSection) => t(`editor.sections.${key}` as MessageKey);
+  /** Shared props of every string list: catalog text and content direction. */
+  const listProps = (label: string) => ({
+    emptyHint: t('editor.emptyList'),
+    itemLabel: (i: number) => t('editor.listItem', { label, index: i + 1 }),
+    removeLabel: (i: number) => t('editor.removeItem', { label, index: i + 1 }),
+    contentLanguage: lang,
+  });
 
   const setContact = (key: keyof ResumeData['contact'], value: string) =>
     setData((d) => ({ ...d, contact: { ...d.contact, [key]: value } }));
@@ -157,16 +174,16 @@ export default function EditorScreen() {
 
   const itemControls = (key: ListKey, index: number, count: number) => (
     <View style={{ flexDirection: 'row', gap: 16, justifyContent: 'flex-end', marginTop: 4 }}>
-      {index > 0 ? <LinkButton label="Move up" onPress={() => changeList(key, { type: 'move', from: index, to: index - 1 })} /> : null}
-      {index < count - 1 ? <LinkButton label="Move down" onPress={() => changeList(key, { type: 'move', from: index, to: index + 1 })} /> : null}
-      <LinkButton label="Remove" danger onPress={() => changeList(key, { type: 'remove', index })} />
+      {index > 0 ? <LinkButton label={t('editor.moveUp')} onPress={() => changeList(key, { type: 'move', from: index, to: index - 1 })} /> : null}
+      {index < count - 1 ? <LinkButton label={t('editor.moveDown')} onPress={() => changeList(key, { type: 'move', from: index, to: index + 1 })} /> : null}
+      <LinkButton label={t('editor.remove')} danger onPress={() => changeList(key, { type: 'remove', index })} />
     </View>
   );
   const listHeader = (key: ListKey) => (
     <View onLayout={anchor(key)}>
       <SectionHeader
-        title={`${SECTION_TITLES[key]} (${data[key].length})`}
-        action={<LinkButton label="+ Add" onPress={() => changeList(key, { type: 'add' })} />}
+        title={t('editor.listCount', { title: sectionTitle(key), count: data[key].length })}
+        action={<LinkButton label={t('editor.add')} onPress={() => changeList(key, { type: 'add' })} />}
       />
     </View>
   );
@@ -175,11 +192,11 @@ export default function EditorScreen() {
     <>
       <Stack.Screen
         options={{
-          title: resume.title || 'Edit',
+          title: resume.title || t('nav.edit'),
           headerRight: () => (
             <View style={{ flexDirection: 'row', gap: 16 }}>
-              <LinkButton label="Tools" onPress={() => router.push({ pathname: '/resume/[id]/tools', params: { id: resume.id } })} />
-              <LinkButton label="Preview" bold onPress={() => router.push({ pathname: '/resume/[id]/preview', params: { id: resume.id } })} />
+              <LinkButton label={t('editor.tools')} onPress={() => router.push({ pathname: '/resume/[id]/tools', params: { id: resume.id } })} />
+              <LinkButton label={t('editor.preview')} bold onPress={() => router.push({ pathname: '/resume/[id]/preview', params: { id: resume.id } })} />
             </View>
           ),
         }}
@@ -191,52 +208,81 @@ export default function EditorScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
-          <Field label="Resume title (only you see this)" value={resume.title} onChangeText={(title) => update(resume.id, { title })} />
+          <Field label={t('editor.resumeTitle')} value={resume.title} onChangeText={(title) => update(resume.id, { title })} />
+
+          <View style={{ gap: 6 }}>
+            <Text style={styles.label}>{t('editor.resumeLanguage')}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
+              {LANGUAGES.map((option: Language) => {
+                const selected = option === lang;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    onPress={() => setLanguage(resume.id, option)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.text : colors.border,
+                      backgroundColor: selected ? colors.text : colors.card,
+                    }}
+                  >
+                    <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600' }}>{LANGUAGE_NAMES[option]}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Muted>{t('editor.resumeLanguageHint')}</Muted>
+            {coachAvailable ? null : <Muted>{t('editor.coachUnavailable')}</Muted>}
+          </View>
 
           <View onLayout={anchor('personal')}>
-            <Collapsible title={SECTION_TITLES.personal} subtitle={data.name || 'Name and contact'} initiallyOpen={!data.name} {...openProps('personal')}>
-              <Field label={COPY.personal.name} value={data.name} onChangeText={(name) => setData((d) => ({ ...d, name }))} textContentType="name" autoComplete="name" />
-              <Field label={COPY.personal.email} value={data.contact.email} onChangeText={(v) => setContact('email', v)} keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" autoComplete="email" />
-              <Field label={COPY.personal.phone} value={data.contact.phone} onChangeText={(v) => setContact('phone', v)} keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" />
-              <Field label={COPY.personal.location} value={data.contact.location} onChangeText={(v) => setContact('location', v)} placeholder="City, State" />
-              <Field label={COPY.personal.linkedin} value={data.contact.linkedin} onChangeText={(v) => setContact('linkedin', v)} autoCapitalize="none" keyboardType="url" />
-              <Field label={COPY.personal.website} value={data.contact.website} onChangeText={(v) => setContact('website', v)} autoCapitalize="none" keyboardType="url" />
+            <Collapsible title={sectionTitle('personal')} subtitle={data.name || t('editor.personalSubtitle')} initiallyOpen={!data.name} {...openProps('personal')}>
+              <Field contentLanguage={lang} label={f('personal.name')} value={data.name} onChangeText={(name) => setData((d) => ({ ...d, name }))} textContentType="name" autoComplete="name" />
+              <Field contentLanguage={lang} label={f('personal.email')} value={data.contact.email} onChangeText={(v) => setContact('email', v)} keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" autoComplete="email" />
+              <Field contentLanguage={lang} label={f('personal.phone')} value={data.contact.phone} onChangeText={(v) => setContact('phone', v)} keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" />
+              <Field contentLanguage={lang} label={f('personal.location')} value={data.contact.location} onChangeText={(v) => setContact('location', v)} placeholder={t('editor.locationPlaceholder')} />
+              <Field contentLanguage={lang} label={f('personal.linkedin')} value={data.contact.linkedin} onChangeText={(v) => setContact('linkedin', v)} autoCapitalize="none" keyboardType="url" />
+              <Field contentLanguage={lang} label={f('personal.website')} value={data.contact.website} onChangeText={(v) => setContact('website', v)} autoCapitalize="none" keyboardType="url" />
             </Collapsible>
           </View>
 
           <View onLayout={anchor('summary')}>
-            <Collapsible title={SECTION_TITLES.summary} subtitle={data.summary.tagline || 'Tagline, summary bullets, skills'} {...openProps('summary')}>
-              <Field label={COPY.summary.tagline} value={data.summary.tagline} onChangeText={(v) => setSummary('tagline', v)} multiline />
-              <CoachEntry text={data.summary.tagline} field="tagline" onApply={(v) => setSummary('tagline', v)} />
-              <StringListEditor label={COPY.summary.bullets} items={data.summary.bullets} onChange={(v) => setSummary('bullets', v)} placeholder={COPY.summary.bulletsPlaceholder} addLabel={COPY.summary.bulletsAdd} />
-              <StringListEditor label={COPY.summary.skills} items={data.summary.skills} onChange={(v) => setSummary('skills', v)} placeholder={COPY.summary.skillsPlaceholder} addLabel={COPY.summary.skillsAdd} />
+            <Collapsible title={sectionTitle('summary')} subtitle={data.summary.tagline || t('editor.summarySubtitle')} {...openProps('summary')}>
+              <Field contentLanguage={lang} label={f('summary.tagline')} value={data.summary.tagline} onChangeText={(v) => setSummary('tagline', v)} multiline />
+              <CoachEntry language={lang} text={data.summary.tagline} field="tagline" onApply={(v) => setSummary('tagline', v)} />
+              <StringListEditor {...listProps(f('summary.bullets'))} label={f('summary.bullets')} items={data.summary.bullets} onChange={(v) => setSummary('bullets', v)} placeholder={f('summary.bulletsPlaceholder')} addLabel={f('summary.bulletsAdd')} />
+              <StringListEditor {...listProps(f('summary.skills'))} label={f('summary.skills')} items={data.summary.skills} onChange={(v) => setSummary('skills', v)} placeholder={f('summary.skillsPlaceholder')} addLabel={f('summary.skillsAdd')} />
             </Collapsible>
           </View>
 
           {listHeader('experience')}
           {data.experience.map((exp, index) => (
-            <Collapsible key={experienceKeys[index]} title={exp.title || 'New role'} subtitle={[exp.company, [exp.start, exp.end].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')} initiallyOpen={!exp.title} {...openProps(experienceKeys[index])}>
-              <Field label={COPY.experience.title} value={exp.title} onChangeText={(v) => updateItem('experience', index, { title: v })} />
-              <Field label={COPY.experience.company} value={exp.company} onChangeText={(v) => updateItem('experience', index, { company: v })} />
-              <Field label={COPY.experience.location} value={exp.location} onChangeText={(v) => updateItem('experience', index, { location: v })} />
+            <Collapsible key={experienceKeys[index]} title={exp.title || t('editor.newRole')} subtitle={[exp.company, [exp.start, exp.end].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')} initiallyOpen={!exp.title} {...openProps(experienceKeys[index])}>
+              <Field contentLanguage={lang} label={f('experience.title')} value={exp.title} onChangeText={(v) => updateItem('experience', index, { title: v })} />
+              <Field contentLanguage={lang} label={f('experience.company')} value={exp.company} onChangeText={(v) => updateItem('experience', index, { company: v })} />
+              <Field contentLanguage={lang} label={f('experience.location')} value={exp.location} onChangeText={(v) => updateItem('experience', index, { location: v })} />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Field label={COPY.experience.start} value={exp.start} placeholder="Mar 2020" onChangeText={(v) => updateItem('experience', index, { start: v })} />
+                  <Field contentLanguage={lang} label={f('experience.start')} value={exp.start} placeholder={t('editor.startPlaceholder')} onChangeText={(v) => updateItem('experience', index, { start: v })} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Field label={COPY.experience.end} value={exp.end} placeholder="Present" onChangeText={(v) => updateItem('experience', index, { end: v })} />
+                  <Field contentLanguage={lang} label={f('experience.end')} value={exp.end} placeholder={t('editor.endPlaceholder')} onChangeText={(v) => updateItem('experience', index, { end: v })} />
                 </View>
               </View>
-              <Field label={COPY.experience.summary} value={exp.summary} multiline onChangeText={(v) => updateItem('experience', index, { summary: v })} />
-              <CoachEntry text={exp.summary} field="experienceSummary" onApply={(v) => updateItem('experience', index, { summary: v })} />
-              <StringListEditor
-                label={COPY.experience.bullets}
+              <Field contentLanguage={lang} label={f('experience.summary')} value={exp.summary} multiline onChangeText={(v) => updateItem('experience', index, { summary: v })} />
+              <CoachEntry language={lang} text={exp.summary} field="experienceSummary" onApply={(v) => updateItem('experience', index, { summary: v })} />
+              <StringListEditor {...listProps(f('experience.bullets'))}
+                label={f('experience.bullets')}
                 items={exp.bullets}
                 onChange={(v) => updateItem('experience', index, { bullets: v })}
-                addLabel={COPY.experience.bulletsAdd}
-                placeholder="Start with an action verb and a result"
+                addLabel={f('experience.bulletsAdd')}
+                placeholder={t('editor.bulletPlaceholder')}
                 renderAction={(bullet, i) => (
-                  <CoachEntry
+                  <CoachEntry language={lang}
                     text={bullet}
                     field="experienceBullet"
                     siblings={exp.bullets.filter((_, j) => j !== i)}
@@ -250,40 +296,40 @@ export default function EditorScreen() {
 
           {listHeader('education')}
           {data.education.map((edu, index) => (
-            <Collapsible key={educationKeys[index]} title={edu.degree || 'New education'} subtitle={edu.school} initiallyOpen={!edu.degree} {...openProps(educationKeys[index])}>
-              <Field label={COPY.education.degree} value={edu.degree} onChangeText={(v) => updateItem('education', index, { degree: v })} />
-              <Field label={COPY.education.school} value={edu.school} onChangeText={(v) => updateItem('education', index, { school: v })} />
-              <Field label={COPY.education.location} value={edu.location} onChangeText={(v) => updateItem('education', index, { location: v })} />
-              <Field label={COPY.education.date} value={edu.date} onChangeText={(v) => updateItem('education', index, { date: v })} />
-              <Field label={COPY.education.honors} value={edu.honors} onChangeText={(v) => updateItem('education', index, { honors: v })} />
+            <Collapsible key={educationKeys[index]} title={edu.degree || t('editor.newEducation')} subtitle={edu.school} initiallyOpen={!edu.degree} {...openProps(educationKeys[index])}>
+              <Field contentLanguage={lang} label={f('education.degree')} value={edu.degree} onChangeText={(v) => updateItem('education', index, { degree: v })} />
+              <Field contentLanguage={lang} label={f('education.school')} value={edu.school} onChangeText={(v) => updateItem('education', index, { school: v })} />
+              <Field contentLanguage={lang} label={f('education.location')} value={edu.location} onChangeText={(v) => updateItem('education', index, { location: v })} />
+              <Field contentLanguage={lang} label={f('education.date')} value={edu.date} onChangeText={(v) => updateItem('education', index, { date: v })} />
+              <Field contentLanguage={lang} label={f('education.honors')} value={edu.honors} onChangeText={(v) => updateItem('education', index, { honors: v })} />
               {itemControls('education', index, data.education.length)}
             </Collapsible>
           ))}
 
           {listHeader('certifications')}
           {data.certifications.map((cert, index) => (
-            <Collapsible key={certificationKeys[index]} title={cert.name || 'New certification'} subtitle={cert.org} initiallyOpen={!cert.name} {...openProps(certificationKeys[index])}>
-              <Field label={COPY.certifications.name} value={cert.name} onChangeText={(v) => updateItem('certifications', index, { name: v })} />
-              <Field label={COPY.certifications.org} value={cert.org} onChangeText={(v) => updateItem('certifications', index, { org: v })} />
-              <Field label={COPY.certifications.date} value={cert.date} onChangeText={(v) => updateItem('certifications', index, { date: v })} />
+            <Collapsible key={certificationKeys[index]} title={cert.name || t('editor.newCertification')} subtitle={cert.org} initiallyOpen={!cert.name} {...openProps(certificationKeys[index])}>
+              <Field contentLanguage={lang} label={f('certifications.name')} value={cert.name} onChangeText={(v) => updateItem('certifications', index, { name: v })} />
+              <Field contentLanguage={lang} label={f('certifications.org')} value={cert.org} onChangeText={(v) => updateItem('certifications', index, { org: v })} />
+              <Field contentLanguage={lang} label={f('certifications.date')} value={cert.date} onChangeText={(v) => updateItem('certifications', index, { date: v })} />
               {itemControls('certifications', index, data.certifications.length)}
             </Collapsible>
           ))}
 
           {listHeader('projects')}
           {data.projects.map((project, index) => (
-            <Collapsible key={projectKeys[index]} title={project.name || 'New project'} subtitle={project.description} initiallyOpen={!project.name} {...openProps(projectKeys[index])}>
-              <Field label={COPY.projects.name} value={project.name} onChangeText={(v) => updateItem('projects', index, { name: v })} />
-              <Field label={COPY.projects.description} value={project.description} onChangeText={(v) => updateItem('projects', index, { description: v })} />
-              <CoachEntry text={project.description} field="projectDescription" onApply={(v) => updateItem('projects', index, { description: v })} />
-              <StringListEditor
-                label={COPY.projects.bullets}
+            <Collapsible key={projectKeys[index]} title={project.name || t('editor.newProject')} subtitle={project.description} initiallyOpen={!project.name} {...openProps(projectKeys[index])}>
+              <Field contentLanguage={lang} label={f('projects.name')} value={project.name} onChangeText={(v) => updateItem('projects', index, { name: v })} />
+              <Field contentLanguage={lang} label={f('projects.description')} value={project.description} onChangeText={(v) => updateItem('projects', index, { description: v })} />
+              <CoachEntry language={lang} text={project.description} field="projectDescription" onApply={(v) => updateItem('projects', index, { description: v })} />
+              <StringListEditor {...listProps(f('projects.bullets'))}
+                label={f('projects.bullets')}
                 items={project.bullets}
                 onChange={(v) => updateItem('projects', index, { bullets: v })}
-                placeholder={COPY.projects.bulletsPlaceholder}
-                addLabel={COPY.projects.bulletsAdd}
+                placeholder={f('projects.bulletsPlaceholder')}
+                addLabel={f('projects.bulletsAdd')}
                 renderAction={(bullet, i) => (
-                  <CoachEntry
+                  <CoachEntry language={lang}
                     text={bullet}
                     field="projectBullet"
                     siblings={project.bullets.filter((_, j) => j !== i)}
@@ -296,18 +342,18 @@ export default function EditorScreen() {
           ))}
 
           <View onLayout={anchor('awards')}>
-            <SectionHeader title={SECTION_TITLES.awards} />
+            <SectionHeader title={sectionTitle('awards')} />
           </View>
           <View style={styles.card}>
-            <StringListEditor label={COPY.awards.list} items={data.awards} onChange={(awards) => setData((d) => ({ ...d, awards }))} placeholder={COPY.awards.placeholder} addLabel={COPY.awards.add} />
+            <StringListEditor {...listProps(f('awards.list'))} label={f('awards.list')} items={data.awards} onChange={(awards) => setData((d) => ({ ...d, awards }))} placeholder={f('awards.placeholder')} addLabel={f('awards.add')} />
           </View>
 
           <Button
-            title="Preview & export"
+            title={t('editor.previewExport')}
             onPress={() => router.push({ pathname: '/resume/[id]/preview', params: { id: resume.id } })}
             style={{ marginTop: 12 }}
           />
-          <Text style={[styles.muted, { textAlign: 'center' }]}>Changes save automatically on this device.</Text>
+          <Text style={[styles.muted, { textAlign: 'center' }]}>{t('editor.autosave')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </>

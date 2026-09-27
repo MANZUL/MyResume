@@ -1,3 +1,5 @@
+import type { LanguageSupport } from '../i18n/analysis-support';
+import type { Language } from '../i18n/languages';
 // Writing Coach (PREMIUM, plan §3): deterministic rules with reasons and a few
 // safe, user-triggered fixes. No rewriting, no AI. A fix never adds a fact.
 
@@ -36,6 +38,8 @@ export interface SiblingSummary {
 
 export interface CoachContext {
   field: CoachField;
+  /** The resume's language. The Coach's rules are English-only; other languages get no findings. */
+  language: Language;
   siblings: readonly SiblingSummary[];
 }
 
@@ -64,6 +68,8 @@ export interface CoachFinding {
 export interface CoachReport {
   text: string;
   field: CoachField;
+  /** 'unavailable' for languages without Coach rules: then there are no findings. */
+  support: LanguageSupport;
   findings: readonly CoachFinding[];
 }
 

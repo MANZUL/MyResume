@@ -1,4 +1,8 @@
+import type { Language } from '../i18n/languages';
 import type { ResumeData } from './types';
+
+/** The sample resume is written in English (not translated yet). */
+export const SAMPLE_RESUME_LANGUAGE: Language = 'en';
 
 export const SAMPLE_RESUME: ResumeData = {
   name: 'Eleanor Vance',

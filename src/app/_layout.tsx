@@ -6,6 +6,7 @@ import { colors } from '../ui/components';
 import { EntitlementProvider } from '../services/entitlement/entitlement';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
 import { RasterizerHost } from '../services/export/rasterizer/RasterizerHost';
+import { LocalizationProvider, useT } from '../services/i18n/localization';
 import { DatabaseProvider } from '../services/storage/database-context';
 import { ResumeStoreProvider } from '../services/storage/resume-store';
 
@@ -18,32 +19,43 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <DatabaseProvider>
-        <EntitlementProvider>
-          <ResumeStoreProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: colors.bg },
-                headerShadowVisible: false,
-                headerTintColor: colors.text,
-                headerTitleStyle: { fontWeight: '600' },
-                contentStyle: { backgroundColor: colors.bg },
-              }}
-            >
-              <Stack.Screen name="index" options={{ title: 'My Resume' }} />
-              <Stack.Screen name="templates/index" options={{ title: 'Templates' }} />
-              <Stack.Screen name="templates/[templateId]" options={{ title: 'Template' }} />
-              <Stack.Screen name="import" options={{ title: 'Import text', presentation: 'modal' }} />
-              <Stack.Screen name="resume/[id]/index" options={{ title: 'Edit' }} />
-              <Stack.Screen name="resume/[id]/preview" options={{ title: 'Preview' }} />
-              <Stack.Screen name="resume/[id]/tools" options={{ title: 'Tools' }} />
-              <Stack.Screen name="unlock" options={{ title: 'Premium', presentation: 'modal' }} />
-            </Stack>
-            {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
-            <RasterizerHost />
-          </ResumeStoreProvider>
-        </EntitlementProvider>
+        <LocalizationProvider>
+          <EntitlementProvider>
+            <ResumeStoreProvider>
+              <StatusBar style="dark" />
+              <AppStack />
+              {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
+              <RasterizerHost />
+            </ResumeStoreProvider>
+          </EntitlementProvider>
+        </LocalizationProvider>
       </DatabaseProvider>
     </SafeAreaProvider>
+  );
+}
+
+/** Screen titles come from the app language. */
+function AppStack() {
+  const t = useT();
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTintColor: colors.text,
+        headerTitleStyle: { fontWeight: '600' },
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
+      <Stack.Screen name="index" options={{ title: t('nav.home') }} />
+      <Stack.Screen name="templates/index" options={{ title: t('nav.templates') }} />
+      <Stack.Screen name="templates/[templateId]" options={{ title: t('nav.template') }} />
+      <Stack.Screen name="import" options={{ title: t('nav.import'), presentation: 'modal' }} />
+      <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
+      <Stack.Screen name="resume/[id]/index" options={{ title: t('nav.edit') }} />
+      <Stack.Screen name="resume/[id]/preview" options={{ title: t('nav.preview') }} />
+      <Stack.Screen name="resume/[id]/tools" options={{ title: t('nav.tools') }} />
+      <Stack.Screen name="unlock" options={{ title: t('nav.premium'), presentation: 'modal' }} />
+    </Stack>
   );
 }

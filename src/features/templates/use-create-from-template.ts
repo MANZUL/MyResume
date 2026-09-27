@@ -11,7 +11,8 @@ export function useCreateFromTemplate(): (templateId: string) => void {
   const { create } = useResumeStore();
   return useCallback(
     (templateId: string) => {
-      const resume = create(emptyResume(), 'Untitled resume', templateId);
+      // No title: the library stores the localized default. Language: the app language.
+      const resume = create(emptyResume(), undefined, templateId);
       router.dismissAll();
       router.push({ pathname: '/resume/[id]', params: { id: resume.id } });
     },

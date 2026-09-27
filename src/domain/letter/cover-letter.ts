@@ -1,3 +1,5 @@
+import { analysisSupport, type LanguageSupport } from '../i18n/analysis-support';
+import type { Language } from '../i18n/languages';
 import type { ResumeData } from '../resume/types';
 
 // Fill-in-the-blanks cover letter built only from the resume's own facts.
@@ -9,7 +11,23 @@ export interface CoverLetterInput {
   hiringManager: string;
 }
 
-export function buildCoverLetter(data: ResumeData, input: CoverLetterInput): string {
+export interface CoverLetter {
+  text: string;
+  /** The language the text is written in. English only today, whatever the resume's language. */
+  writtenIn: Language;
+  support: LanguageSupport;
+}
+
+/**
+ * A draft letter for a resume in `language`. The letter templates exist in English only,
+ * so non-English resumes get an English draft, reported explicitly (never mislabelled).
+ */
+export function generateCoverLetter(data: ResumeData, language: Language, input: CoverLetterInput): CoverLetter {
+  const support = analysisSupport('coverLetter', language);
+  return { text: englishLetter(data, input), writtenIn: 'en', support };
+}
+
+function englishLetter(data: ResumeData, input: CoverLetterInput): string {
   const latest = data.experience[0];
   const role = input.role.trim() || '[Role]';
   const company = input.company.trim() || '[Company]';

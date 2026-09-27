@@ -1,4 +1,6 @@
 import { textFields } from '../ats/fields';
+import { analysisSupport } from '../i18n/analysis-support';
+import type { Language } from '../i18n/languages';
 import { normalizeResumeData } from '../resume/normalize';
 import type { ResumeData } from '../resume/types';
 import { findHits, termById } from './matcher';
@@ -14,7 +16,7 @@ import { JOB_DESCRIPTION_MAX, JobDescriptionTooLongError, type Evidence, type Jo
 
 const SECTION_ORDER: readonly JdSection[] = ['required', 'responsibilities', 'general', 'preferred', 'about'];
 
-export function analyzeJobMatch(input: ResumeData, jobDescription: string): JobMatchReport {
+export function analyzeJobMatch(input: ResumeData, jobDescription: string, language: Language): JobMatchReport {
   const jd = typeof jobDescription === 'string' ? jobDescription : '';
   if (jd.length > JOB_DESCRIPTION_MAX) throw new JobDescriptionTooLongError();
   const data = normalizeResumeData(input);
@@ -76,5 +78,10 @@ export function analyzeJobMatch(input: ResumeData, jobDescription: string): JobM
     title = { text: detected.text, core: detected.core, resume: where };
   }
 
-  return { title, terms, counts: { inJob: terms.length, alsoInResume: terms.filter((t) => t.resume.length > 0).length } };
+  return {
+    support: analysisSupport('jobMatch', language),
+    title,
+    terms,
+    counts: { inJob: terms.length, alsoInResume: terms.filter((t) => t.resume.length > 0).length },
+  };
 }

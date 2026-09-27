@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { Button, colors, Muted } from '../../ui/components';
+import { createTranslator } from '../../i18n/translate';
+import { deviceLanguage } from '../i18n/device-language';
 import { openAppDatabase } from './expo-database';
 import type { AppDatabase } from './sqlite/database';
 import { SchemaTooNewError } from './sqlite/migrate';
@@ -37,15 +39,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   if (error) {
     // Nothing is deleted or reset here: the saved data stays untouched on disk.
     const tooNew = error instanceof SchemaTooNewError;
+    // The saved app language is in the database that could not open: use the device language.
+    const { t } = createTranslator(deviceLanguage());
     return (
       <View style={{ flex: 1, padding: 24, gap: 12, justifyContent: 'center', backgroundColor: colors.bg }}>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>Your resumes couldn&apos;t be opened</Text>
-        <Muted>
-          {tooNew
-            ? 'They were saved by a newer version of My Resume. Update the app to open them.'
-            : 'Your saved data has not been changed. Please try again.'}
-        </Muted>
-        {tooNew ? null : <Button title="Try again" onPress={retry} />}
+        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>{t('database.couldNotOpen')}</Text>
+        <Muted>{tooNew ? t('database.tooNew') : t('database.unchanged')}</Muted>
+        {tooNew ? null : <Button title={t('database.tryAgain')} onPress={retry} />}
       </View>
     );
   }
