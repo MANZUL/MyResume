@@ -173,7 +173,7 @@ export default function EditorScreen() {
   }
 
   const itemControls = (key: ListKey, index: number, count: number) => (
-    <View style={{ flexDirection: 'row', gap: 16, justifyContent: 'flex-end', marginTop: 4 }}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'flex-end', marginTop: 4 }}>
       {index > 0 ? <LinkButton label={t('editor.moveUp')} onPress={() => changeList(key, { type: 'move', from: index, to: index - 1 })} /> : null}
       {index < count - 1 ? <LinkButton label={t('editor.moveDown')} onPress={() => changeList(key, { type: 'move', from: index, to: index + 1 })} /> : null}
       <LinkButton label={t('editor.remove')} danger onPress={() => changeList(key, { type: 'remove', index })} />

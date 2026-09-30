@@ -53,8 +53,8 @@ export function AtsTool({
       <Card style={{ gap: 6 }}>
         <Text style={styles.sectionTitle}>{t('ats.parts')}</Text>
         {report.detected.map((d) => (
-          <View key={d.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.text, fontSize: 15 }}>{renderText(t, d.labelText)}</Text>
+          <View key={d.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+            <Text style={{ flexShrink: 1, color: colors.text, fontSize: 15 }}>{renderText(t, d.labelText)}</Text>
             <Text style={{ color: d.detected ? colors.success : colors.muted, fontWeight: '600' }}>
               {d.detected ? `✓ ${t('ats.detected')}` : t('ats.notDetected')}
             </Text>

@@ -29,6 +29,7 @@ import { templateSampleHtml } from '../domain/templates/sample-preview';
 import { TEMPLATES } from '../domain/templates/templates';
 import { englishText, errorText, renderText } from '../i18n/analysis';
 import { CATALOGS, ENGLISH, type MessageKey, type PartialMessages } from '../i18n/catalog';
+import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
 import { templateText } from '../i18n/templates';
 import { createTranslator, hasTranslation } from '../i18n/translate';
@@ -564,7 +565,9 @@ describe('translator', () => {
     expect(t('home.seeAll')).toBe('See all');
     expect(hasTranslation('de', 'home.create', custom)).toBe(true);
     expect(hasTranslation('de', 'home.seeAll', custom)).toBe(false);
-    for (const language of LANGUAGES) expect(createTranslator(language).t('home.headline')).toBe(ENGLISH.home.headline);
+    // Languages without a catalog yet fall back to English; German has its own text.
+    for (const language of ['fr', 'es', 'ar'] as const) expect(createTranslator(language).t('home.headline')).toBe(ENGLISH.home.headline);
+    expect(createTranslator('de').t('home.headline')).toBe(de.home.headline);
   });
 
   it('translations may only use keys that exist in English', () => {
@@ -836,8 +839,7 @@ describe('English catalog hardening', () => {
       expect(docx).toContain('>BERUFSERFAHRUNG<');
       expect(docx).toContain('>EDUCATION<');
     });
-    // No German translations ship in this phase.
-    expect(CATALOGS.de).toEqual({});
+    // (A partial German catalog is swapped in above, so the English fallback is visible.)
   });
 
   it('migration v4 leaves local_profile untouched and is idempotent', async () => {
@@ -921,25 +923,43 @@ describe('no hard-coded UI text in screens', () => {
     });
   const screens = [...files(join(SRC, 'features')), ...files(join(SRC, 'ui')), ...files(join(SRC, 'app')), join(SRC, 'services', 'storage', 'database-context.tsx')];
 
-  it('screens, UI components and routes take visible and accessibility text from the catalog', () => {
+  // Letters of any script (\p{L}), so German, French, Spanish or Arabic text is caught too.
+  /** JSX text, text props, alerts and navigation titles written in a screen instead of the catalog. */
+  const jsxProblems = (raw: string): string[] => {
+    const source = raw.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '');
     const problems: string[] = [];
-    for (const file of screens) {
-      const source = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '');
-      const where = relative(SRC, file);
-      // JSX text with words: text right after a JSX tag (<Text ...>, </View>, <>), not TS generics or code.
-      for (const m of source.matchAll(/(?:<\/?[A-Z][\w.]*(?:\s[^<>]*?)?|<|<\/)>([^<>{}]*[A-Za-z]{2,}[^<>{}]*)</g)) {
-        const text = m[1].trim();
-        if (text && !/[()=;?]|&&|\|\|/.test(text)) problems.push(`${where}: text "${text}"`);
-      }
-      // Text props as string literals.
-      for (const m of source.matchAll(/\b(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|addLabel|emptyHint)=(["'])[^"']*[A-Za-z]{2,}[^"']*\2/g)) {
-        problems.push(`${where}: ${m[0]}`);
-      }
-      for (const m of source.matchAll(/\b(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle)=\{\s*(['"`])[^'"`]*[A-Za-z]{2,}/g)) problems.push(`${where}: ${m[0]}`);
-      for (const m of source.matchAll(/Alert\.alert\(\s*['"`]/g)) problems.push(`${where}: ${m[0]}`);
-      for (const m of source.matchAll(/\btitle:\s*['"`][A-Za-z]/g)) problems.push(`${where}: ${m[0]}`);
+    // JSX text with words: text right after a JSX tag (<Text ...>, </View>, <>), not TS generics or code.
+    for (const m of source.matchAll(/(?:<\/?[A-Z][\w.]*(?:\s[^<>]*?)?|<|<\/)>([^<>{}]*\p{L}{2,}[^<>{}]*)</gu)) {
+      const text = m[1].trim();
+      if (text && !/[()=;?]|&&|\|\|/.test(text)) problems.push(`text "${text}"`);
     }
+    // Text props as string literals.
+    for (const m of source.matchAll(/\b(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle|addLabel|emptyHint)=(["'])[^"']*\p{L}{2,}[^"']*\2/gu)) {
+      problems.push(m[0]);
+    }
+    for (const m of source.matchAll(/\b(title|label|placeholder|accessibilityLabel|accessibilityHint|subtitle)=\{\s*(['"`])[^'"`]*\p{L}{2,}/gu)) problems.push(m[0]);
+    for (const m of source.matchAll(/Alert\.alert\(\s*['"`]/g)) problems.push(m[0]);
+    for (const m of source.matchAll(/\btitle:\s*['"`]\p{L}/gu)) problems.push(m[0]);
+    return problems;
+  };
+
+  it('screens, UI components and routes take visible and accessibility text from the catalog', () => {
+    const problems = screens.flatMap((file) => jsxProblems(readFileSync(file, 'utf8')).map((p) => `${relative(SRC, file)}: ${p}`));
     expect(problems).toEqual([]);
+  });
+
+  it('the JSX guard catches English and German text', () => {
+    for (const line of [
+      `<Text>Delete this resume</Text>`,
+      `<Text>Vorschau öffnen</Text>`,
+      `<Text>Übernehmen</Text>`,
+      `<Button title="Löschen" />`,
+      `<Field placeholder={'Straße'} />`,
+      `<Stack.Screen options={{ title: 'Einstellungen' }} />`,
+    ]) {
+      expect(jsxProblems(line), line).not.toEqual([]);
+    }
+    expect(jsxProblems(`<Text>{t('home.create')}</Text>`)).toEqual([]);
   });
 
   // Literal-level guard: every string literal in UI code must be a catalog key, a technical
@@ -955,7 +975,7 @@ describe('no hard-coded UI text in screens', () => {
     s
       .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
       .replace(/(^|[^:'"`\\])\/\/.*$/gm, (m, p: string) => p + ' '.repeat(m.length - p.length));
-  /** Returns the user-visible English literals the guard would reject in `source`. */
+  /** Returns the user-visible literals (any language) the guard would reject in `source`. */
   const visibleLiterals = (source: string): string[] => {
     const code = stripComments(source);
     const found: string[] = [];
@@ -963,7 +983,7 @@ describe('no hard-coded UI text in screens', () => {
       const value = m[2];
       const before = code.slice(Math.max(0, m.index! - 60), m.index);
       const plain = value.replace(/\$\{[^}]*\}/g, ' ').trim();
-      if (!/[A-Za-z]{2,}/.test(plain)) continue;
+      if (!/\p{L}{2,}/u.test(plain)) continue;
       if (/\b(from|import|require)\s*\(?\s*$/.test(before)) continue; // module specifiers and assets
       if (/\bt\(\s*$/.test(before)) continue; // catalog keys
       if (/\b(name|href|pathname|testID|key|nativeID)=\{?\s*$/.test(before)) continue; // routes and ids
@@ -971,13 +991,13 @@ describe('no hard-coded UI text in screens', () => {
       if (/[!=]==\s*$|\bcase\s+$/.test(before)) continue; // enum comparisons
       if (/^#[0-9A-Fa-f]{3,8}$/.test(plain) || /^(about:blank|data:|https?:\/\/)/.test(plain)) continue; // colors, URLs
       // Technical identifiers: keys, style names, paths, CSS values — one lowercase/camel token.
-      if (/^[\w.\-/:[\]@ ]*$/.test(plain) && !/[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(plain) && !/^([A-Z][a-z]+|[A-Z]{2,})$/.test(plain)) continue;
+      if (/^[\w.\-/:[\]@ ]*$/.test(plain) && !/\p{L}{2,}\s+\p{L}{2,}/u.test(plain) && !/^(\p{Lu}\p{Ll}+|\p{Lu}{2,})$/u.test(plain)) continue;
       found.push(value);
     }
     return found;
   };
 
-  it('UI code has no user-visible English string literals', () => {
+  it('UI code has no user-visible string literals (English, German or other)', () => {
     const problems = literalSources.flatMap((file) => visibleLiterals(readFileSync(file, 'utf8')).map((v) => `${relative(SRC, file)}: ${JSON.stringify(v)}`));
     expect(problems).toEqual([]);
   });
@@ -992,6 +1012,11 @@ describe('no hard-coded UI text in screens', () => {
       `<TextInput placeholder={'Job title'} />`,
       `accessibilityLabel={\`Delete \${name}\`}`,
       `const label = 'OK';`,
+      // German text is caught the same way (umlauts, ß, single capitalized words).
+      `<Button title={'Lebenslauf speichern'} />`,
+      `const title = 'Löschen';`,
+      `Alert.alert(t('x'), 'Größe prüfen')`,
+      `const hint = 'Übernehmen';`,
     ];
     for (const line of injected) expect(visibleLiterals(line), line).not.toEqual([]);
     const technical = [

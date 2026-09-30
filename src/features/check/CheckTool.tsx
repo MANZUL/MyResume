@@ -34,8 +34,8 @@ export function CheckTool({
       </Card>
       <Card style={{ gap: 8 }}>
         {score.categories.map((category) => (
-          <View key={category.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.text, fontSize: 15 }}>{renderText(t, category.labelText)}</Text>
+          <View key={category.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+            <Text style={{ flexShrink: 1, color: colors.text, fontSize: 15 }}>{renderText(t, category.labelText)}</Text>
             <Text style={{ color: category.status === 'Strong' ? colors.success : colors.warn, fontWeight: '600' }}>
               {category.status === 'Strong' ? t('check.status.strong') : t('check.status.needsAttention')}
             </Text>

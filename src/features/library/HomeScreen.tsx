@@ -74,7 +74,7 @@ export default function Home() {
             <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>{t('home.headline')}</Text>
             <Muted>{t('home.subtitle')}</Muted>
             <Button title={t('home.create')} onPress={() => router.push('/templates')} accessibilityHint={t('home.createHint')} />
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
               <Button title={t('home.importText')} variant="ghost" style={{ minHeight: 40 }} onPress={() => router.push('/import')} />
               <Button
                 title={t('home.trySample')}

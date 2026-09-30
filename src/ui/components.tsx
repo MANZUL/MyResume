@@ -145,7 +145,7 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
 export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, { flexShrink: 1 }]}>{title}</Text>
       {action}
     </View>
   );

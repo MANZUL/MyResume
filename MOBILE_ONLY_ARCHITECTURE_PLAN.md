@@ -1813,6 +1813,113 @@ How the guard is proven:
 - Job Match term labels come from the taxonomy (English data).
 - The cover letter body is written in English (§19.11).
 
+### 19.11b Phase 13B: German (de)
+
+**Catalog.** `src/i18n/messages/de.ts` has all 474 keys, 10 of them plural (one/other). It is typed as the full `Messages` shape, so a missing or extra key is a compile error.
+- Formal address ("Sie") throughout; German quotation marks „…“.
+- 28 values are intentionally the same as English. A test pins the list:
+  - product and brand names: My Resume, Premium, Coach, LinkedIn;
+  - loanwords that are standard in German UI: Tools, Website, Name, Layout, Tech;
+  - PDF, Word, ATS;
+  - pure formats and separators such as `{title} ({count})`.
+
+**Terminology** (one term per concept, pinned by a test):
+
+| Concept | German |
+|---|---|
+| resume | Lebenslauf |
+| summary heading | Kurzprofil |
+| experience | Berufserfahrung |
+| education | Ausbildung |
+| skills | Kenntnisse |
+| certifications | Zertifikate |
+| projects | Projekte |
+| awards | Auszeichnungen |
+| bullet | Aufzählungspunkt |
+| accomplishment | Erfolg |
+| job title / role | Position |
+| job description | Stellenanzeige |
+| job match | Stellenabgleich (tab: Abgleich) |
+| cover letter | Anschreiben |
+| template | Vorlage |
+| preview | Vorschau |
+| accent color | Akzentfarbe |
+
+Writing Coach, Premium, ATS and My Resume stay as names.
+
+**Templates.**
+- German names: Der Vorstand, Die Kanzlei, Der Baustein, Die Architektur, Das Magazin, Das Atelier, Die Praxis, Die Lehre, Die Fakultät, Das Labor, Die Baustelle, Der Meisterbrief.
+- Categories: Wirtschaft, Tech, Kreativ, Gesundheit, Wissenschaft, Handwerk.
+- Ids, designs and the 12 definitions are unchanged.
+
+**Documents.**
+- `resume.labels` in German: Kurzprofil, Berufserfahrung, Ausbildung, Zertifikate, Projekte, Auszeichnungen, Lebenslauf, VORSCHAU.
+- They come from the one canonical source, so PDF, preview, watermark and DOCX match.
+- A German resume renders `lang="de" dir="ltr"`, with no RTL rules.
+- The DOCX title uses the German template name.
+
+**Honest limits (German UI, English rules).** Score, ATS, Job Match, Cover Letter and Import still run English rules. The German text says so in these places:
+- the English-rules note (`tools.englishRules`);
+- the Writing Coach note (disabled for German resumes, unchanged);
+- "Der Entwurf wird vorerst auf Englisch erstellt" (cover letter);
+- "Abschnittsüberschriften werden vorerst nur auf Englisch erkannt" (import);
+- the ATS date messages, which say the rule only recognizes English words such as "Present" and suggest "03/2020".
+
+Job Match term labels are the English taxonomy. The template preview says its sample content is English.
+
+**UI fit.** Candidate labels were measured in Chromium for each slot at 360 dp (Liberation Sans as a stand-in for Roboto/SF, +8%). Short forms were chosen where the slot is fixed:
+- "PDF-Export", "Word-Export", "Bild-Export" (the same width as "Export PDF");
+- "Vorlage nutzen";
+- the tab "Abgleich".
+
+Local layout changes (English unchanged):
+- **Tools tabs:** a one-word label stays on one line and shrinks up to 20% ("Anschreiben"); two-word labels wrap as before.
+- **Home:** the "Text importieren" / "Beispiel testen" row may wrap.
+- **Editor:** the move/remove row may wrap.
+- **Section headers:** the title may shrink before the action.
+- **Score categories and ATS detections:** the label shrinks before the status.
+
+Character budgets for these slots are tested.
+
+**Tests** (`german.test.ts`, 34):
+- completeness, identical-value allowlist, parameter parity, plurals, quotation marks, terminology;
+- plural rendering for zero, one and several;
+- German number and date formats;
+- template metadata;
+- labels for 12 templates × PDF/preview × watermark × Letter/A4, and DOCX headings for all 12;
+- app/resume combinations A–D through the database;
+- analysis rendering over the corpora, with rule results unchanged;
+- the stated limits, paywall price, fallback, UI budgets and file names (ä/ö/ü/ß, NFD, hyphens).
+
+In Chromium:
+- pdf.js text of all 12 templates × Letter/A4 has the German headings, the umlaut name and ß text;
+- German headings stay on one line, inside the page, unclipped, and away from decorative marks, in PDF and watermarked preview for both paper sizes.
+
+The hard-coded string guard now matches letters of any script. German injections are tested, and two were mutation-checked on real files: a literal in `LetterTool.tsx` and JSX text in `ImportScreen.tsx`. Both failed, were restored and passed.
+
+**Device validation checklist (next build; NOT RUN):**
+1. App German: switch in Language, reopen, confirm the setting persisted and every screen is German.
+2. Resume German: editor language "Deutsch". Preview headings are German, with the VORSCHAU watermark on the FREE tier.
+3. App German, resume English: German UI, English document, no English-rules note on English resumes.
+4. App English, resume German: English UI, German document, English-rules note in English.
+5. Gallery: German names, categories, filters and "Vorlage nutzen" on a 360 dp phone at the default and the largest font size.
+6. Editor: section titles, "+ Hinzufügen", the move row, placeholders ("03/2020", "heute"), and the Coach hidden for German resumes.
+7. Preview: template chips, accent row, "PDF-Export" / "Word-Export" / "Bild-Export" buttons, locked state.
+8. PDF export: German headings; open in a PDF reader and copy text (umlauts, ß).
+9. DOCX export: German headings, document title, opens in Word/Pages.
+10. Paywall: German text, price unchanged, restore, pending and failure alerts.
+11. Tools: four tabs ("Anschreiben" fits), Score, ATS, Job Match and Cover Letter in German with the English-rules note.
+12. Settings: Language list shows English, Deutsch, Français, Español, العربية; German selected.
+13. Long labels: no clipped or overlapping text anywhere at the largest system font size.
+14. File name: resume named "Jürgen Weiß-Müller" exports `jürgen-weiß-müller.pdf`, and the share dialog title is German.
+15. Restart: after changing the app language, close and reopen. The layout direction stays LTR for German.
+
+**Validation:**
+- `tsc` ✅, `expo lint` ✅
+- 550 passed + 1 skipped generator (515 before) ✅
+- iOS and Android bundles ✅
+- Devices: **NOT RUN**
+
 ## 20. Major risks and failure modes
 
 | # | Risk | Impact | Mitigation |

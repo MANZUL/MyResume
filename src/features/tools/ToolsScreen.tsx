@@ -39,7 +39,7 @@ export default function ToolsScreen() {
                 backgroundColor: tool === key ? colors.card : 'transparent',
               }}
             >
-              <Text style={{ fontWeight: '600', color: colors.text }}>{t(`tools.tabs.${key}`)}</Text>
+              <TabLabel label={t(`tools.tabs.${key}`)} />
             </Pressable>
           ))}
         </View>
@@ -54,5 +54,24 @@ export default function ToolsScreen() {
         {tool === 'letter' ? <LetterTool data={resume.data} language={resume.language} /> : null}
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * Two-word labels wrap as before ("Cover / letter"). A one-word label cannot wrap, so it
+ * stays on one line and shrinks slightly if the tab is too narrow (e.g. "Anschreiben"),
+ * instead of breaking in the middle of the word.
+ */
+function TabLabel({ label }: { label: string }) {
+  const oneWord = !/\s/.test(label.trim());
+  return (
+    <Text
+      style={{ fontWeight: '600', color: colors.text }}
+      numberOfLines={oneWord ? 1 : 2}
+      adjustsFontSizeToFit={oneWord}
+      minimumFontScale={oneWord ? 0.8 : undefined}
+    >
+      {label}
+    </Text>
   );
 }
