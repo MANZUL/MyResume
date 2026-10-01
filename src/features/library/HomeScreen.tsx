@@ -1,6 +1,6 @@
 import { router, Stack } from 'expo-router';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
-import { Button, Card, colors, Muted, styles } from '../../ui/components';
+import { Button, Card, Muted, SectionTitle, colors, styles } from '../../ui/components';
 import { TemplateThumbnail } from '../templates/TemplateCard';
 import { templateHref } from '../templates/use-create-from-template';
 import { SAMPLE_RESUME, SAMPLE_RESUME_LANGUAGE } from '../../domain/resume/sample-data';
@@ -86,7 +86,7 @@ export default function Home() {
             </View>
 
             <View style={[styles.sectionHeader, { marginTop: 4 }]}>
-              <Text style={styles.sectionTitle}>{t('home.exploreTemplates')}</Text>
+              <SectionTitle>{t('home.exploreTemplates')}</SectionTitle>
               <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.push('/templates')}>
                 <Text style={{ color: colors.accent, fontWeight: '600' }}>{t('home.seeAll')}</Text>
               </Pressable>
@@ -114,7 +114,7 @@ export default function Home() {
               <View style={{ width: 4 }} />
             </ScrollView>
 
-            <Text style={[styles.sectionTitle, { marginTop: 12 }]}>{t('home.yourResumes')}</Text>
+            <SectionTitle style={{ marginTop: 12 }}>{t('home.yourResumes')}</SectionTitle>
           </View>
         }
         ListEmptyComponent={

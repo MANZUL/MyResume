@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { CoachCategory, CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
-import { colors, styles } from '../../ui/components';
+import { colors, SectionTitle, styles } from '../../ui/components';
+import { arrowFor } from '../../ui/direction';
 import { analysisSupport } from '../../domain/i18n/analysis-support';
 import type { Language } from '../../domain/i18n/languages';
-import { useT } from '../../services/i18n/localization';
+import { useLocalization, useT } from '../../services/i18n/localization';
 import { errorText, renderText } from '../../i18n/analysis';
 import { applyCoachFix, writingCoach } from '../../services/tools/resume-tools';
 
@@ -96,7 +97,7 @@ export function CoachEntry({
               if (!items.length) return null;
               return (
                 <View key={category} style={{ gap: 8 }}>
-                  <Text style={styles.sectionTitle}>{t(`coach.categories.${category}`)}</Text>
+                  <SectionTitle>{t(`coach.categories.${category}`)}</SectionTitle>
                   {items.map((finding) => (
                     <FindingRow key={finding.id} finding={finding} text={report.text} onApply={apply} />
                   ))}
@@ -112,7 +113,7 @@ export function CoachEntry({
 }
 
 function FindingRow({ finding, text, onApply }: { finding: CoachFinding; text: string; onApply: (f: CoachFinding, choice?: number) => void }) {
-  const t = useT();
+  const { t, appLanguage } = useLocalization();
   const fix = finding.fix;
   const before = text.slice(finding.start, finding.end);
   return (
@@ -120,7 +121,7 @@ function FindingRow({ finding, text, onApply }: { finding: CoachFinding; text: s
       <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{renderText(t, finding.messageText)}</Text>
       {fix?.kind === 'preview' ? (
         <Text style={{ color: colors.muted, fontSize: 13 }}>
-          “{before}” → “{fix.replacement}”
+          “{before}” {arrowFor(appLanguage)} “{fix.replacement}”
         </Text>
       ) : null}
       {fix?.kind === 'choices' ? (

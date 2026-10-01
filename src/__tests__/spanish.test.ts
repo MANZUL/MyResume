@@ -582,7 +582,7 @@ describe('Spanish strings in narrow places', () => {
     expect(tools).toMatch(/numberOfLines=\{oneWord \? 1 : 2\}/);
     expect(read('features/library/HomeScreen.tsx')).toMatch(/flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'/);
     expect(read('features/editor/EditorScreen.tsx')).toMatch(/flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'flex-end'/);
-    expect(read('ui/components.tsx')).toMatch(/styles\.sectionTitle, \{ flexShrink: 1 \}/);
+    expect(read('ui/components.tsx')).toMatch(/SectionTitle style=\{\{ flexShrink: 1 \}\}/);
     expect(read('features/preview/PreviewScreen.tsx')).toMatch(/fit\n/);
     expect(read('features/templates/TemplateCard.tsx')).toMatch(/fit\n/);
   });

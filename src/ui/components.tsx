@@ -7,10 +7,12 @@ import {
   TextInput,
   View,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import type { Language } from '../domain/i18n/languages';
-import { contentTextStyle } from './direction';
+import { useLocalization } from '../services/i18n/localization';
+import { contentTextStyle, trackedCapsStyle } from './direction';
 import { useStableKeys } from './entry-keys';
 
 
@@ -117,10 +119,16 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
+/** Small tracked upper-case heading (plain in Arabic, see trackedCapsStyle). */
+export function SectionTitle({ children, style }: { children: ReactNode; style?: TextStyle }) {
+  const { appLanguage } = useLocalization();
+  return <Text style={[styles.sectionTitle, trackedCapsStyle(appLanguage), style]}>{children}</Text>;
+}
+
 export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, { flexShrink: 1 }]}>{title}</Text>
+      <SectionTitle style={{ flexShrink: 1 }}>{title}</SectionTitle>
       {action}
     </View>
   );

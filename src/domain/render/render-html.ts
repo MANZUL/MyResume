@@ -1,5 +1,6 @@
 import type { Language } from '../i18n/languages';
 import { resumeLabels, type ResumeLabels } from '../i18n/resume-labels';
+import { mapLatinRuns } from '../i18n/bidi';
 import { ARABIC_FONT_FAMILIES, typographyFor, type Typography } from '../i18n/typography';
 import { normalizeResumeData } from '../resume/normalize';
 import { getTemplate, type TemplateConfig } from '../templates/templates';
@@ -142,8 +143,8 @@ export function renderContent(data: ResumeData, config: TemplateConfig, language
   if (data.summary.tagline.trim() || summaryBullets.length || skills.length) {
     parts.push(
       section(labels.summary, config, [
-        data.summary.tagline.trim() ? `<p class="italic" style="font-size:11pt;font-weight:500">${e(data.summary.tagline)}</p>` : '',
-        list(summaryBullets),
+        data.summary.tagline.trim() ? `<p class="italic" style="font-size:11pt;font-weight:500">${isolate(doc, data.summary.tagline)}</p>` : '',
+        list(summaryBullets, doc),
         skills.length ? `<div style="margin-top:4px">${renderSkills(skills, config, doc)}</div>` : '',
       ].join('')),
     );
@@ -154,17 +155,17 @@ export function renderContent(data: ResumeData, config: TemplateConfig, language
       section(labels.experience, config, `<div class="entries">${data.experience.map((exp) => {
         const dates = [exp.start, exp.end].filter((v) => v.trim()).map((v) => isolate(doc, v)).join(' – ');
         const titleWeight = config.jobTitleWeight === 'bold' ? 700 : 600;
-        const where = [exp.company, exp.location].filter((v) => v.trim()).map(e).join(', ');
+        const where = [exp.company, exp.location].filter((v) => v.trim()).map((v) => isolate(doc, v)).join(doc.typography.listSeparator);
         return `<div class="entry">
           <div class="row">
-            <span><span style="font-weight:${titleWeight};font-size:11pt">${e(exp.title)}</span>${
+            <span><span style="font-weight:${titleWeight};font-size:11pt">${isolate(doc, exp.title)}</span>${
               config.dateAlign === 'inline' && dates ? ` <span class="soft small">| ${dates}</span>` : ''
             }</span>
             ${config.dateAlign === 'right' && dates ? `<span class="date">${dates}</span>` : ''}
           </div>
           ${where ? `<div class="muted ${config.companyStyle === 'italic' ? 'italic' : ''}" style="${config.companyStyle === 'italic' ? '' : 'font-weight:500;'}margin-bottom:2px">${where}</div>` : ''}
-          ${exp.summary.trim() ? `<p class="small">${e(exp.summary)}</p>` : ''}
-          ${list(nonEmpty(exp.bullets))}
+          ${exp.summary.trim() ? `<p class="small">${isolate(doc, exp.summary)}</p>` : ''}
+          ${list(nonEmpty(exp.bullets), doc)}
         </div>`;
       }).join('')}</div>`),
     );
@@ -174,9 +175,9 @@ export function renderContent(data: ResumeData, config: TemplateConfig, language
     parts.push(
       section(labels.education, config, `<div class="entries">${data.education.map((edu) => `
         <div class="entry">
-          <div class="row"><span style="font-weight:700;font-size:10.5pt">${e(edu.degree)}</span><span class="date">${isolate(doc, edu.date)}</span></div>
-          <div>${[edu.school, edu.location].filter((v) => v.trim()).map(e).join(', ')}</div>
-          ${edu.honors.trim() ? `<p class="italic small soft">${e(edu.honors)}</p>` : ''}
+          <div class="row"><span style="font-weight:700;font-size:10.5pt">${isolate(doc, edu.degree)}</span><span class="date">${isolate(doc, edu.date)}</span></div>
+          <div>${[edu.school, edu.location].filter((v) => v.trim()).map((v) => isolate(doc, v)).join(doc.typography.listSeparator)}</div>
+          ${edu.honors.trim() ? `<p class="italic small soft">${isolate(doc, edu.honors)}</p>` : ''}
         </div>`).join('')}</div>`),
     );
   }
@@ -185,7 +186,7 @@ export function renderContent(data: ResumeData, config: TemplateConfig, language
     parts.push(
       section(labels.certifications, config, `<div class="entries" style="gap:6px">${data.certifications.map((cert) => `
         <div class="row">
-          <span style="font-weight:500">${e(cert.name)}${cert.org.trim() ? ` <span class="soft" style="font-weight:400">— ${e(cert.org)}</span>` : ''}</span>
+          <span style="font-weight:500">${isolate(doc, cert.name)}${cert.org.trim() ? ` <span class="soft" style="font-weight:400">— ${isolate(doc, cert.org)}</span>` : ''}</span>
           <span class="date">${isolate(doc, cert.date)}</span>
         </div>`).join('')}</div>`),
     );
@@ -195,15 +196,15 @@ export function renderContent(data: ResumeData, config: TemplateConfig, language
     parts.push(
       section(labels.projects, config, `<div class="entries">${data.projects.map((project) => `
         <div class="entry">
-          <span style="font-weight:700;font-size:10.5pt">${e(project.name)}</span>
-          ${project.description.trim() ? `<p class="italic small muted">${e(project.description)}</p>` : ''}
-          ${list(nonEmpty(project.bullets))}
+          <span style="font-weight:700;font-size:10.5pt">${isolate(doc, project.name)}</span>
+          ${project.description.trim() ? `<p class="italic small muted">${isolate(doc, project.description)}</p>` : ''}
+          ${list(nonEmpty(project.bullets), doc)}
         </div>`).join('')}</div>`),
     );
   }
 
   const awards = nonEmpty(data.awards);
-  if (awards.length) parts.push(section(labels.awards, config, list(awards)));
+  if (awards.length) parts.push(section(labels.awards, config, list(awards, doc)));
 
   parts.push('</div>');
   parts.push('</div>');
@@ -286,14 +287,15 @@ const watermarkCss = (tileUrl: string) => `
   `;
 
 /**
- * Non-Latin scripts (Arabic): no template uppercase, small caps or tracking (they break
- * cursive joins and do not exist in the script), and a named Arabic font ahead of each
+ * Non-Latin scripts (Arabic): no template uppercase, small caps, tracking or italics (they
+ * break cursive joins or do not exist in the script), and a named Arabic font ahead of each
  * template font. `!important` also overrides the inline name tracking.
  */
 function scriptCss(config: TemplateConfig): string {
   const arabicFirst = (kind: 'serif' | 'sans') => `${ARABIC_FONT_FAMILIES}, ${kind === 'serif' ? SERIF : SANS}`;
   return `
     .upper, h1, h2 { text-transform: none !important; }
+    .italic { font-style: normal !important; }
     h1, h2, .h-banner, .h-underline, .h-small-caps, .h-small-caps-rule, .h-plain { letter-spacing: 0 !important; font-variant: normal !important; }
     .content { font-family: ${arabicFirst(config.fontBody)}; }
     h1 { font-family: ${arabicFirst(config.fontName)}; }
@@ -313,14 +315,21 @@ const RTL_CSS = `
   `;
 
 /**
- * Text whose direction can differ from the document's (dates, skills, contact parts) is
- * isolated in a right-to-left document, so its punctuation and digits keep their order.
- * `dir` forces a direction for strings that are always left-to-right (email, URL, phone).
- * Left-to-right documents are rendered exactly as before.
+ * Text whose direction can differ from the document's is isolated in a right-to-left
+ * document, so its punctuation and digits keep their order: every user-entered value (name,
+ * titles, companies, bullets, paragraphs, skills, dates, contact parts). Without it an
+ * English bullet's final period, or the "++" of "C++", lands on the wrong side of the line.
+ * Plain `<bdi>` infers the direction from the first strong letter, so an Arabic value is
+ * unchanged and an English one reads left-to-right as a unit. `dir` forces a direction for
+ * strings that are always left-to-right (email, URL, phone). Left-to-right documents are
+ * rendered exactly as before.
  */
 function isolate(doc: DocContext, text: string, dir?: 'ltr'): string {
   if (doc.typography.direction === 'ltr') return e(text);
-  return `<bdi${dir ? ` dir="${dir}"` : ''}>${e(text)}</bdi>`;
+  // Arabic-first text with Latin runs inside ("C++", "AWS Lambda"): each run is its own
+  // left-to-right isolate, so its symbols and punctuation keep their side.
+  const body = dir ? e(text) : mapLatinRuns(text, e, (run) => `<bdi dir="ltr">${e(run)}</bdi>`);
+  return `<bdi${dir ? ` dir="${dir}"` : ''}>${body}</bdi>`;
 }
 
 /** The start and end sides of a line in this document's direction. */
@@ -332,7 +341,7 @@ function renderHeader(data: ResumeData, config: TemplateConfig, doc: DocContext)
   const upper = config.nameCase === 'uppercase';
   if (config.nameAlign === 'split') {
     return `<header class="row" style="border-bottom:1px solid var(--accent);padding-bottom:8px">
-      <h1 style="color:var(--accent);${upper ? 'text-transform:uppercase;' : ''}">${e(data.name)}</h1>
+      <h1 style="color:var(--accent);${upper ? 'text-transform:uppercase;' : ''}">${isolate(doc, data.name)}</h1>
       <div style="text-align:${endSide(doc)};font-size:8.5pt;display:flex;flex-direction:column;gap:1px">${contact.map((p) => `<span>${p}</span>`).join('')}</div>
     </header>`;
   }
@@ -341,7 +350,7 @@ function renderHeader(data: ResumeData, config: TemplateConfig, doc: DocContext)
     ? '<div style="height:1px;background:var(--accent);margin-bottom:6px"></div>'
     : '';
   return `<header style="text-align:${align}">
-    <h1 style="${upper ? `text-transform:uppercase;letter-spacing:${NAME_TRACKING_EM}em;` : ''}">${e(data.name)}</h1>
+    <h1 style="${upper ? `text-transform:uppercase;letter-spacing:${NAME_TRACKING_EM}em;` : ''}">${isolate(doc, data.name)}</h1>
     ${rule}
     <div style="font-size:9.5pt;text-align:${config.contactAlign === 'center' ? 'center' : startSide(doc)}">${contact.join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>
   </header>`;
@@ -368,9 +377,9 @@ function section(title: string, config: TemplateConfig, body: string): string {
   return `<section><h2 class="h-${config.sectionHeaderStyle}${upper}">${e(title)}</h2><div>${body}</div></section>`;
 }
 
-function list(items: string[]): string {
+function list(items: string[], doc: DocContext): string {
   if (!items.length) return '';
-  return `<ul>${items.map((item) => `<li>${e(item)}</li>`).join('')}</ul>`;
+  return `<ul>${items.map((item) => `<li>${isolate(doc, item)}</li>`).join('')}</ul>`;
 }
 
 function renderSkills(skills: string[], config: TemplateConfig, doc: DocContext): string {
@@ -379,7 +388,7 @@ function renderSkills(skills: string[], config: TemplateConfig, doc: DocContext)
     case 'dash':
       return `<span class="small" style="font-weight:500">${items.join(' - ')}</span>`;
     case 'comma':
-      return `<span class="small">${items.join(', ')}</span>`;
+      return `<span class="small">${items.join(doc.typography.listSeparator)}</span>`;
     case 'mono':
       return `<span style="font-size:8.5pt;font-family:${MONO};color:#444">${items.join(' • ')}</span>`;
     case 'pills':

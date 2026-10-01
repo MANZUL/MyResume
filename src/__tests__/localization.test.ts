@@ -28,7 +28,8 @@ import { fileSafeName } from '../domain/shared/text';
 import { templateSampleHtml } from '../domain/templates/sample-preview';
 import { TEMPLATES } from '../domain/templates/templates';
 import { englishText, errorText, renderText } from '../i18n/analysis';
-import { CATALOGS, ENGLISH, type MessageKey, type PartialMessages } from '../i18n/catalog';
+import { CATALOGS, type MessageKey, type PartialMessages } from '../i18n/catalog';
+import { ar } from '../i18n/messages/ar';
 import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
 import { es } from '../i18n/messages/es';
@@ -383,7 +384,8 @@ describe('Arabic typography', () => {
   it('DOCX: an Arabic name and headings are not upper-cased or tracked', async () => {
     const data = { ...SAMPLE_RESUME, name: 'Zoë Müller' };
     const ar = await docxText('ar', data);
-    expect(ar).toContain('>Zoë Müller<');
+    // The name is a user value: a Latin name in an Arabic document is wrapped in LRM marks so its final characters keep their side.
+    expect(ar).toContain('>\u200EZoë Müller\u200E<');
     expect(ar).not.toContain('ZOË MÜLLER');
     expect(ar).not.toMatch(/<w:spacing w:val="45"\/>/);
     expect(await docxText('en', data)).toContain('ZOË MÜLLER');
@@ -551,8 +553,8 @@ describe('translator', () => {
     expect(t('home.seeAll')).toBe('See all');
     expect(hasTranslation('de', 'home.create', custom)).toBe(true);
     expect(hasTranslation('de', 'home.seeAll', custom)).toBe(false);
-    // A language without a catalog yet falls back to English; German, French and Spanish have their own text.
-    expect(createTranslator('ar').t('home.headline')).toBe(ENGLISH.home.headline);
+    // Every language has its own text; a missing key (custom catalogs above) falls back to English.
+    expect(createTranslator('ar').t('home.headline')).toBe(ar.home.headline);
     expect(createTranslator('de').t('home.headline')).toBe(de.home.headline);
     expect(createTranslator('fr').t('home.headline')).toBe(fr.home.headline);
     expect(createTranslator('es').t('home.headline')).toBe(es.home.headline);
@@ -589,7 +591,7 @@ describe('translator', () => {
   it('isolates user text inside right-to-left sentences only', () => {
     expect(createTranslator('en').t('home.moreActions', { title: 'CV' })).toBe('More actions for CV');
     expect(createTranslator('en').t('home.moreActions', { title: 'سيرة' })).toBe('More actions for ⁨سيرة⁩');
-    expect(createTranslator('ar').t('home.moreActions', { title: 'CV' })).toBe('More actions for ⁨CV⁩');
+    expect(createTranslator('ar').t('home.moreActions', { title: 'CV' })).toBe(`مزيد من الإجراءات لـ \u2068CV\u2069`);
   });
 
   it('resolves the device language on the primary subtag, else English', () => {
@@ -953,6 +955,11 @@ describe('no hard-coded UI text in screens', () => {
       `<Button title="Descargar" />`,
       `<Field placeholder={'Nombre completo'} />`,
       `<Stack.Screen options={{ title: 'Configuración' }} />`,
+      `<Text>إنشاء سيرتي الذاتية</Text>`,
+      `<Text>معاينة</Text>`,
+      `<Button title="حذف" />`,
+      `<Field placeholder={'الاسم الكامل'} />`,
+      `<Stack.Screen options={{ title: 'الإعدادات' }} />`,
     ]) {
       expect(jsxProblems(line), line).not.toEqual([]);
     }
@@ -1024,6 +1031,12 @@ describe('no hard-coded UI text in screens', () => {
       `const title = 'Reintentar';`,
       `Alert.alert(t('x'), '¿Eliminar el currículum?')`,
       `setError('Ocurrió un error inesperado')`,
+      // Arabic text is caught the same way (single words, phrases, tashkeel, Arabic punctuation).
+      `const empty = 'لا توجد سير ذاتية بعد';`,
+      `const title = 'حذف';`,
+      `Alert.alert(t('x'), 'هل أنت متأكد؟')`,
+      `setError('حدث خطأ غير متوقع')`,
+      `const hint = \`تصدير \${format}\`;`,
     ];
     for (const line of injected) expect(visibleLiterals(line), line).not.toEqual([]);
     const technical = [

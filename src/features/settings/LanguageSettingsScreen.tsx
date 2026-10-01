@@ -1,14 +1,14 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { LANGUAGE_NAMES, LANGUAGES, type Language } from '../../domain/i18n/languages';
 import { useLocalization } from '../../services/i18n/localization';
-import { Card, colors, Muted, styles } from '../../ui/components';
+import { Card, Muted, SectionTitle, colors } from '../../ui/components';
 
 /** App language only. Each resume's language is set in its editor and never changes here. */
 export default function LanguageSettingsScreen() {
   const { t, appLanguage, setAppLanguage, restartPending } = useLocalization();
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={styles.sectionTitle}>{t('settings.appLanguage')}</Text>
+      <SectionTitle>{t('settings.appLanguage')}</SectionTitle>
       <Muted>{t('settings.appLanguageHint')}</Muted>
       <Card style={{ padding: 0 }}>
         {LANGUAGES.map((language: Language, index) => {

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { scoreResume } from '../../domain/check/resume-score';
 import type { EditorSection } from '../../domain/resume/sections';
-import { Card, colors, Muted, styles } from '../../ui/components';
+import { Card, Muted, SectionTitle, colors } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useLocalization } from '../../services/i18n/localization';
 import { renderText } from '../../i18n/analysis';
@@ -44,7 +44,7 @@ export function CheckTool({
       </Card>
       {score.strengthTexts.length ? (
         <Card style={{ gap: 8 }}>
-          <Text style={styles.sectionTitle}>{t('check.working')}</Text>
+          <SectionTitle>{t('check.working')}</SectionTitle>
           {score.strengthTexts.map((s) => (
             <Text key={s.code} style={{ color: colors.text, fontSize: 15 }}>✓ {renderText(t, s)}</Text>
           ))}
@@ -52,7 +52,7 @@ export function CheckTool({
       ) : null}
       {score.warnings.length ? (
         <Card style={{ gap: 10 }}>
-          <Text style={styles.sectionTitle}>{t('check.attention')}</Text>
+          <SectionTitle>{t('check.attention')}</SectionTitle>
           {score.warnings.map((w) => (
             <View key={w.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
               <Text style={{ flex: 1, color: colors.text, fontSize: 15, lineHeight: 21 }}>⚠︎ {renderText(t, w.messageText)}</Text>

@@ -4,7 +4,7 @@ import type { JobMatchReport } from '../../domain/job-match/types';
 import { JOB_DESCRIPTION_MAX } from '../../domain/job-match/types';
 import type { ResumeData } from '../../domain/resume/types';
 import { useTargetJob } from '../../services/storage/use-target-job';
-import { Button, Card, colors, Field, Muted, styles } from '../../ui/components';
+import { Button, Card, Field, Muted, SectionTitle, colors } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useLocalization } from '../../services/i18n/localization';
 import { errorText, renderText } from '../../i18n/analysis';
@@ -54,7 +54,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
           <EnglishRulesNote support={report.support} />
           {report.title ? (
             <Card style={{ gap: 4 }}>
-              <Text style={styles.sectionTitle}>{t('match.role')}</Text>
+              <SectionTitle>{t('match.role')}</SectionTitle>
               <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{report.title.text}</Text>
               <Text style={{ color: report.title.resume.length ? colors.success : colors.muted }}>
                 {report.title.resume.length
@@ -64,7 +64,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
             </Card>
           ) : null}
           <Card style={{ gap: 10 }}>
-            <Text style={styles.sectionTitle}>{t('match.termsTitle')}</Text>
+            <SectionTitle>{t('match.termsTitle')}</SectionTitle>
             {report.terms.length ? (
               <>
                 <Text style={{ color: colors.text, fontWeight: '600' }}>

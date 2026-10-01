@@ -2115,6 +2115,61 @@ The hard-coded string guard has Spanish injections. It was mutation-checked on t
 
 **Device validation: NOT RUN** (postponed until all five languages are done). §19.11b's checklist applies to Spanish with these changes: "Deutsch" becomes "Español", the file name example is "Ángel Núñez", and the export buttons show only the format.
 
+### 19.11e Phase 13F: Arabic (ar), right-to-left and document typography
+
+The final language phase. Arabic is Modern Standard Arabic (not a dialect). `src/i18n/messages/ar.ts` is a complete `Messages` catalog with the same 445 keys as English. English, German, French and Spanish catalogs and renderers are unchanged (their hashes are pinned in `arabic.test.ts`; the Latin-script renderer output is byte-identical to before).
+
+**Terminology (one term per concept).** السيرة الذاتية (resume), قالب (template), معاينة (preview), تصدير (export), مشاركة (share), استيراد (import), المهارات (skills), الخبرات (experience), التعليم (education), الشهادات (certifications), المشاريع (projects), الجوائز (awards), الملخص (summary), خطاب التقديم (cover letter), مطابقة الوظيفة (job match), التقييم (score), المدرّب (coach). "ATS", "PDF", "Word" and "LinkedIn" stay in Latin letters (industry and product names). Only values with no words to translate are identical to English: brand and technical names and pure formats (parameters and punctuation).
+
+**Typography of the text.** Arabic comma (،), semicolon (؛) and question mark (؟); quotes are « » without inner spaces; no straight or curly quotes. Digits are Latin (see below).
+
+**Plurals.** Arabic has six CLDR categories and the engine supports all six (zero 0, one 1, two 2, few 3-10, many 11-99, other 100+ and fractions). The 10 plural messages have all six forms: the dual for 2 ("مشكلتان"), the singular word for 1, and counts shown for few, many and other. Tested for 0, 1, 2, 3, 11 and 100.
+
+**Numbers and dates.** The app pins Arabic to `ar-u-ca-gregory-nu-latn`: Latin digits, Gregorian calendar, Arabic month names ("15 مارس 2026"), comma grouping ("1,234", "25,000", "1,234,567"). Plain "ar" leaves the digit system to the platform's ICU (Arabic-Indic on some, Latin on others), which would differ between iOS, Android and tests and would sit next to the Latin digits of user-typed dates, phone numbers and e-mails. User dates, numbers and phone numbers are never converted; a user who types Arabic-Indic digits keeps them.
+
+**RTL app foundation.** Semantic RTL only: the layout direction comes from the app language through `I18nManager` (restart requirement unchanged, §19.11). There is no `row-reverse`, no hard-coded `textAlign: 'left'|'right'` and no per-screen direction hack in the screens (a test guards this). Two UI fixes: small tracked upper-case labels (`SectionTitle`, the template category tag and the ATS badge) drop letter-spacing and uppercase for Arabic through one shared style (`trackedCapsStyle`), and the Coach "before → after" arrow points the way the app reads (`arrowFor`). The editor's typing direction follows the RESUME language (existing `contentTextStyle`), independent of the app language.
+
+**App language and resume language stay independent.** All six combinations are tested through a real database: ar/ar, ar/en, en/ar, de/ar, fr/ar, es/ar. The app direction is RTL only when the app language is Arabic; the document direction is RTL only when the resume language is Arabic. An English resume that contains Arabic words stays left-to-right (the language decides, not the characters).
+
+**Mixed-direction approach (user data is never modified).**
+- HTML/PDF/preview/image: in an Arabic document every user value is wrapped in `<bdi>`; phone, e-mail and URLs are `<bdi dir="ltr">`; and each Latin run inside Arabic-first text ("C++", "AWS Lambda", "Node.js", "e-Commerce", a URL) is its own LTR isolate (`src/domain/i18n/bidi.ts`). Without this the "++" of "C++" displays as "++C" and a final period of an English bullet lands on the wrong side.
+- DOCX: contact parts and dates use Unicode isolates (LRI/FSI…PDI). Free text uses LRM marks instead (isolates around digits next to Arabic mis-positioned glyphs in LibreOffice): Latin-first values are bracketed as a whole, and each Latin run in Arabic-first text is bracketed. Skill separators are bracketed by RLM so the skills keep their reading order. Every paragraph is `w:bidi` and every run `w:rtl`; list items are bidirectional bullets.
+- The marks are invisible, only inside the exported file, and Word/search treat the text as the user typed it.
+
+**Decorative geometry is not mirrored.** The templates' marks and rules keep their reserved band (part of each template's identity); a Chromium test checks no text touches them, for all 12 templates.
+
+**Arabic typography.** No uppercase, small caps, letter-spacing or italics (a slanted Arabic font is a synthesized distortion) in HTML, PDF, image and DOCX, for all 12 templates. The list separator the app writes itself (company, location; school, location) is the Arabic comma. DOCX sets the complex-script font.
+
+**Font strategy (documented limitation).** No Arabic font is bundled. The renderer asks for platform fonts in this order: Geeza Pro (iOS), Noto Naskh Arabic, Noto Sans Arabic, Arabic UI Text, Tahoma, then the template's own family. Android and iOS ship an Arabic system font, so text renders; but the exact face, and the PDF export on a device without one of these, depends on the platform. **Bundling is a post-phase requirement**, not done here because an Arabic font is large (hundreds of KB per weight), must be properly licensed (an OFL font such as Noto Naskh Arabic would qualify) and must be checked in the PDF engine; no font was downloaded from the internet.
+
+**File names.** Arabic letters are kept (explicit Unicode ranges), words are joined by hyphens, direction-control characters (LRM/RLM, embeddings, isolates, ALM) are dropped, the 60-character cap and "no trailing separator" hold. `محمد أحمد` → `محمد-أحمد.pdf`; `محمد أحمد Müller` → `محمد-أحمد-müller.pdf`.
+
+**Analysis and limits.** The rules are unchanged: an Arabic resume gets the same scores, statuses and findings as English. Score, ATS, Job Match, Cover Letter and Import say in Arabic that they use English rules and wording; the Writing Coach stays off for Arabic resumes with the explanation in Arabic; the cover-letter draft is English; section headings are recognized in English only. Latin words inside Arabic sentences (the user's words, a template name, a language name) are isolated with FSI…PDI by the translator.
+
+**Tests** (`src/__tests__/arabic.test.ts`, 59 tests): catalog completeness, parameters, terminology, punctuation, no dialect words, no monetization words; the six plural categories; number and date formats; template metadata; labels for 12 templates × PDF/preview × watermark × Letter/A4; DOCX headings, bidi flags, no caps/tracking/italics for all 12; mixed-direction HTML and DOCX with a representative mixed resume; the six app/resume combinations; analysis rendering over the corpora; RTL source guards; UI budgets; file names; image export through the same print path as the PDF. In Chromium: pdf.js text of all 12 templates × Letter/A4 (see below), headings on one line inside the page and away from marks, no transform/tracking/italics (computed styles), and the on-screen order of final periods, "C++", ".NET" and e-mail. The hard-coded string guard has Arabic injections; it was mutation-checked on real files (Arabic injected into `LanguageSettingsScreen.tsx` JSX and a literal in `ToolsScreen.tsx`: each failed, was restored byte-for-byte, and passed).
+
+**PDF text extraction (known engine behavior).** With the Linux Chromium and its Arabic-capable font, `page.pdf()` stores Arabic as one glyph per text item using presentation forms (U+FExx) in visual positions. pdf.js therefore returns separate glyph items; the test puts each line back in reading order (Arabic right-to-left, Latin left-to-right) and applies NFKC before asserting whole words. Latin parts (e-mail, phone, URLs, "C++", ".NET") extract intact. How a phone's PDF engine and font store Arabic is device-specific (see the checklist).
+
+**Remaining Arabic risks.**
+1. No bundled font (above).
+2. Microsoft Word's rendering of the Arabic DOCX could not be tested here (LibreOffice only); LRM/LRI handling differs between engines.
+3. Arabic PDF text extraction by real ATS software depends on the device's PDF engine and font (presentation forms, visual order).
+4. English-rule analysis and the English-only Coach, Cover Letter and Import are stated limits, not Arabic analysis.
+5. Mixed Latin runs with unusual punctuation (for example "a/b - c") may need more bidi marks; the run detector covers technical words, URLs and phrases.
+6. Mirrored icons: the app has no directional icons other than the Coach arrow (handled) and the back chevron (React Native/Expo Router mirror it).
+
+**Device validation: NOT RUN** (all five languages are done; device testing is the next phase). Items that MUST be tested on a real device:
+1. Switch the app to العربية: the layout mirrors after the required restart on iOS and Android; the Language screen shows "العربية"; the choice persists after a force-quit.
+2. Every screen in RTL: Home (resume cards, actions), template gallery and filters, template preview, editor (fields, list rows, add/move/remove), Preview, Tools tabs (the four tab labels fit), Check, ATS, Job Match, Cover Letter, Import. Check text clipping, icon/arrow direction, chevrons, keyboards, and the cursor and selection in RTL inputs.
+3. Editor typing: an Arabic resume types right-to-left in an English app and an English resume types left-to-right in an Arabic app; mixed text (Arabic with an English company, "C++", e-mail, URL) is entered and shown correctly; the keyboard language switch does not move the caret unexpectedly.
+4. Export PDF, Word and Image from an Arabic resume for all 12 templates on both platforms: heading and body shaping (connected letters, no boxes/tofu), diacritics, mixed English names, e-mail, URL and phone order, bullet side, date side, skills pills, page breaks. Open the PDF in the device viewer and select/copy text.
+5. Open the DOCX in Microsoft Word (desktop and mobile) and Google Docs/Pages: right-to-left paragraphs, bullets on the right, the e-mail/URL/phone and "C++" order, skills order, headings.
+6. Arabic file names in the share sheet and in the receiving apps (Files, Mail, WhatsApp): `محمد-أحمد.pdf`, `محمد-أحمد-müller.pdf`.
+7. Combinations on device: app ar + resume en, app en + resume ar, app de/fr/es + resume ar.
+8. The preview is clean (no watermark), and no purchase text anywhere (§19.12).
+9. Font appearance on the oldest supported Android and iOS versions; decide whether to bundle an OFL Arabic font from what is seen.
+10. VoiceOver and TalkBack reading of Arabic labels, plurals ("مشكلتان محتملتان") and the isolated English words.
+
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 
 **Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.

@@ -4,7 +4,7 @@ import { checkAtsReadability } from '../../domain/ats/ats';
 import type { AtsStatus } from '../../domain/ats/types';
 import type { ResumeData } from '../../domain/resume/types';
 import type { EditorSection } from '../../domain/resume/sections';
-import { Card, colors, Muted, styles } from '../../ui/components';
+import { Card, Muted, SectionTitle, colors, styles } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useT } from '../../services/i18n/localization';
 import { renderText } from '../../i18n/analysis';
@@ -51,7 +51,7 @@ export function AtsTool({
       </Card>
 
       <Card style={{ gap: 6 }}>
-        <Text style={styles.sectionTitle}>{t('ats.parts')}</Text>
+        <SectionTitle>{t('ats.parts')}</SectionTitle>
         {report.detected.map((d) => (
           <View key={d.labelText.code} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
             <Text style={{ flexShrink: 1, color: colors.text, fontSize: 15 }}>{renderText(t, d.labelText)}</Text>

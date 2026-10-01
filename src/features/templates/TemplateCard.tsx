@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { Image, Pressable, Text, View, type ViewStyle } from 'react-native';
 import { Button, colors } from '../../ui/components';
+import { trackedCapsStyle } from '../../ui/direction';
 import { templateText } from '../../i18n/templates';
-import { useT } from '../../services/i18n/localization';
+import { useLocalization, useT } from '../../services/i18n/localization';
 import type { TemplateConfig } from '../../domain/templates/templates';
 import { THUMBNAIL_ASPECT, thumbnailFor } from './thumbnails';
 import { templateHref } from './use-create-from-template';
@@ -29,19 +30,20 @@ export function TemplateThumbnail({ template, style }: { template: TemplateConfi
 }
 
 export function CategoryTag({ label }: { label: string }) {
+  const { appLanguage } = useLocalization();
   return (
     <View style={{ alignSelf: 'flex-start', backgroundColor: '#ECE9E3', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.muted, textTransform: 'uppercase' }}>{label}</Text>
+      <Text style={[{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.muted, textTransform: 'uppercase' }, trackedCapsStyle(appLanguage)]}>{label}</Text>
     </View>
   );
 }
 
 /** Every template's text layer is machine-readable (checked by the ATS Readability tests). */
 export function AtsReadyBadge() {
-  const t = useT();
+  const { t, appLanguage } = useLocalization();
   return (
     <View style={{ alignSelf: 'flex-start', backgroundColor: '#E6F2EA', borderWidth: 1, borderColor: '#CFE6D7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.success, textTransform: 'uppercase' }}>{t('gallery.atsReady')}</Text>
+      <Text style={[{ fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colors.success, textTransform: 'uppercase' }, trackedCapsStyle(appLanguage)]}>{t('gallery.atsReady')}</Text>
     </View>
   );
 }
