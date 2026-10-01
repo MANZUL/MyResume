@@ -31,6 +31,7 @@ import { englishText, errorText, renderText } from '../i18n/analysis';
 import { CATALOGS, ENGLISH, type MessageKey, type PartialMessages } from '../i18n/catalog';
 import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
+import { es } from '../i18n/messages/es';
 import { fr } from '../i18n/messages/fr';
 import { templateText } from '../i18n/templates';
 import { createTranslator, hasTranslation } from '../i18n/translate';
@@ -550,10 +551,11 @@ describe('translator', () => {
     expect(t('home.seeAll')).toBe('See all');
     expect(hasTranslation('de', 'home.create', custom)).toBe(true);
     expect(hasTranslation('de', 'home.seeAll', custom)).toBe(false);
-    // Languages without a catalog yet fall back to English; German and French have their own text.
-    for (const language of ['es', 'ar'] as const) expect(createTranslator(language).t('home.headline')).toBe(ENGLISH.home.headline);
+    // A language without a catalog yet falls back to English; German, French and Spanish have their own text.
+    expect(createTranslator('ar').t('home.headline')).toBe(ENGLISH.home.headline);
     expect(createTranslator('de').t('home.headline')).toBe(de.home.headline);
     expect(createTranslator('fr').t('home.headline')).toBe(fr.home.headline);
+    expect(createTranslator('es').t('home.headline')).toBe(es.home.headline);
   });
 
   it('translations may only use keys that exist in English', () => {
@@ -946,6 +948,11 @@ describe('no hard-coded UI text in screens', () => {
       `<Button title="Télécharger" />`,
       `<Field placeholder={'Intitulé du poste'} />`,
       `<Stack.Screen options={{ title: 'Paramètres' }} />`,
+      `<Text>Crear mi currículum</Text>`,
+      `<Text>Vista previa del modelo</Text>`,
+      `<Button title="Descargar" />`,
+      `<Field placeholder={'Nombre completo'} />`,
+      `<Stack.Screen options={{ title: 'Configuración' }} />`,
     ]) {
       expect(jsxProblems(line), line).not.toEqual([]);
     }
@@ -1012,6 +1019,11 @@ describe('no hard-coded UI text in screens', () => {
       `const title = 'Réessayer';`,
       `Alert.alert(t('x'), 'Êtes-vous sûr ?')`,
       `setError('Une erreur est survenue')`,
+      // Spanish text is caught the same way (accents, ñ, ¿¡, single capitalized words, phrases).
+      `const empty = 'Aún no tienes currículums';`,
+      `const title = 'Reintentar';`,
+      `Alert.alert(t('x'), '¿Eliminar el currículum?')`,
+      `setError('Ocurrió un error inesperado')`,
     ];
     for (const line of injected) expect(visibleLiterals(line), line).not.toEqual([]);
     const technical = [

@@ -2016,6 +2016,105 @@ The hard-coded string guard now has French injections. It was mutation-checked o
 
 **Device validation: NOT RUN** (postponed to the end of the project). §19.11b's checklist applies to French with these changes: "Deutsch" becomes "Français", the file name example is "Élodie Müller", and the watermark and paywall items follow §19.12.
 
+### 19.11d Phase 13E: Spanish (es)
+
+**Catalog.** `src/i18n/messages/es.ts` has all 445 keys of the current catalog (the free product, §19.12), including the 10 plural messages (one/other). It is typed as the full `Messages` shape, so a missing or extra key is a compile error. Neutral international Spanish: "tú" imperatives, no voseo, no regional vocabulary (so "Añadir", "currículum" and "CV", not "computadora" or "ordenador").
+
+18 values are intentionally the same as English; a test pins the list:
+- names: My Resume, Coach, LinkedIn;
+- technical names: PDF, Word, ATS;
+- pure formats and separators: `{title} ({count})`, `{count} / {max}`, ` · `, ", ", `{status}: `.
+
+Spanish also shares two values with other languages on purpose: the numeric date `03/2020` and "un emoji" (same phrase in French).
+
+**Terminology** (one term per concept, pinned by a test):
+
+| Concept | Spanish |
+|---|---|
+| resume | currículum (plural: currículums; "CV" where short) |
+| summary heading | Perfil profesional |
+| experience | Experiencia |
+| education | Formación |
+| skills | Competencias |
+| certifications | Certificaciones |
+| projects | Proyectos |
+| awards | Premios |
+| bullet | viñeta |
+| summary bullet | punto clave |
+| accomplishment | Logro |
+| job title | Cargo |
+| role | Puesto |
+| job description | Descripción del puesto |
+| job match | Adecuación al puesto (tab: Adecuación) |
+| cover letter | Carta de presentación (tab: Carta) |
+| template | Plantilla |
+| preview | Vista previa |
+| accent color | Color de acento |
+| parser | analizador |
+
+Writing Coach, ATS and My Resume stay as names.
+
+**Typography** (tested):
+- ¿…? and ¡…! in pairs;
+- « … » without inner spaces;
+- no space before `: ; ? !`;
+- no English quotes or apostrophes.
+
+**Templates.**
+- Spanish names: El Directivo, El Socio, El Constructor, El Arquitecto, La Revista, El Estudio, El Clínico, El Docente, El Erudito, El Investigador, El Operador, El Capataz.
+- Categories: Empresa, Tecnología, Creativo, Salud, Académico, Oficios.
+- All differ from the English, German and French text. Ids, designs and the 12 definitions are unchanged.
+
+**Documents.**
+- `resume.labels` in Spanish: Perfil profesional, Experiencia, Formación, Certificaciones, Proyectos, Premios, Currículum, PREVIA.
+- They come from the one canonical source, so PDF, preview, watermark and DOCX match.
+- A Spanish resume renders `lang="es" dir="ltr"`, with no RTL rules.
+- The DOCX title uses the Spanish template name.
+- The app preview stays clean (free product).
+- The watermark label is "PREVIA", not "VISTA PREVIA": the full phrase is wider than the renderer's 300 px tile and would be cut (checked in Chromium).
+
+**Honest limits (Spanish UI, English rules).** Same as German and French: Score, ATS, Job Match, Cover Letter and Import run English rules, and the Writing Coach stays off for Spanish resumes. Spanish messages say so in these places:
+- `tools.englishRules`;
+- `editor.coachUnavailable`;
+- `letter.englishOnly`;
+- `import.englishHeadings`;
+- the ATS date message;
+- the Coach's "a/an" message ("En inglés, usa …").
+
+Job Match terms stay the English taxonomy. The template preview says its sample content is English.
+
+**Formatting.** Spanish does not group four-digit numbers: `1234 / 25.000`, `12.345,5`, dates like `15 mar 2026`. User-typed dates are never reformatted. Spanish treats 0 as plural ("0 posibles problemas").
+
+**UI fit.** Measured in Chromium for each slot at 360 dp. Choices:
+- the Tools tab "Adecuación", which fits at the existing 0.8 shrink floor;
+- the cover-letter tab "Carta", because "Carta de presentación" cannot wrap in a tab (the word "presentación" alone is wider than the slot);
+- the export buttons show just "PDF", "Word", "Imagen": "Exportar {format}" is wider than the English labels, which already sit at the shrink floor;
+- "Usar plantilla" and "Apto para ATS" fit.
+
+The editor header links "Herramientas" and "Vista previa" are the widest pair; the resume title next to them truncates first. Spanish needed no new layout code: the shared local fixes (shrinking one-word tabs, wrapping action rows, flexible section titles and status rows) apply. Budgets are tested.
+
+**Tests** (`spanish.test.ts`, 39):
+- catalog completeness (445/445), identical-value list, parameter parity, plural keys and forms, typography, terminology, free-product vocabulary;
+- plural rendering for zero (plural), one and several, and the "many" fallback;
+- Spanish number and date formats;
+- template metadata;
+- labels for 12 templates × PDF/preview × watermark × Letter/A4, and DOCX headings for all 12;
+- app/resume combinations es/es, es/en, en/es, de/es, fr/es through the database;
+- analysis rendering over the corpora, with rule results unchanged;
+- the stated limits, Language screen and persistence, device language resolution, UI budgets and file names (accents, ñ, NFD, hyphens, 60-character cap);
+- the English, German and French catalog hashes pinned as unchanged.
+
+In Chromium:
+- pdf.js text of all 12 templates × Letter/A4 has the Spanish headings, the name "Ángel Núñez" and a sentence with á é í ó ú ü ñ ¿ ¡ as whole words;
+- Spanish headings stay on one line, inside the page and away from decorative marks, in PDF and preview;
+- the watermark tile fits.
+
+The hard-coded string guard has Spanish injections. It was mutation-checked on three real files: a literal in `LetterTool.tsx`, JSX text in `ImportScreen.tsx` and a ternary in `ToolsScreen.tsx`. Each failed, was restored and passed.
+
+**Known file-name note.** "Mª José" exports as `m-josé-…`, because the ordinal "ª" is not a letter under the existing rules (still safe and deterministic; the rules were not changed).
+
+**Device validation: NOT RUN** (postponed until all five languages are done). §19.11b's checklist applies to Spanish with these changes: "Deutsch" becomes "Español", the file name example is "Ángel Núñez", and the export buttons show only the format.
+
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 
 **Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.
