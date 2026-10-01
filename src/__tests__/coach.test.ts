@@ -14,13 +14,7 @@ import {
   type CoachRuleId,
 } from '../domain/coach/types';
 import { COACH_ALLOWED_WORDS, ELEVATED_CLAIM_WORDS, WEAK_OPENERS, WORDY_PHRASES } from '../domain/coach/wordlists';
-import { PremiumRequiredError } from '../domain/entitlement/features';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PaywallCoordinator } from '../services/entitlement/paywall';
-import { PremiumGate } from '../services/entitlement/premium-gate';
-import { PremiumTools } from '../services/premium/premium-tools';
+import { applyCoachFix, writingCoach } from '../services/tools/resume-tools';
 import { STRONG, WEAK, type CorpusEntry } from './fixtures/coach-corpus';
 
 const SRC = join(__dirname, '..');
@@ -414,68 +408,25 @@ describe('limits', () => {
   });
 });
 
-// --- 7. entitlement (PremiumTools is the only way in) ---
+// --- 7. free for everyone (services/tools is the only way in) ---
 
-const T = 1_700_000_000_000;
-function world(premium: boolean) {
-  const store = new FakeStoreProvider({ storeNow: () => T });
-  if (premium) store.setSubscription('active', T + 86_400_000);
-  const entitlements = new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T);
-  return { store, tools: new PremiumTools(new PremiumGate(entitlements)), paywall: new PaywallCoordinator(entitlements) };
-}
-
-describe('entitlement', () => {
-  it('FREE: refused before any analysis (even for text the engine would reject)', async () => {
-    const free = world(false);
-    await expect(free.tools.writingCoach('Helped with the launch', 'experienceBullet', 'en')).rejects.toEqual(new PremiumRequiredError('coach'));
-    await expect(free.tools.writingCoach('x'.repeat(7000), 'experienceBullet', 'en')).rejects.toEqual(new PremiumRequiredError('coach'));
+describe('free access', () => {
+  it('analyses and applies with no entitlement, purchase or account step', async () => {
+    const report = await writingCoach('Led a analysis', 'experienceBullet', 'en');
+    expect(report.findings.map((f) => f.rule)).toEqual(['a-an']);
+    expect(await applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0])).toBe('Led an analysis');
   });
 
-  it('FREE: cannot apply a finding obtained earlier', async () => {
-    const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
-    await expect(world(false).tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0])).rejects.toEqual(new PremiumRequiredError('coach'));
+  it('the engine still rejects stale fixes and too-long text through the service', async () => {
+    const report = await writingCoach('Led a analysis', 'experienceBullet', 'en');
+    await expect(applyCoachFix('Led a analysis of churn', 'experienceBullet', 'en', [], report.findings[0])).rejects.toBeInstanceOf(CoachStaleFindingError);
+    await expect(writingCoach('x'.repeat(7000), 'experienceBullet', 'en')).rejects.toBeInstanceOf(CoachInputError);
   });
 
-  it('PREMIUM: one check to analyse, another to apply', async () => {
-    const paid = world(true);
-    const before = paid.store.calls.verify;
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
-    expect(paid.store.calls.verify - before).toBe(1);
-    expect(await paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0])).toBe('Led an analysis');
-    expect(paid.store.calls.verify - before).toBe(2);
-  });
-
-  it('premium lost between analysis and apply → refused, no text returned', async () => {
-    const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
-    paid.store.refund();
-    let result: string | null = null;
-    await expect(
-      paid.tools.applyCoachFix('Led a analysis', 'experienceBullet', 'en', [], report.findings[0]).then((r) => (result = r)),
-    ).rejects.toEqual(new PremiumRequiredError('coach'));
-    expect(result).toBeNull();
-  });
-
-  it('stale through the service', async () => {
-    const paid = world(true);
-    const report = await paid.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
-    await expect(paid.tools.applyCoachFix('Led a analysis of churn', 'experienceBullet', 'en', [], report.findings[0])).rejects.toBeInstanceOf(CoachStaleFindingError);
-  });
-
-  it('a refused Coach request resumes through the existing paywall after subscribing', async () => {
-    const w = world(false);
-    let report: unknown = null;
-    try {
-      await w.tools.writingCoach('Led a analysis', 'experienceBullet', 'en');
-    } catch (error) {
-      if (error instanceof PremiumRequiredError) {
-        w.paywall.request({ feature: error.feature, run: async () => void (report = await w.tools.writingCoach('Led a analysis', 'experienceBullet', 'en')) });
-      }
+  it('the language limit is unchanged: no English rules on other resume languages', async () => {
+    for (const language of ['de', 'fr', 'es', 'ar'] as const) {
+      expect(await writingCoach('Helped with the launch', 'experienceBullet', language)).toMatchObject({ findings: [], support: { kind: 'unavailable' } });
     }
-    expect(w.paywall.pendingFeature()).toBe('coach');
-    await (await w.paywall.subscribe()).resume!();
-    expect(report).toMatchObject({ findings: [{ rule: 'a-an' }] });
   });
 });
 
@@ -491,7 +442,7 @@ function sourceFiles(dir: string): string[] {
 const valueImports = (source: string) =>
   [...source.matchAll(/^import\s+(?!type\s)[^;]*?from\s+['"]([^'"]+)['"]/gms)].map((m) => m[1]);
 
-describe('architecture: Editor → PremiumTools → domain/coach', () => {
+describe('architecture: Editor → services/tools → domain/coach', () => {
   it('domain/coach is pure (imports only itself and the language contract)', () => {
     for (const file of sourceFiles(join(SRC, 'domain', 'coach'))) {
       for (const spec of [...read(relative(SRC, file)).matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
@@ -500,15 +451,15 @@ describe('architecture: Editor → PremiumTools → domain/coach', () => {
     }
   });
 
-  it('only PremiumTools runs the Coach engine; screens import its types only', () => {
+  it('only services/tools runs the Coach engine; screens import its types only', () => {
     const owners = sourceFiles(SRC)
       .filter((file) => !file.includes(join('domain', 'coach')))
       .filter((file) => valueImports(readFileSync(file, 'utf8')).some((spec) => /domain\/coach\//.test(spec)))
       .map((file) => relative(SRC, file));
-    expect(owners).toEqual([join('services', 'premium', 'premium-tools.ts')]);
+    expect(owners).toEqual([join('services', 'tools', 'resume-tools.ts')]);
     const entry = read('features/coach/CoachEntry.tsx');
-    expect(entry).toContain('tools.writingCoach(');
-    expect(entry).toContain('tools.applyCoachFix(');
+    expect(entry).toContain('await writingCoach(');
+    expect(entry).toContain('await applyCoachFix(');
     expect(entry).not.toMatch(/analyzeText|applyFix\(|applyVerifiedFix/);
   });
 
@@ -521,13 +472,13 @@ describe('architecture: Editor → PremiumTools → domain/coach', () => {
     expect(editor).not.toMatch(/field="summaryBullets"/);
   });
 
-  it('FREE sees only "Coach 🔒": no teaser, and no analysis outside the gated service call', () => {
+  it('everyone gets the open Coach link: no lock, no teaser, the panel opens on a report', () => {
     const entry = read('features/coach/CoachEntry.tsx');
-    expect(entry).toMatch(/decision\.premium \? t\('coach\.open'\) : t\('coach\.locked'\)/);
-    expect(en.coach.locked).toBe('Coach 🔒');
+    expect(entry).toMatch(/\{open \? t\('coach\.close'\) : t\('coach\.open'\)\}/);
+    expect(entry).toMatch(/const open = report !== null;/);
+    expect(entry).not.toMatch(/locked|🔒|premium|paywall|entitlement/i);
+    expect(en.coach).not.toHaveProperty('locked');
     expect(JSON.stringify(en.coach)).not.toMatch(/\d+ suggestion|found|issues/i);
-    // The panel only renders for a premium decision.
-    expect(entry).toMatch(/const open = report !== null && decision\.premium;/);
   });
 
   it('adds no dependency', () => {

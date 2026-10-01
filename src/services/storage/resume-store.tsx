@@ -2,9 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { AppState } from 'react-native';
 import type { ResumeData, StoredResume } from '../../domain/resume/types';
 import { getTemplate } from '../../domain/templates/templates';
-import { useEntitlement } from '../entitlement/entitlement';
-import { CustomizationService } from '../premium/customization';
 import { newId } from '../../domain/shared/id';
+import { isHexColor } from '../../domain/shared/text';
 import type { Language } from '../../domain/i18n/languages';
 import { appTranslator, getAppLanguage } from '../i18n/app-language';
 import { useDatabase } from './database-context';
@@ -21,12 +20,12 @@ interface StoreState {
   create: (data: ResumeData, title?: string, templateId?: string, language?: Language) => StoredResume;
   /** Changes one resume's language (never the app language). */
   setLanguage: (id: string, language: Language) => void;
-  /** Content edits. Colors go through setAccent, which enforces the premium rules. */
+  /** Content edits. Colors go through setAccent, which validates them. */
   update: (id: string, patch: Partial<Pick<StoredResume, 'title' | 'data'>>) => void;
-  /** Switches template and resets the accent to its default (FREE). */
+  /** Switches template and resets the accent to its default. */
   setTemplate: (id: string, templateId: string) => void;
-  /** Default and preset colors are FREE; custom colors throw PremiumRequiredError for FREE users. */
-  setAccent: (id: string, accent: string) => Promise<void>;
+  /** Any valid hex color (default, preset or custom). Anything else is ignored. */
+  setAccent: (id: string, accent: string) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => StoredResume | null;
   setActive: (id: string | null) => void;
@@ -37,7 +36,6 @@ const StoreContext = createContext<StoreState | null>(null);
 
 export function ResumeStoreProvider({ children }: { children: ReactNode }) {
   const { resumes: repository } = useDatabase();
-  const { gate } = useEntitlement();
   const library = useMemo(
     () =>
       new ResumeLibrary(repository, {
@@ -54,7 +52,6 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       }),
     [repository],
   );
-  const customization = useMemo(() => new CustomizationService(gate, library), [gate, library]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -110,17 +107,16 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
         const template = getTemplate(templateId);
         library.update(id, { templateId: template.id, accent: template.defaultAccent });
       },
-      setAccent: async (id, accent) => {
-        const resume = library.get(id);
-        if (!resume) return;
-        await customization.setAccent(id, resume.templateId, accent);
+      setAccent: (id, accent) => {
+        if (!library.get(id) || !isHexColor(accent)) return;
+        library.update(id, { accent });
       },
       remove: (id) => void library.remove(id),
       duplicate: (id) => library.duplicate(id),
       setActive: (id) => void library.setActive(id),
       flush: (id) => library.flush(id),
     }),
-    [library, customization, ready, resumes, activeId],
+    [library, ready, resumes, activeId],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

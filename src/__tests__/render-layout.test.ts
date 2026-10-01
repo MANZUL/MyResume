@@ -160,13 +160,13 @@ describe.skipIf(!hasChromium)('layout in a real browser engine', () => {
     }
   }, 60_000);
 
-  it('FREE preview: the watermark covers the whole page and the resume stays readable; PREMIUM is clean', async () => {
+  it('renderer watermark: it covers the whole page and the resume stays readable; without it the page is clean', async () => {
     const shot = async (watermark: boolean) => {
       await load(page, html('corporate-boardroom', 'preview', SAMPLE_RESUME, { watermark }), 'preview');
       return (await page.locator('.page').screenshot()).toString('base64');
     };
-    const free = await shot(true);
-    const premium = await shot(false);
+    const marked = await shot(true);
+    const unmarked = await shot(false);
     // Decode both PNGs in the browser and compare them block by block.
     const blank = await browser.newPage();
     const result = await blank.evaluate(async ([a, b]) => {
@@ -204,7 +204,7 @@ describe.skipIf(!hasChromium)('layout in a real browser engine', () => {
         }
       }
       return { size: [free.width, free.height, clean.width, clean.height], blocks };
-    }, [free, premium]);
+    }, [marked, unmarked]);
     await blank.close();
 
     expect(result.size[0]).toBe(result.size[2]);

@@ -6,7 +6,6 @@ import type { Browser, Page } from 'playwright-core';
 import { checkAtsReadability } from '../domain/ats/ats';
 import { scoreResume } from '../domain/check/resume-score';
 import { analyzeText, buildCoachContext } from '../domain/coach/coach';
-import { PREMIUM_PRICE } from '../domain/entitlement/subscription';
 import { analysisSupport } from '../domain/i18n/analysis-support';
 import type { AnalysisText } from '../domain/i18n/analysis-text';
 import { formatDate, formatNumber } from '../domain/i18n/format';
@@ -29,11 +28,8 @@ import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
 import { categoryName, templateText } from '../i18n/templates';
 import { createTranslator } from '../i18n/translate';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
 import { exportFileName, pdfHtml } from '../services/export/file-export-platform';
-import { PreviewService } from '../services/preview/preview-service';
+import { renderPreview } from '../services/preview/preview-service';
 import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase } from '../services/storage/sqlite/database';
 import { EDGE as ATS_EDGE, STRONG as ATS_STRONG, WEAK as ATS_WEAK } from './fixtures/ats-corpus';
@@ -95,7 +91,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('German catalog', () => {
   it('has a German value for every English key, and no other keys', () => {
     expect([...DE.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(DE.size).toBe(474);
+    // 474 before phase 13C, minus the 29 monetization keys removed with the paywall.
+    expect(DE.size).toBe(445);
     for (const [key, value] of DE) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.de).toBe(de);
@@ -104,8 +101,8 @@ describe('German catalog', () => {
   it('translates every key; the few identical values are names, symbols or pure formats', () => {
     const identical = [...DE].filter(([key, value]) => JSON.stringify(value) === JSON.stringify(EN.get(key))).map(([key]) => key).sort();
     expect(identical).toEqual([
-      // Product and brand names (My Resume, Premium, Writing Coach's short name "Coach", LinkedIn).
-      'analysis.location.linkedin', 'coach.locked', 'coach.open', 'editor.fields.personal.linkedin', 'nav.home', 'nav.premium',
+      // Product and brand names (My Resume, Writing Coach's short name "Coach", LinkedIn).
+      'analysis.location.linkedin', 'coach.open', 'editor.fields.personal.linkedin', 'nav.home',
       // Established German loanwords used as-is in German UI.
       'analysis.ats.detected.name', 'analysis.ats.layout.title', 'analysis.location.field.name', 'analysis.location.website',
       'editor.fields.personal.website', 'editor.tools', 'nav.tools', 'templates.categories.Tech',
@@ -267,13 +264,12 @@ describe('German resume documents', () => {
     }
   });
 
-  it('PDF (print HTML) and preview service use the resume language', async () => {
-    const T0 = 1_700_000_000_000;
-    const preview = new PreviewService(new EntitlementService(new FakeStoreProvider({ storeNow: () => T0 }), new MemoryEntitlementCacheStore(), () => T0));
-    const shown = (await preview.render(stored('de'))).html;
+  it('PDF (print HTML) and the app preview use the resume language', () => {
+    const shown = renderPreview(stored('de'));
     expect(shown).toContain('<html lang="de" dir="ltr">');
     expect(headingsIn(shown)).toEqual(GERMAN_LABELS);
-    expect(shown).toContain(tileText('VORSCHAU'));
+    // The app preview is clean (free product); the German watermark label is the renderer's.
+    expect(shown).not.toContain(tileText('VORSCHAU'));
     const printed = pdfHtml(stored('de'), 'a4');
     expect(headingsIn(printed)).toEqual(GERMAN_LABELS);
     expect(printed).not.toContain(tileText('VORSCHAU'));
@@ -431,12 +427,11 @@ describe('German app UI', () => {
     expect(LANGUAGES.map((l) => LANGUAGE_NAMES[l])).toEqual(['English', 'Deutsch', 'Français', 'Español', 'العربية']);
   });
 
-  it('the paywall keeps the product price: German text only wraps the {price} value', () => {
-    expect(PREMIUM_PRICE.amount).toBe('$7.99');
-    expect(T.de('paywall.heading', { price: PREMIUM_PRICE.amount })).toBe('Premium — $7.99/Monat');
-    expect(T.de('paywall.subscribe', { price: PREMIUM_PRICE.amount })).toBe('Abonnieren — $7.99/Monat');
-    for (const key of ['heading', 'subscribe', 'terms'] as const) expect(de.paywall[key]).not.toMatch(/\d|€|\$/);
-    expect(Object.keys(de.paywall.features)).toEqual(Object.keys(en.paywall.features));
+  it('has no paywall, price or purchase text (My Resume is free)', () => {
+    expect(de).not.toHaveProperty('paywall');
+    expect(de.nav).not.toHaveProperty('premium');
+    const all = [...DE.values()].flatMap(forms).join('\n');
+    expect(all).not.toMatch(/Premium|Abo\b|Abonn|Kauf|kaufen|Preis|\$\d|€|🔒|freischalten|wiederherstellen/i);
   });
 
   it('a key missing from German falls back to English, key by key', () => {

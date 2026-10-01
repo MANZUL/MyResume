@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { PremiumRequiredError } from '../../domain/entitlement/features';
 import type { JobMatchReport } from '../../domain/job-match/types';
 import { JOB_DESCRIPTION_MAX } from '../../domain/job-match/types';
 import type { ResumeData } from '../../domain/resume/types';
-import { useEntitlement } from '../../services/entitlement/entitlement';
 import { useTargetJob } from '../../services/storage/use-target-job';
 import { Button, Card, colors, Field, Muted, styles } from '../../ui/components';
 import type { Language } from '../../domain/i18n/languages';
 import { useLocalization } from '../../services/i18n/localization';
 import { errorText, renderText } from '../../i18n/analysis';
+import { jobMatch } from '../../services/tools/resume-tools';
 import { EnglishRulesNote } from '../tools/EnglishRulesNote';
 
 export function MatchTool({ resumeId, data, language }: { resumeId: string; data: ResumeData; language: Language }) {
@@ -17,22 +16,19 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
   const { description, setDescription, ready } = useTargetJob(resumeId);
   const [result, setResult] = useState<{ report: JobMatchReport; for: string } | null>(null);
   const [error, setError] = useState('');
-  const { tools, paywall, decision } = useEntitlement();
 
-  // Job Match is premium: the tools service checks the entitlement before any analysis.
   const compare = async (): Promise<void> => {
     const text = description;
     try {
-      setResult({ report: await tools.jobMatch(data, text, language), for: text });
+      setResult({ report: await jobMatch(data, text, language), for: text });
       setError('');
     } catch (e) {
-      if (e instanceof PremiumRequiredError) paywall.request({ feature: e.feature, run: compare });
-      else setError(errorText(t, e, 'match.failed'));
+      setError(errorText(t, e, 'match.failed'));
     }
   };
 
   // A result shows only while it matches the text it was made from.
-  const report = result && result.for === description && decision.premium ? result.report : null;
+  const report = result && result.for === description ? result.report : null;
 
   return (
     <>
@@ -48,7 +44,7 @@ export function MatchTool({ resumeId, data, language }: { resumeId: string; data
       />
       <Muted>{t('match.charCount', { count: description.length, max: JOB_DESCRIPTION_MAX })}</Muted>
       <Button
-        title={decision.premium ? t('match.compare') : t('match.compareLocked')}
+        title={t('match.compare')}
         onPress={() => void compare()}
         disabled={!description.trim()}
       />

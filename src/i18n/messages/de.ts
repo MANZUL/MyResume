@@ -10,7 +10,7 @@ import type { Messages } from '../catalog';
 //   accomplishment → Erfolg · job title / role → Position · job description → Stellenanzeige
 //   job match → Stellenabgleich (tab: Abgleich) · cover letter → Anschreiben · template → Vorlage
 //   preview → Vorschau · watermark → Wasserzeichen · accent color → Akzentfarbe
-//   Writing Coach, Premium, ATS and My Resume stay as product and technical names.
+//   Writing Coach, ATS and My Resume stay as product and technical names.
 //
 // The analysis rules are English (§19.11): messages never claim German language analysis,
 // and where a rule only understands English input the message says so.
@@ -22,7 +22,6 @@ export const de: Messages = {
     edit: 'Bearbeiten',
     preview: 'Vorschau',
     tools: 'Tools',
-    premium: 'Premium',
     templates: 'Vorlagen',
     template: 'Vorlage',
     settings: 'Sprache',
@@ -203,7 +202,6 @@ export const de: Messages = {
   },
   coach: {
     open: 'Coach',
-    locked: 'Coach 🔒',
     close: 'Coach ausblenden',
     apply: 'Übernehmen',
     refresh: 'Vorschläge aktualisieren',
@@ -266,7 +264,6 @@ export const de: Messages = {
     jdPlaceholder: 'Fügen Sie hier die Stellenanzeige ein',
     charCount: '{count} / {max}',
     compare: 'Mit Lebenslauf vergleichen',
-    compareLocked: 'Mit Lebenslauf vergleichen 🔒',
     failed: 'Vergleich nicht möglich.',
     termsTitle: 'Begriffe aus der Anzeige',
     detected: 'Im Lebenslauf',
@@ -317,44 +314,14 @@ export const de: Messages = {
     },
     // A compound keeps the three export buttons as narrow as the English ones.
     export: '{format}-Export',
-    locked: '{format}, gesperrt. Erfordert Premium',
     exportFailed: 'Export fehlgeschlagen',
     tryAgain: 'Bitte versuchen Sie es erneut.',
-    devStore: 'Entwicklungs-Build: Käufe verwenden einen simulierten Store.',
   },
   share: {
     pdf: 'Lebenslauf als PDF teilen',
     image: 'Lebenslauf als Bild teilen',
     docx: 'Lebenslauf teilen (Word)',
     page: '{title} (Seite {index} von {count})',
-  },
-  paywall: {
-    heading: 'Premium — {price}/Monat',
-    intro: 'Erstellen und Bearbeiten bleiben kostenlos. Mit Premium nehmen Sie Ihren Lebenslauf aus der App mit.',
-    features: {
-      export: 'PDF- und Word-Dateien (.docx) exportieren',
-      image: 'Export und Teilen als Bild',
-      clean: 'Saubere Ausgabe ohne Wasserzeichen',
-      tools: 'Writing Coach, Stellenabgleich und Anpassung an Stellen',
-      colors: 'Eigene Akzentfarben',
-    },
-    terms: '{price} pro Monat. Verlängert sich automatisch bis zur Kündigung; Sie können jederzeit in den Einstellungen Ihres Store-Kontos kündigen.',
-    verify: 'Stellen Sie eine Internetverbindung her, damit Ihr Abo bestätigt werden kann, oder tippen Sie auf „Käufe wiederherstellen“.',
-    unavailable: 'In diesem Build sind keine Käufe möglich.',
-    subscribe: 'Abonnieren — {price}/Monat',
-    storeUnavailable: 'Der Store ist gerade nicht erreichbar. Bitte versuchen Sie es gleich noch einmal.',
-    restore: 'Käufe wiederherstellen',
-    notNow: 'Jetzt nicht',
-    havePremium: 'Sie haben Premium',
-    done: 'Fertig',
-    pendingTitle: 'Kauf ausstehend',
-    pendingBody: 'Premium wird freigeschaltet, sobald der Kauf genehmigt ist.',
-    notCompletedTitle: 'Kauf nicht abgeschlossen',
-    notVerified: 'Der Kauf konnte nicht bestätigt werden. Bitte versuchen Sie es erneut.',
-    tryAgain: 'Bitte versuchen Sie es erneut.',
-    nothingTitle: 'Nichts wiederherzustellen',
-    nothingBody: 'Für dieses Store-Konto wurde kein aktives Premium-Abo gefunden.',
-    restoreFailed: 'Wiederherstellung fehlgeschlagen',
   },
   import: {
     title: 'Lebenslauf einfügen',

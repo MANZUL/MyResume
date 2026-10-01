@@ -1,21 +1,16 @@
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { PremiumRequiredError } from '../domain/entitlement/features';
 import type { ExportRecord, NewExportRecord } from '../domain/export/export-record';
 import type { ExportRecordRepository } from '../domain/ports/repositories';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import type { StoredResume } from '../domain/resume/types';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PaywallCoordinator } from '../services/entitlement/paywall';
-import { PremiumGate } from '../services/entitlement/premium-gate';
 import {
   ExportCancelledError,
   ExportHandleInvalidError,
   ExportInProgressError,
   ExportInterruptedError,
   ExportService,
+  FREE_ACCESS_REASON,
   type ExportHandle,
   type ShareResult,
 } from '../services/export/export-service';
@@ -148,12 +143,8 @@ class MemoryRecords implements ExportRecordRepository {
   }
 }
 
-function setup(options: { premium?: boolean; seedRecords?: ExportRecord[] } = {}) {
+function setup(options: { seedRecords?: ExportRecord[] } = {}) {
   const clock = { now: T };
-  const store = new FakeStoreProvider({ storeNow: () => clock.now });
-  if (options.premium ?? true) store.setSubscription('active', T + 30 * DAY);
-  const entitlements = new EntitlementService(store, new MemoryEntitlementCacheStore(), () => clock.now);
-  const gate = new PremiumGate(entitlements);
   const fs = new MemoryFs();
   const print = new FakePrint(fs);
   const share = new FakeShare();
@@ -161,14 +152,13 @@ function setup(options: { premium?: boolean; seedRecords?: ExportRecord[] } = {}
   const platform = createFileExportPlatform({ fs, print, share, rasterizer });
   const records = new MemoryRecords(options.seedRecords);
   const foreground = { value: true };
-  const service = new ExportService(gate, platform, {
+  const service = new ExportService(platform, {
     records,
     isForeground: () => foreground.value,
     now: () => clock.now,
     handleLifetimeMs: 60_000,
   });
-  const paywall = new PaywallCoordinator(entitlements);
-  return { clock, store, entitlements, gate, fs, print, share, rasterizer, platform, records, foreground, service, paywall };
+  return { clock, fs, print, share, rasterizer, platform, records, foreground, service };
 }
 
 const resume = (overrides: Partial<StoredResume> = {}): StoredResume => ({
@@ -186,31 +176,36 @@ async function readDocx(base64: string) {
 
 // --- tests ---
 
-describe('FREE users', () => {
-  it('are refused before anything is rendered, written or shared; the denial is recorded', async () => {
-    const w = setup({ premium: false });
-    await expect(w.service.exportPdf(resume())).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(w.service.exportDocx(resume())).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(w.service.prepare(resume(), { format: 'pdf' })).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(w.print.calls).toHaveLength(0);
-    expect(w.fs.files.size).toBe(0);
-    expect(w.share.shared).toHaveLength(0);
-    expect(outcomes(w.records)).toEqual(['pdf:denied', 'docx:denied', 'pdf:denied']);
-    expect(w.records.added.every((r) => r.accessReason === 'not_premium')).toBe(true);
+describe('every export is free', () => {
+  it('PDF, DOCX and image export run for everyone: no entitlement, purchase or account step', async () => {
+    const w = setup();
+    await w.service.exportPdf(resume());
+    await w.service.exportDocx(resume());
+    await w.service.exportImage(resume());
+    expect(w.share.shared.map((s) => s.mimeType)).toEqual(['application/pdf', DOCX_MIME, PNG_MIME, PNG_MIME]);
+    expect(outcomes(w.records)).toEqual(['pdf:succeeded', 'docx:succeeded', 'png:succeeded']);
+    expect(w.records.added.every((r) => r.accessReason === FREE_ACCESS_REASON)).toBe(true);
+    expect(FREE_ACCESS_REASON).toBe('free');
   });
 
-  it('a history of successful exports is never treated as proof of entitlement', async () => {
+  it('the service takes no entitlement: its constructor needs only the platform', () => {
+    expect(ExportService.length).toBe(1);
+    expect(() => new ExportService(setup().platform)).not.toThrow();
+  });
+
+  it('export history is never read, and nothing is ever recorded as denied', async () => {
     const past: ExportRecord = {
-      id: 'old', resumeId: 'r1', templateId: 'corporate-boardroom', exportType: 'pdf', outcome: 'succeeded',
-      accessReason: 'verified', errorMessage: null, createdAt: T - DAY,
+      id: 'old', resumeId: 'r1', templateId: 'corporate-boardroom', exportType: 'pdf', outcome: 'denied',
+      accessReason: 'not_premium', errorMessage: null, createdAt: T - DAY,
     };
-    const w = setup({ premium: false, seedRecords: [past, past] });
-    await expect(w.service.exportPdf(resume())).rejects.toBeInstanceOf(PremiumRequiredError);
+    const w = setup({ seedRecords: [past, past] });
+    await w.service.exportPdf(resume());
     expect(w.records.reads).toBe(0);
+    expect(outcomes(w.records)).toEqual(['pdf:succeeded']);
   });
 });
 
-describe('PREMIUM PDF', () => {
+describe('PDF', () => {
   it('Letter: renders the shared renderer in PDF mode at 612×792 pt, clean, then shares the private file', async () => {
     const w = setup();
     await w.service.exportPdf(resume(), 'letter');
@@ -226,7 +221,7 @@ describe('PREMIUM PDF', () => {
     expect(w.share.shared[0].uri).toMatch(/^mem:\/\/cache\/exports\/[^/]+\/eleanor-vance\.pdf$/);
     expect(w.fs.tempFiles()).toEqual([]); // print temp file was moved, not copied
     expect(outcomes(w.records)).toEqual(['pdf:succeeded']);
-    expect(w.records.added[0].accessReason).toBe('verified');
+    expect(w.records.added[0].accessReason).toBe('free');
   });
 
   it('A4: 595×842 pt and an A4 page rule', async () => {
@@ -263,7 +258,7 @@ describe('PREMIUM PDF', () => {
   });
 });
 
-describe('PREMIUM DOCX', () => {
+describe('DOCX', () => {
   it('is a valid Word file with the resume content, template mapping, product metadata and no watermark', async () => {
     const w = setup();
     await w.service.exportDocx(resume());
@@ -294,62 +289,6 @@ describe('PREMIUM DOCX', () => {
   });
 });
 
-describe('the two entitlement checks', () => {
-  it('each export verifies before generation and again before sharing', async () => {
-    const w = setup();
-    const before = w.store.calls.verify;
-    await w.service.exportPdf(resume());
-    expect(w.store.calls.verify - before).toBe(2);
-  });
-
-  it('check #1 fails → nothing generated', async () => {
-    const w = setup({ premium: false });
-    await expect(w.service.exportPdf(resume())).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(w.print.calls).toHaveLength(0);
-  });
-
-  it('entitlement lost between the checks (refund) → not shared, artifact deleted, denial recorded', async () => {
-    const w = setup();
-    const handle = await w.service.prepare(resume(), { format: 'pdf' });
-    expect(w.fs.exportFiles()).toHaveLength(1);
-    w.store.refund();
-    await expect(w.service.share(handle)).rejects.toEqual(new PremiumRequiredError('export.share'));
-    expect(w.share.shared).toHaveLength(0);
-    expect(w.fs.exportFiles()).toEqual([]);
-    expect(outcomes(w.records)).toEqual(['pdf:denied']);
-  });
-
-  it('subscription expiry between generation and sharing → refused', async () => {
-    const w = setup();
-    w.store.setSubscription('active', T + 30_000);
-    const handle = await w.service.prepare(resume(), { format: 'docx' });
-    w.clock.now += 31_000;
-    await expect(w.service.share(handle)).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(w.fs.exportFiles()).toEqual([]);
-  });
-
-  it('a refused share opens the paywall through the existing flow, and a subscription resumes it', async () => {
-    const w = setup({ premium: false });
-    const opened: string[] = [];
-    w.paywall.onRequest((feature) => opened.push(feature));
-    const run = async (): Promise<void> => {
-      try {
-        await w.service.exportPdf(resume());
-      } catch (error) {
-        if (error instanceof PremiumRequiredError) w.paywall.request({ feature: error.feature, run });
-        else throw error;
-      }
-    };
-    await run();
-    expect(opened).toEqual(['export.pdf']);
-    const { outcome, resume: resumeAction } = await w.paywall.subscribe();
-    expect(outcome).toBe('subscribed');
-    await resumeAction!();
-    expect(w.share.shared).toHaveLength(1);
-    expect(outcomes(w.records)).toEqual(['pdf:denied', 'pdf:succeeded']);
-  });
-});
-
 describe('artifact handles', () => {
   let w: ReturnType<typeof setup>;
   beforeEach(() => {
@@ -377,14 +316,6 @@ describe('artifact handles', () => {
     await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
   });
 
-  it('are invalid after entitlement loss, even if premium comes back', async () => {
-    const handle = await w.service.prepare(resume(), { format: 'pdf' });
-    w.store.refund();
-    await expect(w.service.share(handle)).rejects.toBeInstanceOf(PremiumRequiredError);
-    w.store.setSubscription('active', T + 30 * DAY);
-    await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
-  });
-
   it('expire after their lifetime: file deleted, nothing shared', async () => {
     const handle = await w.service.prepare(resume(), { format: 'pdf' });
     w.clock.now += 60_001;
@@ -398,7 +329,7 @@ describe('artifact handles', () => {
     const forged = { id: handle.id, format: handle.format } as ExportHandle;
     await expect(w.service.share(forged)).rejects.toBeInstanceOf(ExportHandleInvalidError);
     await expect(w.service.share({ ...handle })).rejects.toBeInstanceOf(ExportHandleInvalidError);
-    const other = new ExportService(w.gate, w.platform);
+    const other = new ExportService(w.platform);
     await expect(other.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
     await w.service.share(handle); // the genuine handle still works once
     expect(w.share.shared).toHaveLength(1);
@@ -414,7 +345,7 @@ describe('artifact handles', () => {
   });
 });
 
-describe('failure handling leaves no reusable paid artifact', () => {
+describe('failure handling leaves no reusable artifact', () => {
   it('renderer / print failure', async () => {
     const w = setup();
     w.print.fail = new Error('WebView print failed');
@@ -494,29 +425,21 @@ describe('failure handling leaves no reusable paid artifact', () => {
     expect(w.fs.exportFiles()).toHaveLength(1);
     // New process: new platform and service over the same disk.
     const platform = createFileExportPlatform({ fs: w.fs, print: w.print, share: w.share });
-    const service = new ExportService(w.gate, platform);
+    const service = new ExportService(platform);
     await expect(service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
     platform.purgeAll(); // what the app does at launch
     expect(w.fs.exportFiles()).toEqual([]);
   });
 });
 
-describe('security: bypass attempts all fail', () => {
-  const claim = { premium: true, isPremium: true, unlocked: true, watermark: false } as never;
-
-  it('passing "premium: true" anywhere changes nothing', async () => {
-    const w = setup({ premium: false });
+describe('security: the handle is the only way to share', () => {
+  it('extra arguments cannot skip handle validation', async () => {
+    const w = setup();
+    const handle = await w.service.prepare(resume(), { format: 'pdf' });
     const anyService = w.service as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    await expect(anyService.exportPdf(resume(), 'letter', claim)).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(anyService.exportDocx(resume(), claim)).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(anyService.prepare(resume(), { format: 'pdf', premium: true })).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(w.print.calls).toHaveLength(0);
-  });
-
-  it('premium-looking fields inside the resume change nothing', async () => {
-    const w = setup({ premium: false });
-    const sneaky = { ...resume(), premium: true, entitlement: 'premium', data: { ...SAMPLE_RESUME, premium: true } } as StoredResume;
-    await expect(w.service.exportPdf(sneaky)).rejects.toBeInstanceOf(PremiumRequiredError);
+    const forged = { id: handle.id, format: 'pdf' };
+    await expect(anyService.share(forged, { trusted: true, skipChecks: true })).rejects.toBeInstanceOf(ExportHandleInvalidError);
+    expect(w.share.shared).toHaveLength(0);
   });
 
   it('reusing an old handle after a later successful export fails', async () => {
@@ -527,25 +450,13 @@ describe('security: bypass attempts all fail', () => {
     await expect(w.service.share(old)).rejects.toBeInstanceOf(ExportHandleInvalidError);
   });
 
-  it('sharing an artifact prepared while premium, after the subscription expired, fails', async () => {
+  it('a stale handle (expired) stays invalid after the clock goes back', async () => {
     const w = setup();
-    const handle = await w.service.prepare(resume(), { format: 'pdf' });
-    w.store.setSubscription('expired', T - 1);
-    await expect(w.service.share(handle)).rejects.toBeInstanceOf(PremiumRequiredError);
-  });
-
-  it('bypassing the paywall coordinator (running the pending action without subscribing) is still refused', async () => {
-    const w = setup({ premium: false });
-    let pending: (() => Promise<void>) | null = null;
-    try {
-      await w.service.exportPdf(resume());
-    } catch (error) {
-      if (error instanceof PremiumRequiredError) pending = () => w.service.exportPdf(resume());
-    }
-    w.paywall.request({ feature: 'export.pdf', run: pending! });
-    await expect(pending!()).rejects.toBeInstanceOf(PremiumRequiredError); // called directly, no purchase
-    w.store.setNextPurchaseResult({ kind: 'cancelled' });
-    expect((await w.paywall.subscribe()).resume).toBeNull(); // cancelled purchase does not release it
+    const handle = await w.service.prepare(resume(), { format: 'docx' });
+    w.clock.now += 60_001;
+    await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+    w.clock.now = T;
+    await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
     expect(w.share.shared).toHaveLength(0);
   });
 });
@@ -553,16 +464,7 @@ describe('security: bypass attempts all fail', () => {
 describe('image export (PNG, step 6)', () => {
   const pngFiles = (w: ReturnType<typeof setup>) => w.fs.exportFiles().filter((uri) => uri.endsWith('.png'));
 
-  it('FREE: refused before anything is printed or rasterized; denial recorded; paywall feature is export.image', async () => {
-    const w = setup({ premium: false });
-    await expect(w.service.exportImage(resume())).rejects.toEqual(new PremiumRequiredError('export.image'));
-    expect(w.print.calls).toHaveLength(0);
-    expect(w.rasterizer.inputs).toHaveLength(0);
-    expect(w.fs.files.size).toBe(0);
-    expect(outcomes(w.records)).toEqual(['png:denied']);
-  });
-
-  it('PREMIUM: one PNG per page from the export PDF, shared in page order from the private folder', async () => {
+  it('one PNG per page from the export PDF, shared in page order from the private folder', async () => {
     const w = setup();
     await w.service.exportImage(resume());
     expect(w.rasterizer.inputs).toEqual(['%PDF-fake 612x792']); // exactly the printed PDF
@@ -620,56 +522,12 @@ describe('image export (PNG, step 6)', () => {
     expect(w.share.shared.at(-1)!.uri).toMatch(/ada-lovelace-page-2\.png$/);
   });
 
-  it('checks the entitlement before generation, before sharing, and again before every further page', async () => {
+  it('shares every page in order with nothing between the pages but the share sheets', async () => {
     const w = setup();
-    const before = w.store.calls.verify;
-    await w.service.exportImage(resume()); // 2 pages
-    expect(w.store.calls.verify - before).toBe(3);
-    w.rasterizer.pageCount = 1;
-    const mid = w.store.calls.verify;
+    w.rasterizer.pageCount = 3;
     await w.service.exportImage(resume());
-    expect(w.store.calls.verify - mid).toBe(2);
-  });
-
-  it('entitlement lost before sharing → nothing shared, every page deleted, denial recorded', async () => {
-    const w = setup();
-    const handle = await w.service.prepare(resume(), { format: 'png' });
-    expect(pngFiles(w)).toHaveLength(2);
-    w.store.refund();
-    await expect(w.service.share(handle)).rejects.toEqual(new PremiumRequiredError('export.share'));
-    expect(w.share.shared).toHaveLength(0);
-    expect(w.fs.exportFiles()).toEqual([]);
-    expect(outcomes(w.records)).toEqual(['png:denied']);
-    w.store.setSubscription('active', T + 30 * DAY);
-    await expect(w.service.share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
-  });
-
-  it('entitlement lost between pages → the next page is not shared, files deleted, denial recorded, paywall error', async () => {
-    const w = setup();
-    w.share.onShare = () => {
-      if (w.share.shared.length === 0) w.store.refund(); // refund lands while page 1's sheet is open
-    };
-    await expect(w.service.exportImage(resume())).rejects.toEqual(new PremiumRequiredError('export.share'));
-    expect(w.share.shared).toHaveLength(1);
-    expect(w.fs.exportFiles()).toEqual([]);
-    expect(outcomes(w.records)).toEqual(['png:denied']);
-  });
-
-  it('a refused image export resumes through the existing paywall flow after subscribing', async () => {
-    const w = setup({ premium: false });
-    let resumeAction: (() => Promise<void>) | null = null;
-    try {
-      await w.service.exportImage(resume());
-    } catch (error) {
-      if (error instanceof PremiumRequiredError) {
-        w.paywall.request({ feature: error.feature, run: () => w.service.exportImage(resume()) });
-      }
-    }
-    expect(w.paywall.pendingFeature()).toBe('export.image');
-    resumeAction = (await w.paywall.subscribe()).resume;
-    await resumeAction!();
-    expect(w.share.shared).toHaveLength(2);
-    expect(outcomes(w.records)).toEqual(['png:denied', 'png:succeeded']);
+    expect(w.share.shared.map((s) => s.uri.replace(/.*\//, ''))).toEqual(['eleanor-vance-page-1.png', 'eleanor-vance-page-2.png', 'eleanor-vance-page-3.png']);
+    expect(outcomes(w.records)).toEqual(['png:succeeded']);
   });
 
   describe('handles', () => {
@@ -707,7 +565,7 @@ describe('image export (PNG, step 6)', () => {
       const handle = await w.service.prepare(resume(), { format: 'png' });
       await expect(w.service.share({ id: handle.id, format: 'png' } as ExportHandle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
       await expect(w.service.share({ ...handle })).rejects.toBeInstanceOf(ExportHandleInvalidError);
-      await expect(new ExportService(w.gate, w.platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      await expect(new ExportService(w.platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
       expect(w.share.shared).toHaveLength(0);
     });
 
@@ -716,7 +574,7 @@ describe('image export (PNG, step 6)', () => {
       const handle = await w.service.prepare(resume(), { format: 'png' });
       expect(pngFiles(w)).toHaveLength(2);
       const platform = createFileExportPlatform({ fs: w.fs, print: w.print, share: w.share, rasterizer: w.rasterizer });
-      await expect(new ExportService(w.gate, platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
+      await expect(new ExportService(platform).share(handle)).rejects.toBeInstanceOf(ExportHandleInvalidError);
       platform.purgeAll();
       expect(w.fs.exportFiles()).toEqual([]);
       expect(w.share.shared).toHaveLength(0);
@@ -747,7 +605,7 @@ describe('image export (PNG, step 6)', () => {
     it('rasterizer not available (no host): refused cleanly', async () => {
       const w = setup();
       const platform = createFileExportPlatform({ fs: w.fs, print: w.print, share: w.share });
-      const service = new ExportService(w.gate, platform, { records: w.records });
+      const service = new ExportService(platform, { records: w.records });
       await expect(service.exportImage(resume())).rejects.toBeInstanceOf(RasterizerError);
       expect(w.fs.files.size).toBe(0);
     });
@@ -806,14 +664,4 @@ describe('image export (PNG, step 6)', () => {
     });
   });
 
-  it('bypass attempts: "premium" arguments and resume fields change nothing', async () => {
-    const w = setup({ premium: false });
-    const anyService = w.service as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    await expect(anyService.exportImage(resume(), 'letter', { premium: true, watermark: false })).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(anyService.prepare(resume(), { format: 'png', premium: true })).rejects.toBeInstanceOf(PremiumRequiredError);
-    const sneaky = { ...resume(), premium: true, data: { ...SAMPLE_RESUME, premium: true } } as StoredResume;
-    await expect(w.service.exportImage(sneaky)).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(w.print.calls).toHaveLength(0);
-    expect(w.rasterizer.inputs).toHaveLength(0);
-  });
 });

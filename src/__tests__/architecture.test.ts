@@ -77,10 +77,9 @@ describe('layering', () => {
     }
   });
 
-  it('only the entitlement service owns purchase state', () => {
+  it('no source file uses a purchase API (My Resume is free)', () => {
     for (const file of sourceFiles()) {
-      if (file.includes(`${sep}services${sep}entitlement${sep}`)) continue;
-      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/\bPurchases\.|purchasePackage|getCustomerInfo/);
+      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/\bPurchases\.|purchasePackage|getCustomerInfo|requestPurchase/);
     }
   });
 });
@@ -129,41 +128,24 @@ describe('export records cannot grant access', () => {
   });
 });
 
-describe('entitlement architecture (step 3)', () => {
+describe('free product: no billing (phase 13C)', () => {
   const BILLING_SDKS = /^(react-native-purchases|@revenuecat\/|react-native-iap|expo-iap|expo-in-app-purchases|react-native-billing|@react-native-google-play|react-native-google-play-billing|dodopayments|dodo-payments|@dodopayments\/|stripe|@stripe\/)/;
 
-  it('no real billing SDK is declared or imported', () => {
+  it('no billing SDK is declared or imported', () => {
     for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) expect(name).not.toMatch(BILLING_SDKS);
     for (const file of sourceFiles()) {
       for (const spec of importsOf(readFileSync(file, 'utf8'))) expect(spec, relative(SRC, file)).not.toMatch(BILLING_SDKS);
     }
   });
 
-  it('the fake store is only reachable through the development branch of the store factory', () => {
-    for (const file of sourceFiles()) {
-      const source = readFileSync(file, 'utf8');
-      if (!/fake-store/.test(source)) continue;
-      expect(relative(SRC, file)).toBe(join('services', 'entitlement', 'store-factory.ts'));
-      expect(source).toMatch(/if \(__DEV__\) \{[\s\S]*require\('\.\/fake-store'\)/);
-    }
-  });
-
-  it('screens cannot bypass the premium services', () => {
+  it('screens go through the services (export, storage, tools), never around them', () => {
     for (const file of sourceFiles(join(SRC, 'features'))) {
       const source = readFileSync(file, 'utf8');
       const where = relative(SRC, file);
       for (const spec of importsOf(source)) {
-        expect(spec, where).not.toMatch(
-          /domain\/render\/render-html|services\/export\/expo-export-platform|services\/storage\/resume-library|services\/entitlement\/(fake-store|store-factory|entitlement-service)|domain\/entitlement\/policy/,
-        );
+        expect(spec, where).not.toMatch(/domain\/render\/render-html|services\/export\/expo-export-platform|services\/storage\/resume-library/);
       }
-      expect(source, where).not.toMatch(/\b(matchJob|analyzeJobMatch)\(/);
-    }
-  });
-
-  it('nothing persists a premium boolean', () => {
-    for (const file of sourceFiles()) {
-      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/(is_premium|isPremium)\s*[:=]\s*true/);
+      expect(source, where).not.toMatch(/\b(matchJob|analyzeJobMatch|analyzeText|applyFix)\(/);
     }
   });
 });
@@ -239,9 +221,9 @@ describe('image export boundary (step 6)', () => {
     expect(references(/__rasterize/)).toEqual([join(RASTER, 'rasterizer-bridge.ts'), join(RASTER, 'rasterizer-page.ts')].sort());
   });
 
-  it('image generation is only reachable through ExportService (format png → export.image)', () => {
+  it('image generation is only reachable through ExportService (format png)', () => {
     const service = readFileSync(join(SRC, 'services', 'export', 'export-service.ts'), 'utf8');
-    expect(service).toMatch(/png: 'export\.image'/);
+    expect(service).toMatch(/format === 'png'\s*\?\s*await this\.platform\.generatePng\(/);
     expect(references(/\.generatePng\(/)).toEqual([join('services', 'export', 'export-service.ts')]);
     expect(references(/\.rasterize\(/)).toEqual([join('services', 'export', 'file-export-platform.ts')]);
   });
@@ -253,7 +235,7 @@ describe('image export boundary (step 6)', () => {
   });
 });
 
-describe('editor and Resume Check stay FREE (step 7)', () => {
+describe('editor and Resume Check (step 7)', () => {
   it('neither the editor nor the check imports entitlement, premium, paywall or export code', () => {
     for (const dir of [join(SRC, 'features', 'editor'), join(SRC, 'features', 'check')]) {
       for (const file of sourceFiles(dir)) {

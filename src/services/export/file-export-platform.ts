@@ -6,7 +6,7 @@ import { fileSafeName } from '../../domain/shared/text';
 import { DEFAULT_LANGUAGE, type Language } from '../../domain/i18n/languages';
 import { templateText } from '../../i18n/templates';
 import { createTranslator } from '../../i18n/translate';
-import type { ExportArtifact, ExportPlatform, ShareGuard, ShareResult } from './export-service';
+import type { ExportArtifact, ExportPlatform, ShareResult } from './export-service';
 import { RasterizerError, type Rasterizer } from './rasterizer/rasterizer-bridge';
 
 // Export generation over small, injectable adapters (file system, printing,
@@ -182,9 +182,8 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
       }
     },
 
-    // Files are shared one share sheet at a time, in page order. Before every file
-    // after the first, the service's guard re-checks the entitlement.
-    async share(artifact: ExportArtifact, guard?: ShareGuard) {
+    // Files are shared one share sheet at a time, in page order.
+    async share(artifact: ExportArtifact) {
       const record = artifacts.get(artifact.id);
       if (!record || record.files.length === 0 || !record.files.every((file) => fs.exists(file))) {
         throw new Error('This export is no longer available. Please export again.');
@@ -192,7 +191,6 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
       if (!(await share.isAvailable())) throw new Error('Sharing is not available on this device.');
       let result: ShareResult | void = undefined;
       for (const [index, file] of record.files.entries()) {
-        if (index > 0 && guard) await guard();
         const title =
           record.files.length > 1
             ? ui()('share.page', { title: record.dialogTitle, index: index + 1, count: record.files.length })

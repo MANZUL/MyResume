@@ -1,26 +1,17 @@
 import { renderResumeHtml } from '../../domain/render/render-html';
 import type { StoredResume } from '../../domain/resume/types';
-import type { EntitlementReader } from '../entitlement/entitlement-service';
 
 /**
- * Builds the in-app preview. The watermark is decided here from the
- * entitlement: FREE users always get the "PREVIEW" watermark, PREMIUM users a
- * clean preview. Screens cannot ask for a clean preview themselves.
+ * The in-app preview of a resume: the shared renderer in preview mode, in the resume's
+ * own language. My Resume is free, so the preview is clean (no watermark) for everyone.
  */
-export class PreviewService {
-  constructor(private readonly entitlements: EntitlementReader) {}
-
-  async render(resume: StoredResume): Promise<{ html: string; watermarked: boolean }> {
-    const decision = await this.entitlements.check();
-    const watermarked = !decision.premium;
-    const html = renderResumeHtml(resume.data, {
-      templateId: resume.templateId,
-      accent: resume.accent,
-      mode: 'preview',
-      // The resume's language, not the app's: labels and direction belong to the document.
-      language: resume.language,
-      watermark: watermarked,
-    });
-    return { html, watermarked };
-  }
+export function renderPreview(resume: StoredResume): string {
+  return renderResumeHtml(resume.data, {
+    templateId: resume.templateId,
+    accent: resume.accent,
+    mode: 'preview',
+    // The resume's language, not the app's: labels and direction belong to the document.
+    language: resume.language,
+    watermark: false,
+  });
 }

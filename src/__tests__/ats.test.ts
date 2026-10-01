@@ -488,7 +488,6 @@ describe('architecture', () => {
     for (const file of sourceFiles(join(SRC, 'features', 'ats'))) {
       for (const spec of specs(read(relative(SRC, file)))) expect(spec, relative(SRC, file)).not.toMatch(/entitlement|premium|paywall|services\/export|unlock/);
     }
-    expect(read('domain/entitlement/features.ts')).not.toMatch(/ats/i);
   });
 
   it('only the ATS tab uses the engine; it sits in Tools next to Check; Resume Score is untouched', () => {

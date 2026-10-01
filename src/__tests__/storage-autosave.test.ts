@@ -4,11 +4,6 @@ import { emptyResume } from '../domain/resume/types';
 import { createAutosaver } from '../services/storage/autosave';
 import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase, type AppDatabase } from '../services/storage/sqlite/database';
-import { PremiumRequiredError } from '../domain/entitlement/features';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PremiumGate } from '../services/entitlement/premium-gate';
 import { ExportService, type ExportPlatform } from '../services/export/export-service';
 import { ManualTimers, openTestDatabase, settle, tempDir, testId, type TestDatabase } from './helpers/node-sqlite';
 
@@ -220,16 +215,12 @@ describe('resume library on SQLite (edits survive navigation, restart, terminati
   });
 });
 
-describe('export records are written after the access decision, never used for it', () => {
-  // Ported from Step 2: the old runRecordedExport(…, access, …) took a caller-supplied
-  // decision; the ExportService now asks EntitlementService itself (Step 3).
+describe('export records are written after each export, never read to allow one', () => {
+  // Ported from Step 2. Every export is free; a record says what happened, with
+  // access_reason "free".
   const resumeRecord = { id: 'r1', title: 'T', templateId: 'tech-builder', accent: '#000000', language: 'en' as const, data: emptyResume(), createdAt: 1, updatedAt: 1 };
-  const NOW = 1_700_000_000_000;
 
-  const exporter = (premium: boolean, platform: Partial<ExportPlatform>, records: unknown) => {
-    const store = new FakeStoreProvider({ storeNow: () => NOW });
-    if (premium) store.setSubscription('active', NOW + 86_400_000);
-    const gate = new PremiumGate(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => NOW));
+  const exporter = (platform: Partial<ExportPlatform>, records: unknown) => {
     const full: ExportPlatform = {
       generatePdf: async () => ({ id: 'a1' }),
       generateDocx: async () => ({ id: 'a1' }),
@@ -238,7 +229,7 @@ describe('export records are written after the access decision, never used for i
       discard: async () => undefined,
       ...platform,
     };
-    return new ExportService(gate, full, records as never);
+    return new ExportService(full, records as never);
   };
 
   const recorder = () => {
@@ -260,27 +251,26 @@ describe('export records are written after the access decision, never used for i
     };
   };
 
-  it('denied: throws before generating anything and records the denial', async () => {
+  it('free: generates and records the success with access reason "free"', async () => {
     const { added, repo } = recorder();
     let generated = false;
-    const service = exporter(false, { generatePdf: async () => ((generated = true), { id: 'x' }) }, repo);
-    await expect(service.exportPdf(resumeRecord)).rejects.toBeInstanceOf(PremiumRequiredError);
-    expect(generated).toBe(false);
+    await exporter({ generatePdf: async () => ((generated = true), { id: 'x' }) }, repo).exportPdf(resumeRecord);
+    expect(generated).toBe(true);
     expect(added).toEqual([
-      { resumeId: 'r1', templateId: 'tech-builder', exportType: 'pdf', outcome: 'denied', accessReason: 'not_premium', errorMessage: null },
+      { resumeId: 'r1', templateId: 'tech-builder', exportType: 'pdf', outcome: 'succeeded', accessReason: 'free', errorMessage: null },
     ]);
   });
 
   it('succeeded and failed outcomes are recorded; a broken recorder never changes the result', async () => {
     const { added, repo } = recorder();
-    await exporter(true, {}, repo).exportDocx(resumeRecord);
+    await exporter({}, repo).exportDocx(resumeRecord);
     await expect(
-      exporter(true, { generatePdf: async () => { throw new Error('printer crashed'); } }, repo).exportPdf(resumeRecord),
+      exporter({ generatePdf: async () => { throw new Error('printer crashed'); } }, repo).exportPdf(resumeRecord),
     ).rejects.toThrow('printer crashed');
     expect(added.map((r) => (r as { outcome: string }).outcome)).toEqual(['succeeded', 'failed']);
     expect((added[1] as { errorMessage: string }).errorMessage).toBe('Error: printer crashed');
 
     const broken = { ...repo, add: async () => Promise.reject(new Error('db locked')) };
-    await expect(exporter(true, {}, broken).exportPdf(resumeRecord)).resolves.toBeUndefined();
+    await expect(exporter({}, broken).exportPdf(resumeRecord)).resolves.toBeUndefined();
   });
 });

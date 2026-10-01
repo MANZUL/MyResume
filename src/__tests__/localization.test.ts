@@ -33,13 +33,9 @@ import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
 import { templateText } from '../i18n/templates';
 import { createTranslator, hasTranslation } from '../i18n/translate';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PremiumGate } from '../services/entitlement/premium-gate';
 import { exportFileName, pdfHtml } from '../services/export/file-export-platform';
-import { PremiumTools } from '../services/premium/premium-tools';
-import { PreviewService } from '../services/preview/preview-service';
+import { renderPreview } from '../services/preview/preview-service';
+import { jobMatch, writingCoach } from '../services/tools/resume-tools';
 import { ResumeLibrary } from '../services/storage/resume-library';
 import { initializeDatabase } from '../services/storage/sqlite/database';
 import { migrate } from '../services/storage/sqlite/migrate';
@@ -252,12 +248,9 @@ describe('renderer contract', () => {
     }
   });
 
-  it('preview and PDF use the resume language, not the app language', async () => {
-    const T = 1_700_000_000_000;
-    const store = new FakeStoreProvider({ storeNow: () => T });
-    const preview = new PreviewService(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T));
-    expect((await preview.render(stored('ar'))).html).toContain('<html lang="ar" dir="rtl">');
-    expect((await preview.render(stored('de'))).html).toContain('<html lang="de" dir="ltr">');
+  it('preview and PDF use the resume language, not the app language', () => {
+    expect(renderPreview(stored('ar'))).toContain('<html lang="ar" dir="rtl">');
+    expect(renderPreview(stored('de'))).toContain('<html lang="de" dir="ltr">');
     expect(pdfHtml(stored('ar'), 'letter')).toContain('<html lang="ar" dir="rtl">');
     for (const file of ['services/preview/preview-service.ts', 'services/export/file-export-platform.ts']) {
       expect(read(file), file).toMatch(/language: resume\.language/);
@@ -491,18 +484,9 @@ describe('analysis engine contracts', () => {
     });
   });
 
-  it('premium tools pass the language and still check the entitlement first', async () => {
-    const T = 1_700_000_000_000;
-    const make = async (premium: boolean) => {
-      const store = new FakeStoreProvider({ storeNow: () => T });
-      if (premium) store.setSubscription('active', T + 30 * 24 * 60 * 60 * 1000);
-      return new PremiumTools(new PremiumGate(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T)));
-    };
-    await expect((await make(false)).writingCoach('Helped', 'experienceBullet', 'de')).rejects.toMatchObject({ feature: 'coach' });
-    await expect((await make(false)).jobMatch(SAMPLE_RESUME, 'SQL', 'ar')).rejects.toMatchObject({ feature: 'jobMatch' });
-    const paid = await make(true);
-    expect((await paid.writingCoach('Helped with the launch', 'experienceBullet', 'de')).support.kind).toBe('unavailable');
-    expect((await paid.jobMatch(SAMPLE_RESUME, 'SQL', 'ar')).support.kind).toBe('english-rules');
+  it('the tools pass the resume language to the engines', async () => {
+    expect((await writingCoach('Helped with the launch', 'experienceBullet', 'de')).support.kind).toBe('unavailable');
+    expect((await jobMatch(SAMPLE_RESUME, 'SQL', 'ar')).support.kind).toBe('english-rules');
   });
 
   it('import parsing takes the target language; English parsing is unchanged', () => {
@@ -548,7 +532,7 @@ describe('English output is unchanged', () => {
   it('the English app catalog keeps the exact screen text', () => {
     const { t } = createTranslator('en');
     expect(t('home.create')).toBe('Create my resume');
-    expect(t('coach.locked')).toBe('Coach 🔒');
+    expect(t('coach.open')).toBe('Coach');
     expect(t('match.charCount', { count: 1234, max: 25000 })).toBe('1,234 / 25,000');
     expect(t('home.deleteBody', { title: 'CV' })).toBe('"CV" will be removed from this device.');
     expect(t('resume.copyOf', { title: 'Mine' })).toBe('Mine (copy)');
@@ -750,7 +734,6 @@ describe('English catalog hardening', () => {
       'nav.import | home.importText',
       'nav.preview | editor.preview',
       'nav.tools | editor.tools',
-      'preview.tryAgain | paywall.tryAgain',
       'resume.labels.awards | editor.sections.awards',
       'resume.labels.certifications | editor.sections.certifications',
       'resume.labels.education | editor.sections.education | analysis.location.section.education',

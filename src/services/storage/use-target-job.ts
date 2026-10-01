@@ -8,7 +8,6 @@ import { useDatabase } from './database-context';
 /**
  * The job description saved with a resume (plan §9: each resume stores a TargetJob).
  * Loads it once, autosaves edits (debounced), and writes pending edits when the screen goes away.
- * It is the user's own text, so it is kept for FREE and PREMIUM users alike.
  */
 export function useTargetJob(resumeId: string | undefined) {
   const { targetJobs } = useDatabase();

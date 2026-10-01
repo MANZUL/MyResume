@@ -1,21 +1,20 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Button, colors, LockIcon, Muted } from '../../ui/components';
-import { PremiumRequiredError } from '../../domain/entitlement/features';
-import { freeAccentsFor } from '../../domain/entitlement/palette';
+import { Button, colors } from '../../ui/components';
+import { accentsFor } from '../../domain/templates/accents';
 import { TEMPLATES } from '../../domain/templates/templates';
 import { templateText } from '../../i18n/templates';
 import { useT } from '../../services/i18n/localization';
-import { useEntitlement } from '../../services/entitlement/entitlement';
 import {
   ExportCancelledError,
   ExportInProgressError,
   ExportInterruptedError,
 } from '../../services/export/export-service';
 import { useExportService } from '../../services/export/use-export-service';
+import { renderPreview } from '../../services/preview/preview-service';
 import { useResume } from '../../services/storage/resume-store';
 
 const EXPORT_BUTTONS = [
@@ -27,7 +26,6 @@ const EXPORT_BUTTONS = [
 export default function PreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { resume, setTemplate, setAccent, flush } = useResume(id);
-  const { decision, entitlements, paywall, preview } = useEntitlement();
   const exporter = useExportService();
   const t = useT();
   const resumeId = resume?.id;
@@ -43,28 +41,12 @@ export default function PreviewScreen() {
   );
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState<'pdf' | 'docx' | 'image' | null>(null);
-  const [html, setHtml] = useState('');
-
-  // The preview service decides the watermark from the entitlement (FREE: watermarked).
-  useEffect(() => {
-    if (!resume) return undefined;
-    let active = true;
-    preview
-      .render(resume)
-      .then((result) => {
-        if (active) setHtml(result.html);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [resume, preview, decision.premium]);
+  const html = useMemo(() => (resume ? renderPreview(resume) : ''), [resume]);
 
   if (!resume) return null;
   const current = templateText(t, resume.templateId);
 
-  // Every export goes to the ExportService, which checks premium itself. When it
-  // refuses, the paywall remembers this export and runs it again after subscribing.
+  // Every export goes to the ExportService (prepare → opaque handle → share). All formats are free.
   const runExport = async (kind: 'pdf' | 'docx' | 'image'): Promise<void> => {
     setBusy(kind);
     try {
@@ -72,20 +54,11 @@ export default function PreviewScreen() {
       else if (kind === 'docx') await exporter.exportDocx(resume);
       else await exporter.exportImage(resume);
     } catch (error) {
-      if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => runExport(kind) });
-      else if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
+      if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
         // Expected outcomes: another export is running, the app left the foreground, or the user cancelled.
       } else Alert.alert(t('preview.exportFailed'), error instanceof Error ? error.message : t('preview.tryAgain'));
     } finally {
       setBusy(null);
-    }
-  };
-
-  const chooseAccent = async (color: string): Promise<void> => {
-    try {
-      await setAccent(resume.id, color);
-    } catch (error) {
-      if (error instanceof PremiumRequiredError) paywall.request({ feature: error.feature, run: () => chooseAccent(color) });
     }
   };
 
@@ -140,13 +113,13 @@ export default function PreviewScreen() {
         </ScrollView>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4, gap: 10, alignItems: 'center' }}>
           <Text style={{ color: colors.muted, fontSize: 13 }}>{t('preview.accent', { category: current.category })}</Text>
-          {freeAccentsFor(resume.templateId).map((color) => (
+          {accentsFor(resume.templateId).map((color) => (
             <Pressable
               key={color}
               accessibilityRole="button"
               accessibilityLabel={t('preview.accentA11y', { color })}
               accessibilityState={{ selected: resume.accent === color }}
-              onPress={() => void chooseAccent(color)}
+              onPress={() => setAccent(resume.id, color)}
               hitSlop={6}
               style={{
                 width: 28,
@@ -168,9 +141,7 @@ export default function PreviewScreen() {
             return (
             <Button
               key={kind}
-              title={decision.premium ? t('preview.export', { format }) : format}
-              icon={decision.premium ? undefined : <LockIcon color={variant === 'primary' ? colors.primaryText : colors.text} size={13} />}
-              accessibilityLabel={decision.premium ? t('preview.export', { format }) : t('preview.locked', { format })}
+              title={t('preview.export', { format })}
               variant={variant}
               fit
               loading={busy === kind}
@@ -180,11 +151,6 @@ export default function PreviewScreen() {
             );
           })}
         </View>
-        {entitlements.providerId === 'fake' ? (
-          <View style={{ paddingHorizontal: 16 }}>
-            <Muted>{t('preview.devStore')}</Muted>
-          </View>
-        ) : null}
       </View>
     </View>
   );

@@ -50,7 +50,7 @@ export function Button({
   style?: ViewStyle;
   accessibilityHint?: string;
   accessibilityLabel?: string;
-  /** Shown after the title (e.g. LockIcon). */
+  /** Shown after the title. */
   icon?: ReactNode;
   /** Keeps the title on one line, shrinking it slightly in narrow buttons instead of wrapping. */
   fit?: boolean;
@@ -88,31 +88,6 @@ export function Button({
         </View>
       )}
     </Pressable>
-  );
-}
-
-/** Small padlock drawn with views (no icon font or image dependency). */
-export function LockIcon({ color = colors.text, size = 14 }: { color?: string; size?: number }) {
-  const bodyHeight = Math.round(size * 0.6);
-  const shackle = Math.round(size * 0.62);
-  const stroke = Math.max(1.5, size / 8);
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          width: shackle,
-          height: shackle,
-          borderWidth: stroke,
-          borderColor: color,
-          borderTopLeftRadius: shackle / 2,
-          borderTopRightRadius: shackle / 2,
-          borderBottomWidth: 0,
-        }}
-      />
-      <View style={{ width: size, height: bodyHeight, borderRadius: Math.max(2, size / 7), backgroundColor: color }} />
-    </View>
   );
 }
 

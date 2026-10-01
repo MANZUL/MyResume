@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PremiumRequiredError } from '../domain/entitlement/features';
 import { analyzeJobMatch } from '../domain/job-match/job-match';
 import { findHits } from '../domain/job-match/matcher';
 import { detectTitle, segmentJobDescription } from '../domain/job-match/segment';
@@ -12,12 +11,7 @@ import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import { emptyResume, type ResumeData } from '../domain/resume/types';
 import { en } from '../i18n/messages/en';
 import { createTranslator } from '../i18n/translate';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PaywallCoordinator } from '../services/entitlement/paywall';
-import { PremiumGate } from '../services/entitlement/premium-gate';
-import { PremiumTools } from '../services/premium/premium-tools';
+import { jobMatch } from '../services/tools/resume-tools';
 import { JDS, RESUMES } from './fixtures/job-corpus';
 
 const SRC = join(__dirname, '..');
@@ -345,39 +339,23 @@ describe('taxonomy integrity', () => {
   });
 });
 
-// --- 7. gating ---
+// --- 7. free for everyone ---
 
-const T = 1_700_000_000_000;
-function world(premium: boolean) {
-  const store = new FakeStoreProvider({ storeNow: () => T });
-  if (premium) store.setSubscription('active', T + 86_400_000);
-  const entitlements = new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T);
-  return { store, tools: new PremiumTools(new PremiumGate(entitlements)), paywall: new PaywallCoordinator(entitlements) };
-}
-
-describe('PREMIUM gating (plan §4.2: Job Match is PREMIUM)', () => {
-  it('FREE: refused before any analysis (even for input the engine would refuse)', async () => {
-    const free = world(false);
-    await expect(free.tools.jobMatch(SAMPLE_RESUME, JDS.dataAnalyst, 'en')).rejects.toEqual(new PremiumRequiredError('jobMatch'));
-    await expect(free.tools.jobMatch(SAMPLE_RESUME, 'x'.repeat(JOB_DESCRIPTION_MAX + 1), 'en')).rejects.toEqual(new PremiumRequiredError('jobMatch'));
-  });
-
-  it('PREMIUM: one entitlement check, then the report', async () => {
-    const paid = world(true);
-    const before = paid.store.calls.verify;
-    const report = await paid.tools.jobMatch(SAMPLE_RESUME, JDS.productManager, 'en');
-    expect(paid.store.calls.verify - before).toBe(1);
+describe('free access', () => {
+  it('compares with no entitlement, purchase or account step; the report is the engine\'s own', async () => {
+    const report = await jobMatch(SAMPLE_RESUME, JDS.productManager, 'en');
     expect(report).toEqual(analyzeJobMatch(SAMPLE_RESUME, JDS.productManager, 'en'));
+    expect((await jobMatch(SAMPLE_RESUME, JDS.short, 'en')).terms.map((t) => t.label)).toEqual(['Python']);
   });
 
-  it('a refused comparison resumes through the existing paywall after subscribing', async () => {
-    const w = world(false);
-    let report: JobMatchReport | null = null;
-    const run = async () => void (report = await w.tools.jobMatch(SAMPLE_RESUME, JDS.short, 'en'));
-    await run().catch((e) => e instanceof PremiumRequiredError && w.paywall.request({ feature: e.feature, run }));
-    expect(w.paywall.pendingFeature()).toBe('jobMatch');
-    await (await w.paywall.subscribe()).resume!();
-    expect(report!.terms.map((t) => t.label)).toEqual(['Python']);
+  it('the engine still refuses a too-long posting through the service', async () => {
+    await expect(jobMatch(SAMPLE_RESUME, 'x'.repeat(JOB_DESCRIPTION_MAX + 1), 'en')).rejects.toBeInstanceOf(JobDescriptionTooLongError);
+  });
+
+  it('the screen has no lock and no paywall', () => {
+    const screen = read('features/job-match/MatchTool.tsx');
+    expect(screen).toContain("title={t('match.compare')}");
+    expect(screen).not.toMatch(/compareLocked|🔒|premium|paywall|entitlement/i);
   });
 });
 
@@ -401,14 +379,14 @@ describe('architecture', () => {
     }
   });
 
-  it('only PremiumTools runs the engine; the screen goes through it; the old frequency matcher is gone', () => {
+  it('only services/tools runs the engine; the screen goes through it; the old frequency matcher is gone', () => {
     const runners = sourceFiles(SRC)
       .filter((f) => !f.includes(join('domain', 'job-match')))
       .filter((f) => valueImports(readFileSync(f, 'utf8')).some((s) => /domain\/job-match\/job-match$/.test(s)))
       .map((f) => relative(SRC, f));
-    expect(runners).toEqual([join('services', 'premium', 'premium-tools.ts')]);
+    expect(runners).toEqual([join('services', 'tools', 'resume-tools.ts')]);
     const screen = read('features/job-match/MatchTool.tsx');
-    expect(screen).toContain('tools.jobMatch(');
+    expect(screen).toContain('await jobMatch(');
     expect(screen).not.toMatch(/analyzeJobMatch|findHits/);
     expect(() => statSync(join(SRC, 'domain', 'match', 'job-match.ts'))).toThrow();
   });

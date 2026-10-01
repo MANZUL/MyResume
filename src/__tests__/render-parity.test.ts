@@ -9,13 +9,9 @@ import {
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import type { ResumeData, StoredResume } from '../domain/resume/types';
 import { TEMPLATES } from '../domain/templates/templates';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
 import { MARGIN_PT, pdfHtml } from '../services/export/file-export-platform';
-import { PreviewService } from '../services/preview/preview-service';
+import { renderPreview } from '../services/preview/preview-service';
 
-const T = 1_700_000_000_000;
 const between = (html: string, open: string, close: string) => {
   const start = html.indexOf(open);
   const end = html.indexOf(close);
@@ -28,12 +24,6 @@ const shared = (html: string) => between(html, '/*shared*/', '/*/shared*/');
 const geometry = (html: string) => between(html, '/*geometry*/', '/*/geometry*/');
 const render = (options: Partial<RenderOptions> & { mode: RenderOptions['mode'] }, data: ResumeData = SAMPLE_RESUME) =>
   renderResumeHtml(data, { templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', ...options });
-
-function previewService(premium: boolean) {
-  const store = new FakeStoreProvider({ storeNow: () => T });
-  if (premium) store.setSubscription('active', T + 86_400_000);
-  return new PreviewService(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T));
-}
 
 const stored = (overrides: Partial<StoredResume> = {}): StoredResume => ({
   id: 'r1', title: 'Mine', templateId: 'corporate-boardroom', accent: '#1B2B47', language: 'en', data: SAMPLE_RESUME, createdAt: 1, updatedAt: 1, ...overrides,
@@ -87,10 +77,9 @@ describe('preview/export parity: one rendering path', () => {
   });
 });
 
-describe('FREE preview watermark', () => {
-  it('FREE preview: a repeating diagonal PREVIEW overlay above the content, over the whole page', async () => {
-    const { html, watermarked } = await previewService(false).render(stored());
-    expect(watermarked).toBe(true);
+describe('preview watermark (renderer capability) and the clean app preview', () => {
+  it('the renderer can draw a repeating diagonal PREVIEW overlay above the content, over the whole page', () => {
+    const html = render({ mode: 'preview', watermark: true });
     expect(html).toContain('</div><!--/content--><div class="watermark" aria-hidden="true"></div></div>');
     const css = between(html, '/*watermark*/', '/*/watermark*/');
     expect(css).toContain('inset: 0');
@@ -105,12 +94,13 @@ describe('FREE preview watermark', () => {
     expect(opacity).toBeLessThanOrEqual(0.15); // the resume stays readable
   });
 
-  it('PREMIUM preview: no watermark at all', async () => {
-    const { html, watermarked } = await previewService(true).render(stored());
-    expect(watermarked).toBe(false);
-    expect(html).not.toContain('class="watermark"');
-    expect(html).not.toContain('/*watermark*/');
-    expect(html).not.toContain('PREVIEW');
+  it('the app preview is clean for everyone (My Resume is free)', () => {
+    for (const template of TEMPLATES) {
+      const html = renderPreview(stored({ templateId: template.id, accent: template.defaultAccent }));
+      expect(html, template.id).not.toContain('class="watermark"');
+      expect(html, template.id).not.toContain('/*watermark*/');
+      expect(html, template.id).not.toContain('PREVIEW');
+    }
   });
 
   it('the PDF renderer never draws a watermark, even if asked', () => {
@@ -121,25 +111,22 @@ describe('FREE preview watermark', () => {
     for (const paper of ['letter', 'a4'] as PaperSize[]) expect(pdfHtml(stored(), paper)).not.toContain('PREVIEW');
   });
 
-  it('screens cannot remove it: extra flags and premium-looking resume fields are ignored', async () => {
-    const service = previewService(false) as unknown as { render: (...args: unknown[]) => Promise<{ html: string; watermarked: boolean }> };
-    for (const extra of [{ watermark: false }, { premium: true }, { mode: 'pdf' }, false, 'clean']) {
-      const out = await service.render(stored(), extra);
-      expect(out.watermarked).toBe(true);
-      expect(out.html).toContain('class="watermark"');
-    }
-    const sneaky = { ...stored(), premium: true, watermark: false, data: { ...SAMPLE_RESUME, watermark: false } } as StoredResume;
-    expect((await previewService(false).render(sneaky)).html).toContain('class="watermark"');
+  it('extra arguments and resume fields cannot change the preview', () => {
+    const anyPreview = renderPreview as unknown as (...args: unknown[]) => string;
+    const clean = renderPreview(stored());
+    for (const extra of [{ watermark: true }, { mode: 'pdf' }, true, 'watermark']) expect(anyPreview(stored(), extra)).toBe(clean);
+    const sneaky = { ...stored(), watermark: true, data: { ...SAMPLE_RESUME, watermark: true } } as StoredResume;
+    expect(renderPreview(sneaky)).toBe(clean);
   });
 
-  it('is never part of the resume data: rendering does not modify the resume, and content is the same with or without it', async () => {
+  it('is never part of the resume data: rendering does not modify the resume, and content is the same with or without a watermark', () => {
     const resume = deepFreeze(stored({ data: JSON.parse(JSON.stringify(SAMPLE_RESUME)) as ResumeData }));
     const before = JSON.stringify(resume);
-    const free = await previewService(false).render(resume);
-    const paid = await previewService(true).render(resume);
+    const app = renderPreview(resume);
+    const marked = render({ mode: 'preview', watermark: true }, resume.data);
     expect(JSON.stringify(resume)).toBe(before);
     expect(JSON.stringify(resume)).not.toMatch(/watermark|PREVIEW/i);
-    expect(content(free.html)).toBe(content(paid.html));
+    expect(content(app)).toBe(content(marked));
   });
 });
 

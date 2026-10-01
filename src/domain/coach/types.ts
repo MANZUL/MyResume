@@ -2,7 +2,7 @@ import type { LanguageSupport } from '../i18n/analysis-support';
 import { englishText } from '../../i18n/analysis';
 import { text as coded, type AnalysisText } from '../i18n/analysis-text';
 import type { Language } from '../i18n/languages';
-// Writing Coach (PREMIUM, plan §3): deterministic rules with reasons and a few
+// Writing Coach (plan §3): deterministic rules with reasons and a few
 // safe, user-triggered fixes. No rewriting, no AI. A fix never adds a fact.
 
 /** The five fields the web editor offered "Improve with AI" on. */

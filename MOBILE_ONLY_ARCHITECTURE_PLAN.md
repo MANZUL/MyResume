@@ -2,6 +2,10 @@
 
 **Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–9a and 10 (Job Match only) are done in code** (§19, §19.1–§19.10); device validation of steps 4–10 is still open. Step 9 is the owner-approved ATS Readability Checker (scope amendment in §19.9); Import moved to step 9b. No billing SDK, no AI, no EAS builds.
 
+> **Superseded by the owner's final product decision (phase 13C, §19.12): My Resume is completely free.**
+> There is no Premium, subscription, purchase, paywall, entitlement or price anywhere in the app. The
+> revision 3 pricing and entitlement sections below are kept as project history only.
+
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
 - PREMIUM ($7.99/month, entitlement `premium`) is needed to take the resume *out* of the app (PDF, DOCX, image, share, clean output), and for the premium tools.
@@ -1919,6 +1923,39 @@ The hard-coded string guard now matches letters of any script. German injections
 - 550 passed + 1 skipped generator (515 before) ✅
 - iOS and Android bundles ✅
 - Devices: **NOT RUN**
+
+### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
+
+**Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.
+
+**Removed.**
+- `domain/entitlement/*` (features, policy, subscription, cache codec, palette moved to `domain/templates/accents.ts` unchanged).
+- `services/entitlement/*` (EntitlementService, PremiumGate, PaywallCoordinator, store providers, FakeStore, store factory, cache store, provider).
+- `services/premium/*` (PremiumTools, CustomizationService).
+- `services/storage/entitlement-cache-kv.ts`, the only user of `my-resume-entitlement.db` (the entitlement database is gone).
+- The paywall: `features/paywall/UnlockScreen.tsx`, the `/unlock` route, `LockIcon`.
+- 29 catalog keys in English and German: `nav.premium`, `coach.locked`, `match.compareLocked`, `preview.locked`, `preview.devStore` and `paywall.*` (24). Catalogs: 474 → 445 keys each. Every other value is unchanged.
+- Tests that only covered monetization: `access`, `entitlement-policy`, `entitlement-service`, `premium-gating`, plus the premium-only cases in other suites.
+
+**What replaced it.**
+- `ExportService(platform, options)`: prepare → generate → opaque, frozen, single-use handle with expiry → foreground check → share → handle consumed → cleanup. One export at a time. The only change is that there is no entitlement check. The image share guard (an entitlement re-check between pages) is gone. Export records keep their schema; new rows have `access_reason = 'free'`, and `denied` is no longer written.
+- `services/preview/preview-service.ts`: `renderPreview(resume)`, clean (no watermark) for everyone, in the resume's language. The renderer keeps its watermark option and the German VORSCHAU label; the app no longer requests it.
+- `services/tools/resume-tools.ts`: `writingCoach`, `applyCoachFix`, `jobMatch`, the screens' only route to the engines. The engines' rules, taxonomy, language limits and error handling are unchanged.
+- Resume store `setAccent`: any valid hex color is saved; the 8 presets and default accents are unchanged.
+
+**Unchanged.**
+- The main resume database (schema v4: resumes, target_jobs, export_records, local_profile, app_settings); no migration.
+- Package ID, EAS config, app.json, dependencies (no billing SDK was ever installed), template IDs and designs.
+- Renderer, PDF/DOCX/PNG generation, and the Score, ATS, Job Match, Coach and import rules.
+
+**Guard.** `free-product.test.ts` fails on any production reference to entitlement services, premium gates or flags, store or purchase providers, billing vendors, the paywall or `/unlock` route, or prices. It also proves A–P: free PDF, DOCX and image export, Coach, Job Match, ATS, customization and all 12 templates; the paywall gone; no provider, entitlement database or billing package; handle and cleanup security; and the English and German catalogs pinned to the 13B values minus the 29 keys.
+
+**Device checklist changes (§19.11b).**
+- Item 2: the preview has no watermark.
+- Item 7: the export buttons show "PDF-Export" etc. without a lock.
+- Item 10 is replaced: there is no paywall, and every feature opens directly.
+
+**Note.** Devices that ran an earlier development build may still hold an orphaned `my-resume-entitlement.db` file. The app no longer opens or reads it.
 
 ## 20. Major risks and failure modes
 

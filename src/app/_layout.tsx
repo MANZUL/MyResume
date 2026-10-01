@@ -3,7 +3,6 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
-import { EntitlementProvider } from '../services/entitlement/entitlement';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
 import { RasterizerHost } from '../services/export/rasterizer/RasterizerHost';
 import { LocalizationProvider, useT } from '../services/i18n/localization';
@@ -20,14 +19,12 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <DatabaseProvider>
         <LocalizationProvider>
-          <EntitlementProvider>
-            <ResumeStoreProvider>
-              <StatusBar style="dark" />
-              <AppStack />
-              {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
-              <RasterizerHost />
-            </ResumeStoreProvider>
-          </EntitlementProvider>
+          <ResumeStoreProvider>
+            <StatusBar style="dark" />
+            <AppStack />
+            {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
+            <RasterizerHost />
+          </ResumeStoreProvider>
         </LocalizationProvider>
       </DatabaseProvider>
     </SafeAreaProvider>
@@ -55,7 +52,6 @@ function AppStack() {
       <Stack.Screen name="resume/[id]/index" options={{ title: t('nav.edit') }} />
       <Stack.Screen name="resume/[id]/preview" options={{ title: t('nav.preview') }} />
       <Stack.Screen name="resume/[id]/tools" options={{ title: t('nav.tools') }} />
-      <Stack.Screen name="unlock" options={{ title: t('nav.premium'), presentation: 'modal' }} />
     </Stack>
   );
 }

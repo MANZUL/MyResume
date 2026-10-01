@@ -15,8 +15,8 @@ import {
   type SiblingSummary,
 } from './types';
 
-// Entry points of the Writing Coach engine. Pure: callers (PremiumTools) do the
-// entitlement checks. Apply is safe by construction:
+// Entry points of the Writing Coach engine (pure; called through services/tools).
+// Apply is safe by construction:
 //   1. the finding must be reproduced by analysing the current text (else stale);
 //   2. only its own span changes;
 //   3. the result must pass the grounding check (no new fact), or nothing changes.

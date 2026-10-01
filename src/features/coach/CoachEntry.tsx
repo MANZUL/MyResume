@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { CoachCategory, CoachField, CoachFinding, CoachReport } from '../../domain/coach/types';
-import { PremiumRequiredError } from '../../domain/entitlement/features';
-import { useEntitlement } from '../../services/entitlement/entitlement';
 import { colors, styles } from '../../ui/components';
 import { analysisSupport } from '../../domain/i18n/analysis-support';
 import type { Language } from '../../domain/i18n/languages';
 import { useT } from '../../services/i18n/localization';
 import { errorText, renderText } from '../../i18n/analysis';
+import { applyCoachFix, writingCoach } from '../../services/tools/resume-tools';
 
 const CATEGORY_ORDER: readonly CoachCategory[] = ['grammar', 'concise', 'professional', 'impact', 'measurable'];
 
 /**
- * Writing Coach link + inline panel under one field (PREMIUM). Everything goes
- * through PremiumTools, which checks the entitlement before analysing and again
- * before applying. FREE users see "Coach 🔒" only; no analysis runs for them.
+ * Writing Coach link + inline panel under one field. Free for everyone; it goes through
+ * services/tools, and the engine rejects stale or ungrounded fixes.
  */
 export function CoachEntry({
   text,
@@ -31,19 +29,13 @@ export function CoachEntry({
   siblings?: readonly string[];
   onApply: (next: string) => void;
 }) {
-  const { tools, paywall, decision } = useEntitlement();
   const [report, setReport] = useState<CoachReport | null>(null);
   const [message, setMessage] = useState('');
   const t = useT();
 
-  const fail = (error: unknown, retry: () => Promise<void>) => {
+  const fail = (error: unknown) => {
     setReport(null);
-    if (error instanceof PremiumRequiredError) {
-      setMessage('');
-      paywall.request({ feature: error.feature, run: retry });
-    } else {
-      setMessage(errorText(t, error, 'coach.failed'));
-    }
+    setMessage(errorText(t, error, 'coach.failed'));
   };
 
   const analyze = async (value: string): Promise<void> => {
@@ -53,26 +45,25 @@ export function CoachEntry({
       return;
     }
     try {
-      setReport(await tools.writingCoach(value, field, language, siblings));
+      setReport(await writingCoach(value, field, language, siblings));
       setMessage('');
     } catch (error) {
-      fail(error, () => analyze(value));
+      fail(error);
     }
   };
 
   const apply = async (finding: CoachFinding, choice?: number) => {
     if (!report) return;
     try {
-      const next = await tools.applyCoachFix(report.text, field, language, siblings, finding, choice);
+      const next = await applyCoachFix(report.text, field, language, siblings, finding, choice);
       onApply(next);
       await analyze(next);
     } catch (error) {
-      fail(error, () => analyze(report.text));
+      fail(error);
     }
   };
 
-  // A lapsed subscription closes the panel; text already changed stays the user's text.
-  const open = report !== null && decision.premium;
+  const open = report !== null;
   const stale = open && report.text !== text;
   // No Coach for languages without its rules; the editor shows one note instead.
   if (analysisSupport('writingCoach', language).kind === 'unavailable') return null;
@@ -86,7 +77,7 @@ export function CoachEntry({
         style={{ alignSelf: 'flex-start' }}
       >
         <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>
-          {open ? t('coach.close') : decision.premium ? t('coach.open') : t('coach.locked')}
+          {open ? t('coach.close') : t('coach.open')}
         </Text>
       </Pressable>
       {message ? <Text style={[styles.muted, { marginTop: 4 }]}>{message}</Text> : null}

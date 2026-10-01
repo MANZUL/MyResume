@@ -5,7 +5,7 @@ import type { EditorSection } from '../resume/sections';
 import type { JdSection } from './segment';
 import type { TermCategory } from './taxonomy';
 
-// Job Description → Resume match (PREMIUM). Only textual facts: where a listed term is
+// Job Description → Resume match. Only textual facts: where a listed term is
 // mentioned in the posting and where the same term appears in the resume. No score,
 // no percentage, no judgement of fit, level, years or qualification.
 

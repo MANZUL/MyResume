@@ -5,10 +5,6 @@ import { asciiOnly, buildPdfjsSource, OUTPUT } from '../../scripts/pdfjs-source.
 import { WATERMARK_TILE_URL } from '../domain/render/render-html';
 import { SAMPLE_RESUME } from '../domain/resume/sample-data';
 import type { StoredResume } from '../domain/resume/types';
-import { MemoryEntitlementCacheStore } from '../services/entitlement/cache-store';
-import { EntitlementService } from '../services/entitlement/entitlement-service';
-import { FakeStoreProvider } from '../services/entitlement/fake-store';
-import { PremiumGate } from '../services/entitlement/premium-gate';
 import { ExportService } from '../services/export/export-service';
 import { createFileExportPlatform, pdfHtml, type ExportFileSystem, type FileRef } from '../services/export/file-export-platform';
 import { RasterizerBridge, RasterizerError, type RasterizerHostPort } from '../services/export/rasterizer/rasterizer-bridge';
@@ -288,9 +284,6 @@ describe.skipIf(!existsSync(CHROMIUM))('image export end to end (Chromium stands
       }
     });
 
-    const store = new FakeStoreProvider({ storeNow: () => T });
-    store.setSubscription('active', T + 86_400_000);
-    const gate = new PremiumGate(new EntitlementService(store, new MemoryEntitlementCacheStore(), () => T));
     const platform = createFileExportPlatform({
       fs,
       print: { printToFile },
@@ -303,7 +296,7 @@ describe.skipIf(!existsSync(CHROMIUM))('image export end to end (Chromium stands
         },
       },
     });
-    service = new ExportService(gate, platform, { now: () => T });
+    service = new ExportService(platform, { now: () => T });
   }, 30_000);
 
   afterAll(async () => {

@@ -5,6 +5,7 @@
 export const EXPORT_TYPES = ['pdf', 'docx', 'png'] as const;
 export type ExportType = (typeof EXPORT_TYPES)[number];
 
+// "denied" is no longer written (nothing can be refused); it stays readable for old rows.
 export const EXPORT_OUTCOMES = ['succeeded', 'failed', 'denied'] as const;
 export type ExportOutcome = (typeof EXPORT_OUTCOMES)[number];
 
@@ -15,7 +16,10 @@ export interface ExportRecord {
   templateId: string;
   exportType: ExportType;
   outcome: ExportOutcome;
-  /** The entitlement decision reason at the time of the request (e.g. verified, cached, not_premium). */
+  /**
+   * Why the export was allowed. Every export is free, so new rows hold "free"; rows written
+   * before the free product keep their historical value. Never read to authorize anything.
+   */
   accessReason: string;
   /** Short, non-personal error summary for failed exports. */
   errorMessage: string | null;

@@ -3,11 +3,11 @@
 Standalone iOS and Android resume builder (Expo). No AI, no backend: resumes stay on the device and
 the app works offline.
 
-**Status: migration in progress.** The app is still the prototype, restructured with a real SQLite data layer, entitlement
-architecture, secure export (PDF, Word, PNG images), a watermarked FREE preview, editor parity
-with Resume Check jump-to-section, a deterministic Writing Coach, an ATS Readability Checker and a keyword-based Job Match (steps 1–10 of
-[`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md)). The product specification,
-pricing (free to build, $7.99/month "premium" to export) and the remaining steps are in that plan.
+**My Resume is completely free.** There is no subscription, purchase, paywall or account: every feature
+(all 12 templates, preview, PDF/Word/image export, Resume Score, Writing Coach, ATS Readability, Job Match,
+Cover Letter, import, custom colors, English and German) is available to everyone. The app has a real SQLite
+data layer, a secure export service (PDF, Word, PNG images) and deterministic analysis tools; see
+[`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md) (§19.12 records the move to a free product).
 
 ## Layout
 
@@ -15,11 +15,11 @@ pricing (free to build, $7.99/month "premium" to export) and the remaining steps
 src/
   app/        Expo Router routes (thin: each re-exports a feature screen)
   features/   screens and feature components (library, import, editor, preview, tools, check,
-              job-match, cover-letter, paywall)
+              job-match, cover-letter, settings)
   domain/     pure TypeScript business logic: resume model, templates, renderer, DOCX builder,
-              parser, job match, cover letter, resume score, access policy
+              parser, job match, cover letter, resume score, ATS, Writing Coach, i18n
   services/   side effects: storage (on-device SQLite repositories + migrations), export
-              (PDF/DOCX + share), entitlement
+              (PDF/DOCX/PNG + share), preview, tools, i18n
   ui/         shared UI components
 ```
 
@@ -34,12 +34,7 @@ npm run lint
 npx expo run:ios    # or: npx expo run:android (development build)
 ```
 
-## Billing
+## Free product
 
-Real Apple/Google billing is not implemented yet and no billing SDK is installed. The app depends only
-on `EntitlementService` (one entitlement, `premium`, $7.99/month):
-
-- **Development builds** use a simulated store (`services/entitlement/fake-store.ts`), so premium
-  flows can be tried end to end. It is excluded from release bundles.
-- **Release builds** have no store yet, so every user is FREE: build, edit, preview (watermarked),
-  Resume Score and Cover Letter work; export and the premium tools show the paywall.
+My Resume has no monetization: no billing SDK, no purchase or entitlement code, no paywall and no prices.
+A guard test (`src/__tests__/free-product.test.ts`) fails if any of that architecture comes back.
