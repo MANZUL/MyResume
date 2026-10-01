@@ -1924,6 +1924,98 @@ The hard-coded string guard now matches letters of any script. German injections
 - iOS and Android bundles ✅
 - Devices: **NOT RUN**
 
+### 19.11c Phase 13D: French (fr)
+
+**Catalog.** `src/i18n/messages/fr.ts` has all 445 keys of the current catalog (the free product, §19.12), including the 10 plural messages (one/other). It is typed as the full `Messages` shape, so a missing or extra key is a compile error. "vous" throughout.
+
+26 values are intentionally the same as English; a test pins the list:
+- names: My Resume, Coach, LinkedIn;
+- words that are the same in French: Dates, Date, Structure, Certifications, Certification {n}, Image, Tech, "Export {format}";
+- technical names: PDF, Word, ATS;
+- pure formats and separators: `{title} ({count})`, `{count} / {max}`, ` · `, ", ".
+
+The values shared with German are also pinned: "Atelier" (French word, borrowed by German) and the numeric date `03/2020`.
+
+**Terminology** (one term per concept, pinned by a test):
+
+| Concept | French |
+|---|---|
+| resume | CV |
+| summary heading | Profil |
+| experience | Expérience professionnelle |
+| education | Formation |
+| skills | Compétences |
+| certifications | Certifications |
+| projects | Projets |
+| awards | Distinctions |
+| bullet | puce |
+| summary bullet | point clé |
+| accomplishment | Réalisation |
+| job title | Intitulé du poste |
+| role | Poste |
+| job description | Offre d'emploi |
+| job match | Correspondance avec l'offre (tab: Adéquation) |
+| cover letter | Lettre de motivation |
+| template | Modèle |
+| preview | Aperçu |
+| accent color | Couleur d'accent |
+| parser | analyseur |
+
+Writing Coach, ATS and My Resume stay as names.
+
+**Typography** (tested):
+- « … » with no-break spaces inside;
+- a no-break space before `: ; ? !`;
+- typographic apostrophes (’);
+- no straight or English quotes.
+
+**Templates.**
+- French names: Le Conseil, L'Associé, Le Bâtisseur, L'Architecte, Le Magazine, L'Atelier, Le Praticien, Le Formateur, L'Universitaire, Le Chercheur, L'Opérateur, Le Contremaître.
+- Categories: Entreprise, Tech, Créatif, Santé, Académique, Métiers.
+- Ids, designs and the 12 definitions are unchanged.
+
+**Documents.**
+- `resume.labels` in French: Profil, Expérience professionnelle, Formation, Certifications, Projets, Distinctions, CV, APERÇU.
+- They come from the one canonical source, so PDF, preview, watermark and DOCX match.
+- A French resume renders `lang="fr" dir="ltr"`, with no RTL rules.
+- The DOCX title uses the French template name.
+- The app preview stays clean (free product); the renderer still draws the French watermark label only when asked.
+
+**Honest limits (French UI, English rules).** Same as German (§19.11b): Score, ATS, Job Match, Cover Letter and Import run English rules, and the Writing Coach stays off for French resumes. French messages say so in these places:
+- `tools.englishRules`;
+- `editor.coachUnavailable`;
+- `letter.englishOnly`;
+- `import.englishHeadings`;
+- the ATS date message (only English words such as "Present" are recognized);
+- the Coach's "a/an" message ("En anglais, utilisez …").
+
+Job Match terms stay the English taxonomy. The template preview says its sample content is English.
+
+**UI fit.** Candidate labels were measured in Chromium for each slot at 360 dp. Choices:
+- the Tools tab "Adéquation", since "Correspondance" would not fit even at the 0.8 shrink floor;
+- "Lettre de motivation" wraps over two lines like "Cover letter";
+- "Export PDF / Word / Image" is exactly as wide as the English buttons;
+- "Utiliser ce modèle" fits only with the gallery button's existing shrink-to-fit.
+
+French needed no new layout changes; the German local fixes (shrinking one-word tabs, wrapping action rows, flexible section titles and status rows) apply to French too. Budgets are tested.
+
+**Tests** (`french.test.ts`, 35):
+- catalog completeness (445/445), identical-value list, parameter parity, plural keys and forms, typography, terminology, free-product vocabulary;
+- plural rendering for zero, one and several, with French number and date formats;
+- template metadata;
+- labels for 12 templates × PDF/preview × watermark × Letter/A4, and DOCX headings for all 12;
+- app/resume combinations A–D (fr/fr, fr/en, en/fr, de/fr) through the database;
+- analysis rendering over the corpora, with rule results unchanged;
+- the stated limits, Language screen and persistence, UI budgets and file names (accents, NFD, hyphens, 60-character cap).
+
+In Chromium:
+- pdf.js text of all 12 templates × Letter/A4 has the French headings, the name "Élodie Müller" and accented body text;
+- French headings stay on one line, inside the page, unclipped and away from decorative marks, in PDF and preview.
+
+The hard-coded string guard now has French injections. It was mutation-checked on three real files: a literal in `LetterTool.tsx`, JSX text in `ImportScreen.tsx` and a ternary in `ToolsScreen.tsx`. Each failed, was restored and passed.
+
+**Device validation: NOT RUN** (postponed to the end of the project). §19.11b's checklist applies to French with these changes: "Deutsch" becomes "Français", the file name example is "Élodie Müller", and the watermark and paywall items follow §19.12.
+
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 
 **Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.

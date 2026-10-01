@@ -31,6 +31,7 @@ import { englishText, errorText, renderText } from '../i18n/analysis';
 import { CATALOGS, ENGLISH, type MessageKey, type PartialMessages } from '../i18n/catalog';
 import { de } from '../i18n/messages/de';
 import { en } from '../i18n/messages/en';
+import { fr } from '../i18n/messages/fr';
 import { templateText } from '../i18n/templates';
 import { createTranslator, hasTranslation } from '../i18n/translate';
 import { exportFileName, pdfHtml } from '../services/export/file-export-platform';
@@ -549,9 +550,10 @@ describe('translator', () => {
     expect(t('home.seeAll')).toBe('See all');
     expect(hasTranslation('de', 'home.create', custom)).toBe(true);
     expect(hasTranslation('de', 'home.seeAll', custom)).toBe(false);
-    // Languages without a catalog yet fall back to English; German has its own text.
-    for (const language of ['fr', 'es', 'ar'] as const) expect(createTranslator(language).t('home.headline')).toBe(ENGLISH.home.headline);
+    // Languages without a catalog yet fall back to English; German and French have their own text.
+    for (const language of ['es', 'ar'] as const) expect(createTranslator(language).t('home.headline')).toBe(ENGLISH.home.headline);
     expect(createTranslator('de').t('home.headline')).toBe(de.home.headline);
+    expect(createTranslator('fr').t('home.headline')).toBe(fr.home.headline);
   });
 
   it('translations may only use keys that exist in English', () => {
@@ -939,6 +941,11 @@ describe('no hard-coded UI text in screens', () => {
       `<Button title="Löschen" />`,
       `<Field placeholder={'Straße'} />`,
       `<Stack.Screen options={{ title: 'Einstellungen' }} />`,
+      `<Text>Créer mon CV</Text>`,
+      `<Text>Aperçu du modèle</Text>`,
+      `<Button title="Télécharger" />`,
+      `<Field placeholder={'Intitulé du poste'} />`,
+      `<Stack.Screen options={{ title: 'Paramètres' }} />`,
     ]) {
       expect(jsxProblems(line), line).not.toEqual([]);
     }
@@ -1000,6 +1007,11 @@ describe('no hard-coded UI text in screens', () => {
       `const title = 'Löschen';`,
       `Alert.alert(t('x'), 'Größe prüfen')`,
       `const hint = 'Übernehmen';`,
+      // French text is caught the same way (accents, single capitalized words, phrases).
+      `const empty = 'Aucun CV pour le moment';`,
+      `const title = 'Réessayer';`,
+      `Alert.alert(t('x'), 'Êtes-vous sûr ?')`,
+      `setError('Une erreur est survenue')`,
     ];
     for (const line of injected) expect(visibleLiterals(line), line).not.toEqual([]);
     const technical = [
