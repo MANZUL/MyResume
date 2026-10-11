@@ -91,8 +91,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('German catalog', () => {
   it('has a German value for every English key, and no other keys', () => {
     expect([...DE.keys()].sort()).toEqual([...EN.keys()].sort());
-    // 474 before phase 13C, minus the 29 monetization keys removed with the paywall.
-    expect(DE.size).toBe(445);
+    // 474 before phase 13C, minus the 29 monetization keys removed with the paywall, plus the 8 keys of phase 15.
+    expect(DE.size).toBe(453);
     for (const [key, value] of DE) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.de).toBe(de);

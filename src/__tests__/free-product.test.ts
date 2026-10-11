@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withoutPhase15 } from './fixtures/phase15-keys';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -250,18 +251,19 @@ const leaves = (node: unknown, prefix = ''): Leaf[] =>
   typeof node === 'object' && node !== null && !('other' in node)
     ? Object.entries(node).flatMap(([k, v]) => leaves(v, `${prefix}${k}.`))
     : [[prefix.slice(0, -1), node]];
-const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(leaves(catalog))).digest('hex');
+// Hashes pin the 445 keys that existed before phase 15 (the new keys are excluded; see fixtures/phase15-keys.ts).
+const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(withoutPhase15(leaves(catalog)))).digest('hex');
 
 describe('localization is unchanged apart from the removed monetization keys', () => {
   // The hashes equal those of the bc39779 catalogs with exactly these 29 keys removed:
   // nav.premium, coach.locked, match.compareLocked, preview.locked, preview.devStore and paywall.* (24).
   it('O. English: 445 keys, every remaining value unchanged', () => {
-    expect(leaves(en)).toHaveLength(445);
+    expect(withoutPhase15(leaves(en))).toHaveLength(445);
     expect(catalogHash(en)).toBe('bbd8860f9c6f7fc294f00b930f2808855ed2aa9fb7eb87626f10c317cc2fbd10');
   });
 
   it('P. German: 445 keys, every remaining value unchanged', () => {
-    expect(leaves(de)).toHaveLength(445);
+    expect(withoutPhase15(leaves(de))).toHaveLength(445);
     expect(catalogHash(de)).toBe('99a5cf244a82e7f666d671611812683c99c6873fd8640f248de9ba8fdf19dd7a');
   });
 

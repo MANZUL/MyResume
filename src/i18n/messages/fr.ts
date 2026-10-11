@@ -35,6 +35,19 @@ export const fr: Messages = {
     unchanged: 'Vos données enregistrées n’ont pas été modifiées. Veuillez réessayer.',
     tryAgain: 'Réessayer',
   },
+  // Failures the app reports instead of hiding them (saving, loading, deleting) and the
+  // root error screen. Phase 15.
+  storage: {
+    saveFailed: 'Vos dernières modifications n’ont pas pu être enregistrées sur cet appareil. Elles sont toujours affichées à l’écran.',
+    deleteFailed: '«\u00A0{title}\u00A0» n’a pas pu être supprimé. Il se trouve toujours sur cet appareil.',
+    loadFailedTitle: 'Impossible de charger vos CV',
+    retry: 'Réessayer',
+    dismiss: 'Fermer',
+  },
+  crash: {
+    title: 'Une erreur est survenue',
+    body: 'Cet écran n’a pas pu être affiché. Vos CV enregistrés n’ont pas été modifiés.',
+  },
   resume: {
     untitled: 'CV sans titre',
     sample: 'CV d’exemple',
@@ -334,6 +347,7 @@ export const fr: Messages = {
     a11y: 'Texte du CV',
     create: 'Créer le CV',
     englishHeadings: 'Les titres de section ne sont reconnus qu’en anglais pour le moment (par exemple EXPERIENCE ou EDUCATION).',
+    tooLong: 'Ce texte est trop long pour être importé. La limite est de {max} caractères.',
   },
   analysis: {
     location: {

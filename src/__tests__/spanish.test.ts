@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withoutPhase15 } from './fixtures/phase15-keys';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
@@ -59,7 +60,8 @@ const FR = new Map(leaves(fr));
 const ES = new Map(leaves(es));
 const forms = (value: Leaf) => (typeof value === 'string' ? [value] : Object.values(value));
 const params = (value: Leaf) => new Set(forms(value).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1])));
-const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(leaves(catalog))).digest('hex');
+// Hashes pin the 445 keys that existed before phase 15 (the new keys are excluded; see fixtures/phase15-keys.ts).
+const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(withoutPhase15(leaves(catalog)))).digest('hex');
 
 const SPANISH_LABELS = ['Perfil profesional', 'Experiencia', 'Formación', 'Certificaciones', 'Proyectos', 'Premios'];
 const ENGLISH_LABELS = ['Summary', 'Experience', 'Education', 'Certifications', 'Projects', 'Awards'];
@@ -99,8 +101,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('Spanish catalog', () => {
   it('has a Spanish value for every English key, and no other keys', () => {
     expect([...ES.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(ES.size).toBe(445);
-    expect(EN.size).toBe(445);
+    expect(ES.size).toBe(453); // 445 + the 8 keys of phase 15
+    expect(EN.size).toBe(453);
     for (const [key, value] of ES) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.es).toBe(es);
@@ -534,7 +536,7 @@ describe('Spanish app UI', () => {
 
 describe('other catalogs are unchanged by the Spanish work', () => {
   it('English, German and French keep exactly their previous text', () => {
-    expect(leaves(en)).toHaveLength(445);
+    expect(withoutPhase15(leaves(en))).toHaveLength(445);
     expect(catalogHash(en)).toBe('bbd8860f9c6f7fc294f00b930f2808855ed2aa9fb7eb87626f10c317cc2fbd10');
     expect(catalogHash(de)).toBe('99a5cf244a82e7f666d671611812683c99c6873fd8640f248de9ba8fdf19dd7a');
     expect(catalogHash(fr)).toBe('333fc9f2ec87050ad4e0703142550697edaf9ed3998cc12bf7f9340d1db07ea6');

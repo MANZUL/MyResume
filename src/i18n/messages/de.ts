@@ -32,6 +32,19 @@ export const de: Messages = {
     unchanged: 'Ihre gespeicherten Daten wurden nicht verändert. Bitte versuchen Sie es erneut.',
     tryAgain: 'Erneut versuchen',
   },
+  // Failures the app reports instead of hiding them (saving, loading, deleting) and the
+  // root error screen. Phase 15.
+  storage: {
+    saveFailed: 'Ihre letzten Änderungen konnten nicht auf diesem Gerät gespeichert werden. Sie sind weiterhin auf dem Bildschirm zu sehen.',
+    deleteFailed: '„{title}“ konnte nicht gelöscht werden. Der Lebenslauf befindet sich weiterhin auf diesem Gerät.',
+    loadFailedTitle: 'Ihre Lebensläufe konnten nicht geladen werden',
+    retry: 'Wiederholen',
+    dismiss: 'Schließen',
+  },
+  crash: {
+    title: 'Etwas ist schiefgelaufen',
+    body: 'Dieser Bildschirm konnte nicht angezeigt werden. Ihre gespeicherten Lebensläufe wurden nicht verändert.',
+  },
   resume: {
     untitled: 'Unbenannter Lebenslauf',
     sample: 'Beispiel-Lebenslauf',
@@ -332,6 +345,7 @@ export const de: Messages = {
     a11y: 'Text des Lebenslaufs',
     create: 'Lebenslauf erstellen',
     englishHeadings: 'Abschnittsüberschriften werden vorerst nur auf Englisch erkannt (zum Beispiel EXPERIENCE oder EDUCATION).',
+    tooLong: 'Dieser Text ist zu lang für den Import. Das Limit beträgt {max} Zeichen.',
   },
   analysis: {
     location: {

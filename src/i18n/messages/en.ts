@@ -22,6 +22,19 @@ export const en = {
     unchanged: 'Your saved data has not been changed. Please try again.',
     tryAgain: 'Try again',
   },
+  // Failures the app reports instead of hiding them (saving, loading, deleting) and the
+  // root error screen. Phase 15.
+  storage: {
+    saveFailed: 'Your latest changes could not be saved on this device. They are still on screen.',
+    deleteFailed: '"{title}" could not be deleted. It is still on this device.',
+    loadFailedTitle: 'Your resumes could not be loaded',
+    retry: 'Retry',
+    dismiss: 'Dismiss',
+  },
+  crash: {
+    title: 'Something went wrong',
+    body: 'This screen could not be shown. Your saved resumes have not been changed.',
+  },
   resume: {
     // Default titles stored with new resumes (in the app language).
     untitled: 'Untitled resume',
@@ -325,6 +338,7 @@ export const en = {
     a11y: 'Resume text',
     create: 'Create resume',
     englishHeadings: 'Section headings are recognized in English only for now.',
+    tooLong: 'This text is too long to import. The limit is {max} characters.',
   },
   // Analysis results: message codes the engines return (with parameters). The English
   // rule packs render their `message` from these same entries.

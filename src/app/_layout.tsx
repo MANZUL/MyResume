@@ -1,8 +1,11 @@
 import { Stack } from 'expo-router';
+import { View } from 'react-native';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
+import { RootErrorBoundary } from '../ui/RootErrorBoundary';
+import { StorageBanner } from '../ui/StorageStatus';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
 import { RasterizerHost } from '../services/export/rasterizer/RasterizerHost';
 import { LocalizationProvider, useT } from '../services/i18n/localization';
@@ -16,18 +19,27 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <DatabaseProvider>
-        <LocalizationProvider>
-          <ResumeStoreProvider>
-            <StatusBar style="dark" />
-            <AppStack />
-            {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
-            <RasterizerHost />
-          </ResumeStoreProvider>
-        </LocalizationProvider>
-      </DatabaseProvider>
-    </SafeAreaProvider>
+    // Outermost: the recovery screen does not depend on any provider below it.
+    <RootErrorBoundary>
+      <SafeAreaProvider>
+        <DatabaseProvider>
+          <LocalizationProvider>
+            <ResumeStoreProvider>
+              <StatusBar style="dark" />
+              <View style={{ flex: 1 }}>
+                <View style={{ flex: 1 }}>
+                  <AppStack />
+                </View>
+                {/* Failed saves and deletes stay visible on every screen until storage confirms. */}
+                <StorageBanner />
+              </View>
+              {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
+              <RasterizerHost />
+            </ResumeStoreProvider>
+          </LocalizationProvider>
+        </DatabaseProvider>
+      </SafeAreaProvider>
+    </RootErrorBoundary>
   );
 }
 

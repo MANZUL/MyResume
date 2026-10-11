@@ -1,6 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button, Card, Muted, SectionTitle, colors, styles } from '../../ui/components';
+import { LoadFailedCard } from '../../ui/StorageStatus';
 import { TemplateThumbnail } from '../templates/TemplateCard';
 import { templateHref } from '../templates/use-create-from-template';
 import { SAMPLE_RESUME, SAMPLE_RESUME_LANGUAGE } from '../../domain/resume/sample-data';
@@ -12,7 +13,7 @@ import { useLocalization } from '../../services/i18n/localization';
 import type { ResumeData } from '../../domain/resume/types';
 
 export default function Home() {
-  const { ready, resumes, create, remove, duplicate } = useResumeStore();
+  const { ready, resumes, create, remove, duplicate, status } = useResumeStore();
   const { t, appLanguage, formatDate } = useLocalization();
 
   const open = (data: ResumeData, title?: string, language?: Language) => {
@@ -115,12 +116,16 @@ export default function Home() {
             </ScrollView>
 
             <SectionTitle style={{ marginTop: 12 }}>{t('home.yourResumes')}</SectionTitle>
+            {/* A failed load must not look like an empty library. */}
+            {status.loadFailed ? <LoadFailedCard /> : null}
           </View>
         }
         ListEmptyComponent={
-          <Card>
-            <Muted>{t('home.empty')}</Muted>
-          </Card>
+          status.loadFailed ? null : (
+            <Card>
+              <Muted>{t('home.empty')}</Muted>
+            </Card>
+          )
         }
         renderItem={({ item }) => (
           <Pressable

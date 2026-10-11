@@ -7,7 +7,7 @@ import { isHexColor } from '../../domain/shared/text';
 import type { Language } from '../../domain/i18n/languages';
 import { appTranslator, getAppLanguage } from '../i18n/app-language';
 import { useDatabase } from './database-context';
-import { ResumeLibrary } from './resume-library';
+import { ResumeLibrary, type LibraryStatus } from './resume-library';
 
 // All resumes live on the device in SQLite. No account, no server, no network.
 
@@ -30,6 +30,15 @@ interface StoreState {
   duplicate: (id: string) => StoredResume | null;
   setActive: (id: string | null) => void;
   flush: (id?: string) => Promise<void>;
+  /** Storage problems the user must be told about (failed load, save or delete). */
+  status: LibraryStatus;
+  /** Reads the saved resumes again after a failed load. */
+  retryLoad: () => Promise<boolean>;
+  /** Writes the changes that could not be saved; true when nothing is left unsaved. */
+  retrySave: () => Promise<boolean>;
+  /** Tries deleting the resume that could not be deleted. */
+  retryDelete: () => Promise<boolean>;
+  dismissDeleteError: () => void;
 }
 
 const StoreContext = createContext<StoreState | null>(null);
@@ -41,7 +50,8 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       new ResumeLibrary(repository, {
         newId,
         onError: (operation, error) => {
-          if (__DEV__) console.warn(`[storage] ${operation} failed`, error);
+          // Never log the error object or any resume content: only what failed.
+          if (__DEV__) console.warn(`[storage] ${operation} failed (${error instanceof Error ? error.name : 'error'})`);
         },
         // Read at each create: the app language at that moment.
         defaultLanguage: getAppLanguage,
@@ -56,14 +66,10 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    library
-      .load()
-      .catch((error: unknown) => {
-        if (__DEV__) console.warn('[storage] load failed', error);
-      })
-      .finally(() => {
-        if (active) setReady(true);
-      });
+    // load() never throws: a failure is reported through the library status.
+    void library.load().then(() => {
+      if (active) setReady(true);
+    });
     return () => {
       active = false;
     };
@@ -80,6 +86,10 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
     };
   }, [library]);
 
+  const status = useSyncExternalStore(
+    (listener) => library.subscribe(listener),
+    () => library.getStatus(),
+  );
   const resumes = useSyncExternalStore(
     (listener) => library.subscribe(listener),
     () => library.getAll(),
@@ -115,8 +125,16 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
       duplicate: (id) => library.duplicate(id),
       setActive: (id) => void library.setActive(id),
       flush: (id) => library.flush(id),
+      status,
+      retryLoad: () => library.load(),
+      retrySave: () => library.retrySave(),
+      retryDelete: async () => {
+        const failed = library.getStatus().deleteFailed;
+        return failed ? library.remove(failed.id) : true;
+      },
+      dismissDeleteError: () => library.dismissDeleteError(),
     }),
-    [library, ready, resumes, activeId],
+    [library, ready, resumes, activeId, status],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

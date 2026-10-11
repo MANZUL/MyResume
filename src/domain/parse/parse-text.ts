@@ -1,4 +1,5 @@
 import type { Language } from '../i18n/languages';
+import { ImportTooLongError, isImportable } from './import-limits';
 import {
   emptyCertification,
   emptyEducation,
@@ -32,12 +33,17 @@ const SECTION_PATTERNS: [SectionKey, RegExp][] = [
   ['awards', /^(awards?|honors?|achievements?|awards?\s*(&|and)\s*honors?|honors?\s*(&|and)\s*awards?)$/],
 ];
 
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/;
-const PHONE = /\+?\(?\d[\d\s().-]{7,}\d/;
+// Performance: these patterns run over pasted text, so none may scan a long run of the same
+// kind of character from every starting position (that is quadratic: one 200,000-character
+// word took 52 s). Each is bounded by the real limits of the thing it matches (an e-mail's
+// local part is at most 64 characters, a domain label 63, a phone number a few dozen
+// characters, a month name 9 letters) and starts only at the beginning of a word.
+const EMAIL = /(?<![\w.+-])[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{1,255}/;
+const PHONE = /\+?\(?\d[\d\s().-]{7,30}\d/;
 const LINKEDIN = /(https?:\/\/)?(www\.)?linkedin\.com\/[^\s|,]+/i;
-const URL = /(https?:\/\/)?(www\.)?[a-z0-9-]+\.(com|net|org|io|dev|me|co|ai|app|info)(\/[^\s|,]*)?/i;
+const URL = /(?<![a-z0-9-])(https?:\/\/)?(www\.)?[a-z0-9-]{1,63}\.(com|net|org|io|dev|me|co|ai|app|info)(\/[^\s|,]*)?/i;
 const BULLET = /^\s*([•●▪◦‣∙·*\-–—]|\d+[.)])\s+/;
-const MONTH = '(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?';
+const MONTH = '(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]{0,6}\\.?';
 const DATE_TOKEN = `(${MONTH}\\s+\\d{4}|\\d{1,2}\\/\\d{4}|\\d{4})`;
 const DATE_RANGE = new RegExp(`${DATE_TOKEN}\\s*(-|–|—|to)\\s*(${DATE_TOKEN}|present|current|now)`, 'i');
 const SINGLE_DATE = new RegExp(`${DATE_TOKEN}$`, 'i');
@@ -88,15 +94,20 @@ function splitList(text: string): string[] {
  * Sorts pasted resume text into sections for a resume in `language`. Only English section
  * headings are recognised today (analysisSupport('import', language)); for other languages
  * the same rules run, and contact details, bullets and English headings are still found.
- * The language is never guessed from the text.
+ * The language is never guessed from the text. Throws ImportTooLongError above
+ * IMPORT_MAX_CHARS (import-limits.ts).
  */
 export function parseResumeText(raw: string, language: Language): ResumeData {
   void language; // One English rule set today; per-language heading tables plug in here.
+  // Refuse (never truncate) text beyond the documented limit; the screen checks it too.
+  if (!isImportable(raw)) throw new ImportTooLongError();
   const resume = emptyResume();
   const lines = raw
     .replace(/\r\n?/g, '\n')
     .split('\n')
-    .map((line) => line.replace(/\t/g, ' ').replace(/\s+$/, ''))
+    // A run of five or more spaces is read exactly like four (every rule below treats two or
+    // more as one separator); shortening it keeps the whitespace patterns linear on long runs.
+    .map((line) => line.replace(/\t/g, ' ').replace(/[^\S\n]{5,}/g, '    ').replace(/\s+$/, ''))
     .filter((line) => line.trim().length > 0);
 
   const buckets: Record<SectionKey | 'header', string[]> = {

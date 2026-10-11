@@ -35,6 +35,19 @@ export const es: Messages = {
     unchanged: 'Tus datos guardados no han cambiado. Inténtalo de nuevo.',
     tryAgain: 'Reintentar',
   },
+  // Failures the app reports instead of hiding them (saving, loading, deleting) and the
+  // root error screen. Phase 15.
+  storage: {
+    saveFailed: 'No se pudieron guardar tus últimos cambios en este dispositivo. Siguen visibles en la pantalla.',
+    deleteFailed: '«{title}» no se pudo eliminar. Sigue en este dispositivo.',
+    loadFailedTitle: 'No se pudieron cargar tus currículums',
+    retry: 'Reintentar',
+    dismiss: 'Cerrar',
+  },
+  crash: {
+    title: 'Algo salió mal',
+    body: 'No se pudo mostrar esta pantalla. Tus currículums guardados no han cambiado.',
+  },
   resume: {
     untitled: 'Currículum sin título',
     sample: 'Currículum de ejemplo',
@@ -338,6 +351,7 @@ export const es: Messages = {
     a11y: 'Texto del currículum',
     create: 'Crear currículum',
     englishHeadings: 'Por ahora, los títulos de sección solo se reconocen en inglés (por ejemplo, EXPERIENCE o EDUCATION).',
+    tooLong: 'Este texto es demasiado largo para importarlo. El límite es de {max} caracteres.',
   },
   analysis: {
     location: {

@@ -6,6 +6,7 @@ import { createTranslator, type Translator } from '../../i18n/translate';
 // a resume's language.
 
 let current: Language = DEFAULT_LANGUAGE;
+let known = false;
 
 export function getAppLanguage(): Language {
   return current;
@@ -13,6 +14,12 @@ export function getAppLanguage(): Language {
 
 export function setAppLanguageForServices(language: Language): void {
   current = language;
+  known = true;
+}
+
+/** False until the provider has resolved the language (e.g. when the app fails to start). */
+export function hasAppLanguage(): boolean {
+  return known;
 }
 
 export function appTranslator(): Translator {

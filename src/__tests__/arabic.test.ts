@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withoutPhase15 } from './fixtures/phase15-keys';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
@@ -67,7 +68,8 @@ const EN = new Map(leaves(en));
 const AR = new Map(leaves(ar));
 const forms = (value: Leaf) => (typeof value === 'string' ? [value] : Object.values(value));
 const params = (value: Leaf) => new Set(forms(value).flatMap((s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1])));
-const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(leaves(catalog))).digest('hex');
+// Hashes pin the 445 keys that existed before phase 15 (the new keys are excluded; see fixtures/phase15-keys.ts).
+const catalogHash = (catalog: unknown) => createHash('sha256').update(JSON.stringify(withoutPhase15(leaves(catalog)))).digest('hex');
 const ARABIC_LETTER = /[ء-ي]/;
 
 const ARABIC_LABELS = ['الملخص', 'الخبرات', 'التعليم', 'الشهادات', 'المشاريع', 'الجوائز'];
@@ -121,7 +123,7 @@ const SHARED = ['editor.startPlaceholder'];
 describe('Arabic catalog', () => {
   it('has an Arabic value for every English key, and no other keys', () => {
     expect([...AR.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(AR.size).toBe(445);
+    expect(AR.size).toBe(453); // 445 + the 8 keys of phase 15
     for (const [key, value] of AR) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.ar).toBe(ar);
@@ -729,7 +731,7 @@ describe('Arabic app UI', () => {
 
 describe('other catalogs are unchanged by the Arabic work', () => {
   it('English, German, French and Spanish keep exactly their previous text', () => {
-    expect(leaves(en)).toHaveLength(445);
+    expect(withoutPhase15(leaves(en))).toHaveLength(445);
     expect(catalogHash(en)).toBe('bbd8860f9c6f7fc294f00b930f2808855ed2aa9fb7eb87626f10c317cc2fbd10');
     expect(catalogHash(de)).toBe('99a5cf244a82e7f666d671611812683c99c6873fd8640f248de9ba8fdf19dd7a');
     expect(catalogHash(fr)).toBe('333fc9f2ec87050ad4e0703142550697edaf9ed3998cc12bf7f9340d1db07ea6');

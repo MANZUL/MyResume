@@ -12,7 +12,8 @@ import {
   styles,
 } from '../../ui/components';
 import { applyListOp, useStableKeys, type ListOp } from '../../ui/entry-keys';
-import { useResume } from '../../services/storage/resume-store';
+import { useResume, useResumeStore } from '../../services/storage/resume-store';
+import { LoadFailedCard } from '../../ui/StorageStatus';
 import { parseSectionParam, type EditorSection } from '../../domain/resume/sections';
 import { analysisSupport } from '../../domain/i18n/analysis-support';
 import { LANGUAGE_NAMES, LANGUAGES, type Language } from '../../domain/i18n/languages';
@@ -39,6 +40,7 @@ export default function EditorScreen() {
   // `section` + `jump` come from Resume Check's "Improve" link (a new `jump` each time).
   const { id, section, jump } = useLocalSearchParams<{ id: string; section?: string; jump?: string }>();
   const { resume, update, ready, flush, setActive, setLanguage } = useResume(id);
+  const { status } = useResumeStore();
   const t = useT();
   const resumeId = resume?.id;
   const data = resume?.data;
@@ -133,6 +135,14 @@ export default function EditorScreen() {
   );
 
   if (!ready) return null;
+  if ((!resume || !data) && status.loadFailed) {
+    // The resume may exist but could not be read: say so instead of "no longer exists".
+    return (
+      <View style={{ flex: 1, padding: 16, gap: 12 }}>
+        <LoadFailedCard />
+      </View>
+    );
+  }
   if (!resume || !data) {
     return (
       <View style={{ flex: 1, padding: 24, gap: 12 }}>

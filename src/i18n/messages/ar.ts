@@ -35,6 +35,19 @@ export const ar: Messages = {
     unchanged: 'لم تتغير بياناتك المحفوظة. حاول مرة أخرى.',
     tryAgain: 'إعادة المحاولة',
   },
+  // Failures the app reports instead of hiding them (saving, loading, deleting) and the
+  // root error screen. Phase 15.
+  storage: {
+    saveFailed: 'تعذّر حفظ أحدث تغييراتك على هذا الجهاز. ما زالت ظاهرة على الشاشة.',
+    deleteFailed: 'تعذّر حذف «{title}». ما زالت السيرة الذاتية على هذا الجهاز.',
+    loadFailedTitle: 'تعذّر تحميل سيَرك الذاتية',
+    retry: 'إعادة المحاولة',
+    dismiss: 'إغلاق',
+  },
+  crash: {
+    title: 'حدث خطأ ما',
+    body: 'تعذّر عرض هذه الشاشة. لم تتغير سيَرك الذاتية المحفوظة.',
+  },
   resume: {
     untitled: 'سيرة ذاتية بلا عنوان',
     sample: 'سيرة ذاتية نموذجية',
@@ -367,6 +380,7 @@ export const ar: Messages = {
     a11y: 'نص السيرة الذاتية',
     create: 'إنشاء السيرة الذاتية',
     englishHeadings: 'لا يتم التعرّف على عناوين الأقسام حاليًا إلا بالإنجليزية (مثل EXPERIENCE أو EDUCATION).',
+    tooLong: 'هذا النص أطول من أن يُستورد. الحد الأقصى {max} محرف.',
   },
   analysis: {
     location: {

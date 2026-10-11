@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput } from 'react-native';
 import { Button, colors, Muted, styles } from '../../ui/components';
+import { IMPORT_MAX_CHARS, ImportTooLongError, isImportable } from '../../domain/parse/import-limits';
 import { parseResumeText } from '../../domain/parse/parse-text';
 import { useResumeStore } from '../../services/storage/resume-store';
 import { analysisSupport } from '../../domain/i18n/analysis-support';
@@ -14,8 +15,17 @@ export default function ImportScreen() {
   const { t, appLanguage } = useLocalization();
   const englishHeadingsOnly = analysisSupport('import', appLanguage).kind !== 'native';
 
+  // Over the limit the text is refused, never cut off: the user decides what to remove.
+  const tooLong = !isImportable(text);
+
   const importText = () => {
-    const data = parseResumeText(text, appLanguage);
+    let data;
+    try {
+      data = parseResumeText(text, appLanguage);
+    } catch (error) {
+      if (error instanceof ImportTooLongError) return; // the message below is already showing
+      throw error;
+    }
     const resume = create(data, data.name || t('resume.imported'), undefined, appLanguage);
     router.dismiss();
     router.push({ pathname: '/resume/[id]', params: { id: resume.id } });
@@ -37,7 +47,12 @@ export default function ImportScreen() {
           accessibilityLabel={t('import.a11y')}
           style={[styles.input, { minHeight: 320, textAlignVertical: 'top', fontSize: 15 }]}
         />
-        <Button title={t('import.create')} onPress={importText} disabled={text.trim().length < 20} />
+        {tooLong ? (
+          <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 14, lineHeight: 20, fontWeight: '600' }}>
+            {t('import.tooLong', { max: IMPORT_MAX_CHARS })}
+          </Text>
+        ) : null}
+        <Button title={t('import.create')} onPress={importText} disabled={text.trim().length < 20 || tooLong} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

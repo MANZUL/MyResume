@@ -2170,6 +2170,30 @@ The final language phase. Arabic is Modern Standard Arabic (not a dialect). `src
 9. Font appearance on the oldest supported Android and iOS versions; decide whether to bundle an OFL Arabic font from what is seen.
 10. VoiceOver and TalkBack reading of Arabic labels, plurals ("مشكلتان محتملتان") and the isolated English words.
 
+### 19.13 Phase 15: data integrity and core error handling
+
+Fixes from the final project audit (findings H2, M2, M3, M5). Nothing else changed: schema and migrations, export security, templates, Score/ATS/Job Match/Coach rules, direction architecture, EAS and package ids are untouched. Paper-size selection and backup are later phases and were not started.
+
+**Persistence failures are visible and recoverable.**
+- `ResumeLibrary.getStatus()` is one stable object: `loadFailed`, `saveFailed`, `deleteFailed {id, title}`. It changes only when something changes.
+- A failed write keeps its value in memory and in the autosaver (unchanged: 600 ms debounce, 3 s maximum wait, ordered per resume). The failure stays until a write that SQLite confirmed; a newer edit's successful write also clears it.
+- `retrySave()` runs the real pending writes (one press is at most the failed write plus one more attempt). There are no automatic retries: after a failure nothing is written until the user presses Retry, edits again, or the next lifecycle flush (screen blur, app to background).
+- Create and duplicate use the same path: the new resume stays on screen, the banner shows, Retry stores it once.
+- `load()` never throws. A failed load shows an error card with Retry on Home (and in the editor) instead of "No resumes yet". A resume created while loading was failing is kept when the load succeeds.
+- `remove()` returns false on failure: the resume goes back into the list (and stays current if it was), `deleteFailed` names it, Retry deletes again, Dismiss only hides the notice.
+- `StorageBanner` is mounted once in the root layout, above every screen; Retry is disabled while an attempt runs (no duplicate writes). Logs (development only) carry the operation and the error name, never resume content.
+- Remaining limit: if the process is killed while a write is failing, the unsaved edit is gone. The banner and the lifecycle flushes make that window visible and short, but no local disk can promise more.
+
+**Import limit.** 30,000 characters (`domain/parse/import-limits.ts`): a real resume is 2,000 to 10,000 characters and a long academic CV stays under 25,000. The screen shows a localized message and disables Import above it; `parseResumeText` throws `ImportTooLongError` above it too. Text is refused, never truncated (no `maxLength`). The quadratic cost came from regular expressions that scanned a whole run of characters from every start position (e-mail local part, domain label, phone, month names) and from `\s+` over long space runs. The patterns are now bounded by the real limits of what they match (e-mail local part 64, domain label 63, phone 30, month suffix 6) and start at word boundaries, and a run of five or more spaces is read as four (whitespace only; every rule treats two or more as one separator). Measured at 29,000 characters: 17 pathological families (one word, digits, dots, `jan`×n, `@`, long space runs inside every section, 500-character lines, and more) each take 0 to 6 ms (before: up to 0.9 s at this size and 52 s at 200,000). 200,000 characters are refused in under 50 ms. A 401-text differential test against the previous parser produced identical output for normal input.
+
+**Root error boundary.** `RootErrorBoundary` wraps the whole app outside every provider; its screen uses only React Native primitives and the catalog (language: the app language once known, else the device language). Reset remounts the children and never touches saved data. Tested in a real React renderer in Chromium: a throwing child shows the recovery screen, Retry while the cause persists shows it again, Retry after the cause is gone mounts the app fresh. It catches errors thrown while rendering or in lifecycle methods. It does NOT catch errors in event handlers, promises and timers, or native crashes; saves, loads, deletes and exports report their own failures instead.
+
+**Cover letter.** The opening follows the first experience entry's end-date field only: an explicit "Present" word (English, German, French, Spanish, Arabic) is current ("In my current role as X at Y"); a valid year, month and year, or full date is ended ("Previously, as X at Y, I built…"); an empty or unrecognized field is neutral ("My background includes work as X at Y…"). Nothing is inferred from other fields or from today's date. The letter is still English for every resume language, with the existing disclosure.
+
+**New catalog keys (8, all five languages):** `storage.saveFailed`, `storage.deleteFailed`, `storage.loadFailedTitle`, `storage.retry`, `storage.dismiss`, `crash.title`, `crash.body`, `import.tooLong`. The load card and the crash screen reuse `database.unchanged` and `database.tryAgain`. The earlier catalog hash tests exclude these keys, so the 445 earlier values remain pinned.
+
+**Device validation: NOT RUN.** Add to the device checklist: force a full disk and confirm the banner and Retry; confirm the banner position with the home indicator and the keyboard; paste about 30,000 characters into Import; trigger the recovery screen in a development build.
+
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 
 **Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.
