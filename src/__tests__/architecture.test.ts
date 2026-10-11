@@ -174,11 +174,12 @@ describe('secure export boundary (step 4)', () => {
     );
   });
 
-  it('only the Expo export adapter touches printing, sharing files and the file system', () => {
+  it('only the Expo export adapter touches printing, sharing files and the file system (and the backup adapter, which shares and reads backup files only)', () => {
     const expo = join('services', 'export', 'expo-export-platform.ts');
+    const backup = join('services', 'backup', 'expo-backup-files.ts');
     expect(owners(/^expo-print$/)).toEqual([expo]);
-    expect(owners(/^expo-sharing$/)).toEqual([expo]);
-    expect(owners(/^expo-file-system/)).toEqual([expo]);
+    expect(owners(/^expo-sharing$/).sort()).toEqual([backup, expo].sort());
+    expect(owners(/^expo-file-system/).sort()).toEqual([backup, expo].sort());
   });
 
   it('screens reach exports only through ExportService', () => {

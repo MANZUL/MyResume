@@ -97,8 +97,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('French catalog', () => {
   it('has a French value for every English key, and no other keys', () => {
     expect([...FR.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(FR.size).toBe(461); // 445 + the 16 keys of phases 15 to 17
-    expect(EN.size).toBe(461);
+    expect(FR.size).toBe(486); // 445 + the 41 keys of phases 15 to 18
+    expect(EN.size).toBe(486);
     for (const [key, value] of FR) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.fr).toBe(fr);

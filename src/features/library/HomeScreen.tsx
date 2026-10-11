@@ -77,6 +77,7 @@ export default function Home() {
             <Button title={t('home.create')} onPress={() => router.push('/templates')} accessibilityHint={t('home.createHint')} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
               <Button title={t('home.importText')} variant="ghost" style={{ minHeight: 40 }} onPress={() => router.push('/import')} />
+              <Button title={t('nav.backup')} variant="ghost" style={{ minHeight: 40 }} onPress={() => router.push('/backup')} />
               <Button
                 title={t('home.trySample')}
                 variant="ghost"

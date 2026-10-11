@@ -6,7 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
 import { RestartNotice } from '../ui/RestartNotice';
 import { RootErrorBoundary } from '../ui/RootErrorBoundary';
-import { StorageBanner } from '../ui/StorageStatus';
+import { BusyOverlay, StorageBanner } from '../ui/StorageStatus';
+import { purgeBackupFiles } from '../services/backup/expo-backup-files';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
 import { RasterizerHost } from '../services/export/rasterizer/RasterizerHost';
 import { LocalizationProvider, useT } from '../services/i18n/localization';
@@ -17,6 +18,7 @@ export default function RootLayout() {
   // Export files are transient: clear any left from the previous session.
   useEffect(() => {
     purgeExportArtifacts();
+    purgeBackupFiles(); // temporary backup files from earlier runs
   }, []);
 
   return (
@@ -35,6 +37,8 @@ export default function RootLayout() {
                 <StorageBanner />
                 {/* Layout direction changes (first launch in Arabic) need the app to be reopened. */}
                 <RestartNotice />
+                {/* While a backup or restore runs, nothing underneath can be touched. */}
+                <BusyOverlay />
               </View>
               {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
               <RasterizerHost />
@@ -64,6 +68,7 @@ function AppStack() {
       <Stack.Screen name="templates/[templateId]" options={{ title: t('nav.template') }} />
       <Stack.Screen name="import" options={{ title: t('nav.import'), presentation: 'modal' }} />
       <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
+      <Stack.Screen name="backup" options={{ title: t('nav.backup') }} />
       <Stack.Screen name="resume/[id]/index" options={{ title: t('nav.edit') }} />
       <Stack.Screen name="resume/[id]/preview" options={{ title: t('nav.preview') }} />
       <Stack.Screen name="resume/[id]/tools" options={{ title: t('nav.tools') }} />

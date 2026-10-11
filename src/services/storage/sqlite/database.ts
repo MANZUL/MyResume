@@ -1,4 +1,5 @@
 import type {
+  BackupStore,
   ExportRecordRepository,
   LocalProfileRepository,
   ResumeRepository,
@@ -6,6 +7,7 @@ import type {
   StorageIssue,
   TargetJobRepository,
 } from '../../../domain/ports/repositories';
+import { SqliteBackupStore } from './backup-store';
 import { SqliteExportRecordRepository } from './export-record-repository';
 import { migrate, type MigrationResult } from './migrate';
 import { SqliteLocalProfileRepository } from './profile-repository';
@@ -23,6 +25,7 @@ export interface AppDatabase {
   exportRecords: ExportRecordRepository;
   targetJobs: TargetJobRepository;
   settings: SettingsRepository;
+  backup: BackupStore;
 }
 
 export interface OpenOptions {
@@ -61,5 +64,6 @@ export async function initializeDatabase(db: SqlDatabase, options: OpenOptions):
     exportRecords: new SqliteExportRecordRepository(db, options.newId, now, onIssue),
     targetJobs: new SqliteTargetJobRepository(db, now),
     settings: new SqliteSettingsRepository(db, now),
+    backup: new SqliteBackupStore(db, now),
   };
 }

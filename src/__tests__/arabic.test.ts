@@ -123,7 +123,7 @@ const SHARED = ['editor.startPlaceholder'];
 describe('Arabic catalog', () => {
   it('has an Arabic value for every English key, and no other keys', () => {
     expect([...AR.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(AR.size).toBe(461); // 445 + the 16 keys of phases 15 to 17
+    expect(AR.size).toBe(486); // 445 + the 41 keys of phases 15 to 18
     for (const [key, value] of AR) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.ar).toBe(ar);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useT } from '../services/i18n/localization';
 import { useResumeStore } from '../services/storage/resume-store';
@@ -57,6 +57,23 @@ export function StorageBanner() {
       {status.deleteFailed ? (
         <Row message={t('storage.deleteFailed', { title: status.deleteFailed.title })} onRetry={retryDelete} onDismiss={dismissDeleteError} />
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Covers the app while a backup or restore runs: touches are caught here, so nothing can be edited
+ * underneath it (the library refuses changes as well).
+ */
+export function BusyOverlay() {
+  const { status } = useResumeStore();
+  if (!status.busy) return null;
+  return (
+    <View
+      accessibilityViewIsModal
+      style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, opacity: 0.85 }}
+    >
+      <ActivityIndicator size="large" color={colors.text} />
     </View>
   );
 }

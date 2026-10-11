@@ -38,6 +38,24 @@ export interface LibraryStatus {
   saveFailed: boolean;
   /** The last delete that failed: the resume is back in the list and still stored. */
   deleteFailed: { id: string; title: string } | null;
+  /** An exclusive operation (backup or restore) is running; edits are refused until it ends. */
+  busy: boolean;
+}
+
+/** An edit, create, delete or second exclusive operation was attempted while one is running. */
+export class LibraryBusyError extends Error {
+  constructor() {
+    super('Another storage operation is running.');
+    this.name = 'LibraryBusyError';
+  }
+}
+
+/** Current edits could not be written, so an exclusive operation did not start. */
+export class LibraryUnsavedError extends Error {
+  constructor() {
+    super('Changes that could not be saved are still pending.');
+    this.name = 'LibraryUnsavedError';
+  }
 }
 
 const ENGLISH_TITLES = { untitled: () => 'Untitled resume', copyOf: (title: string) => `${title} (copy)` };
@@ -53,7 +71,8 @@ export class ResumeLibrary {
   private readonly failedSaves = new Set<string>();
   private loadFailed = false;
   private deleteFailed: LibraryStatus['deleteFailed'] = null;
-  private status: LibraryStatus = { loadFailed: false, saveFailed: false, deleteFailed: null };
+  private exclusive = false;
+  private status: LibraryStatus = { loadFailed: false, saveFailed: false, deleteFailed: null, busy: false };
   private readonly listeners = new Set<() => void>();
   private readonly autosaver: Autosaver<StoredResume>;
   private readonly now: () => number;
@@ -94,8 +113,9 @@ export class ResumeLibrary {
     const changed =
       this.status.loadFailed !== this.loadFailed ||
       this.status.saveFailed !== saveFailed ||
-      this.status.deleteFailed?.id !== this.deleteFailed?.id;
-    if (changed) this.status = { loadFailed: this.loadFailed, saveFailed, deleteFailed: this.deleteFailed };
+      this.status.deleteFailed?.id !== this.deleteFailed?.id ||
+      this.status.busy !== this.exclusive;
+    if (changed) this.status = { loadFailed: this.loadFailed, saveFailed, deleteFailed: this.deleteFailed, busy: this.exclusive };
     for (const listener of this.listeners) listener();
   }
 
@@ -158,6 +178,7 @@ export class ResumeLibrary {
    * `defaultLanguage()` (the app language), then English.
    */
   create(data: ResumeData, title?: string, templateId?: string, language?: Language): StoredResume {
+    if (this.exclusive) throw new LibraryBusyError();
     const template = templateId ? getTemplate(templateId) : TEMPLATES[0];
     const now = this.now();
     const resume: StoredResume = {
@@ -178,6 +199,7 @@ export class ResumeLibrary {
 
   /** Applies an edit in memory now and persists it through the debounced autosaver. */
   update(id: string, patch: ResumePatch): void {
+    if (this.exclusive) return; // the screen is blocked while a restore runs; nothing may change underneath it
     const current = this.get(id);
     if (!current) return;
     const next: StoredResume = { ...current, ...patch, id, updatedAt: this.now() };
@@ -187,6 +209,7 @@ export class ResumeLibrary {
   }
 
   duplicate(id: string): StoredResume | null {
+    if (this.exclusive) return null;
     const source = this.get(id);
     if (!source) return null;
     const now = this.now();
@@ -209,6 +232,7 @@ export class ResumeLibrary {
    * `getStatus().deleteFailed` says so (it is never reported as deleted when it is not).
    */
   async remove(id: string): Promise<boolean> {
+    if (this.exclusive) return false;
     const target = this.get(id);
     if (!target) return true;
     const wasActive = this.activeId === id;
@@ -251,6 +275,7 @@ export class ResumeLibrary {
   }
 
   async setActive(id: string | null): Promise<void> {
+    if (this.exclusive) return;
     if (id !== null && !this.get(id)) return;
     this.activeId = id;
     this.emit();
@@ -260,6 +285,46 @@ export class ResumeLibrary {
       await this.repo.setActive(id);
     } catch (error) {
       this.options.onError?.('set active', error);
+    }
+  }
+
+  /**
+   * Runs a storage operation that must not overlap with edits, saves or deletes (a backup
+   * snapshot, a restore). Pending edits are written first; if they cannot be written the
+   * operation does not start (LibraryUnsavedError). While it runs, the library refuses changes
+   * and `getStatus().busy` is true. With `reload`, the library is re-read from storage when the
+   * operation succeeds, so memory and database agree again; if the operation throws, nothing is
+   * reloaded (a failed restore changed nothing).
+   */
+  async runExclusive<T>(operation: () => Promise<T>, options: { reload?: boolean } = {}): Promise<T> {
+    if (this.exclusive) throw new LibraryBusyError();
+    this.exclusive = true;
+    this.emit();
+    try {
+      await this.autosaver.flush();
+      if (this.failedSaves.size > 0) throw new LibraryUnsavedError();
+      const result = await operation();
+      if (options.reload) await this.reloadFromStorage();
+      return result;
+    } finally {
+      this.exclusive = false;
+      this.emit();
+    }
+  }
+
+  /** After a restore: memory becomes exactly what is stored. A read failure is reported as a failed load. */
+  private async reloadFromStorage(): Promise<void> {
+    this.deleted.clear();
+    this.failedSaves.clear();
+    this.deleteFailed = null;
+    try {
+      const [stored, activeId] = await Promise.all([this.repo.list(), this.repo.getActiveId()]);
+      this.resumes = stored;
+      this.activeId = activeId;
+      this.loadFailed = false;
+    } catch (error) {
+      this.loadFailed = true;
+      this.options.onError?.('load', error);
     }
   }
 

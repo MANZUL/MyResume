@@ -39,6 +39,8 @@ interface StoreState {
   /** Tries deleting the resume that could not be deleted. */
   retryDelete: () => Promise<boolean>;
   dismissDeleteError: () => void;
+  /** Runs a backup or restore with edits paused (see ResumeLibrary.runExclusive). */
+  runExclusive: <T>(operation: () => Promise<T>, options?: { reload?: boolean }) => Promise<T>;
 }
 
 const StoreContext = createContext<StoreState | null>(null);
@@ -133,6 +135,7 @@ export function ResumeStoreProvider({ children }: { children: ReactNode }) {
         return failed ? library.remove(failed.id) : true;
       },
       dismissDeleteError: () => library.dismissDeleteError(),
+      runExclusive: (operation, options) => library.runExclusive(operation, options),
     }),
     [library, ready, resumes, activeId, status],
   );

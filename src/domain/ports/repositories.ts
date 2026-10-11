@@ -1,3 +1,4 @@
+import type { BackupFile, BackupSnapshot } from '../backup/backup-format';
 import type { Language } from '../i18n/languages';
 import type { ExportRecord, NewExportRecord } from '../export/export-record';
 import type { TargetJob } from '../job-match/target-job';
@@ -45,6 +46,18 @@ export interface StorageIssue {
   table: string;
   id: string | null;
   problem: string;
+}
+
+/** Everything a backup holds, read and written as one unit. */
+export interface BackupStore {
+  /** Reads all backup data in one transaction, so it comes from a single moment. */
+  snapshot(): Promise<BackupSnapshot>;
+  /**
+   * Replaces ALL resumes (and their saved job descriptions) with the backup's, sets the current
+   * resume, replaces the Local Profile and applies the app language when the backup has one.
+   * All of it commits or none of it does; the export history is kept (its links to resumes are cleared).
+   */
+  replaceAll(backup: BackupFile): Promise<void>;
 }
 
 /** App-wide settings (currently the app language). */

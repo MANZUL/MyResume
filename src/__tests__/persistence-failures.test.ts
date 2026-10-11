@@ -93,7 +93,7 @@ describe('persistence failures are visible and recoverable', () => {
   async function storedResume(name = 'Original') {
     const resume = library.create(withName(name), name);
     await library.flush();
-    expect(library.getStatus()).toEqual({ loadFailed: false, saveFailed: false, deleteFailed: null });
+    expect(library.getStatus()).toEqual({ loadFailed: false, saveFailed: false, deleteFailed: null, busy: false });
     return resume;
   }
   const onDisk = async (id: string) => (await app.resumes.get(id))?.data.name ?? null;
@@ -376,8 +376,8 @@ describe('the screens and the store report storage failures', () => {
 
 describe('phase 15 messages exist in all five languages', () => {
   const catalogs = { en, de, fr, es, ar } as const;
-  // The preview keys (phases 16 and 17) are checked in paper-size.test.ts and accent-color.test.ts.
-  const KEYS = [...PHASE15_KEYS].filter((key) => !key.startsWith('preview.'));
+  // The keys of later phases are checked in their own tests (paper-size, accent-color, backup-restore).
+  const KEYS = [...PHASE15_KEYS].filter((key) => !/^(preview|backup|nav)\./.test(key));
   const get = (catalog: unknown, key: string) => key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)[part], catalog) as string;
 
   it('every new key has a non-empty value with the same parameters as English, and none repeats an existing English text', () => {
