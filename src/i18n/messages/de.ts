@@ -325,6 +325,12 @@ export const de: Messages = {
       docx: 'Word',
       image: 'Bild',
     },
+    paper: {
+      label: 'Papierformat',
+      letter: 'US-Letter',
+      a4: 'A4',
+      hint: 'Gilt für PDF-, Word- und Bild-Export.',
+    },
     // A compound keeps the three export buttons as narrow as the English ones.
     export: '{format}-Export',
     exportFailed: 'Export fehlgeschlagen',

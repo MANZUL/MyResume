@@ -362,6 +362,12 @@ export const ar: Messages = {
       docx: 'Word',
       image: 'صورة',
     },
+    paper: {
+      label: 'حجم الورق',
+      letter: 'ليتر (Letter)',
+      a4: 'A4',
+      hint: 'يُستخدم عند تصدير PDF وWord والصورة.',
+    },
     export: 'تصدير {format}',
     exportFailed: 'فشل التصدير',
     tryAgain: 'يرجى المحاولة مرة أخرى.',

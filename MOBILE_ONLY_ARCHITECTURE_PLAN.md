@@ -2194,6 +2194,19 @@ Fixes from the final project audit (findings H2, M2, M3, M5). Nothing else chang
 
 **Device validation: NOT RUN.** Add to the device checklist: force a full disk and confirm the banner and Retry; confirm the banner position with the home indicator and the keyboard; paste about 30,000 characters into Import; trigger the recovery screen in a development build.
 
+### 19.14 Phase 16: Letter and A4 export sizes
+
+Fixes audit finding H1: PDF and image export were always US Letter while Word was always A4 (the docx library's silent default). One selected size now serves PDF, Word and image export, and the preview page.
+
+- **Selector:** the Preview screen, in the export bar above the three export buttons: "Paper size" with two radio chips (Letter, A4). The group has `radiogroup`/`radio` semantics, a label and a hint ("Used for PDF, Word and image export."); the chips are disabled while an export runs. The row mirrors in Arabic by itself (semantic RTL, no special case). The preview page itself changes to the selected size (8.5 in or 210 mm wide), so the screen matches the file.
+- **Default:** from the device locale tag when it carries a country (`de-DE` → A4, `en-US`/`en-CA`/`es-MX`/`es-CL`/`es-CO`/`en-PH` and the other Letter countries → Letter; `domain/export/paper-default.ts`). Without a country (a bare `en` or `ar`) the default is Letter, which is what PDF always used. This is a starting guess only: the screen never says the choice follows the region, and the user can pick the other size.
+- **Persistence:** in memory for the running app (`services/export/paper-size.ts`), shared by all resumes; it is not written to the database, so there is no migration (schema stays v4) and after a restart the regional default applies again. Persisting it (one `app_settings` row) is a possible later change.
+- **Plumbing:** `ExportService.exportPdf/exportDocx/exportImage(resume, paper)` → `ExportPlatform.generate*(resume, paper)` → print adapter size in points, HTML `@page` size, and `w:pgSz` in the Word file. The service and platform default to Letter. Handles are unchanged (opaque, frozen, single-use, 5-minute lifetime); the size is fixed when the export is prepared. Image export prints the same PDF HTML at the same size and keeps 216 dpi, the 2,400 px cap, the 10-page cap and the 60 s timeout.
+- **Word:** `w:pgSz` is now always written: Letter 12240 × 15840 twips, A4 11906 × 16838 twips, portrait; margins unchanged.
+- **Measured (Chromium + pdf.js, all 12 templates):** Letter pages are 612 × 792 pt. A4 pages are 594.96 × 841.92 pt, which is A4 (595.28 × 841.89 pt) to within 0.33 pt: Chromium rounds 210 × 297 mm to whole CSS pixels. On a device the print call passes 595 × 842 pt, also within 0.3 pt of A4. Images: Letter 1836 × 2376 px; A4 about 1697 × 2400 px (the 2,400 px cap), ratio 0.7066.
+- **Catalog keys (4, all five languages):** `preview.paper.label`, `preview.paper.letter`, `preview.paper.a4` (a technical name, the same in every language), `preview.paper.hint`.
+- **Device validation: NOT RUN.** Check on devices: a real A4 and Letter PDF page size from `expo-print` on iOS and Android, the Word file opening at the right size in Word and Google Docs, the selector with the keyboard and in Arabic, and the regional default on devices set to different countries.
+
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 
 **Decision.** No monetization. Every capability is free for every user: create, edit, save, duplicate, delete, import, all 12 templates, template switching and preview, resume preview, Resume Score, Writing Coach, ATS Readability, Job Match, Cover Letter, PDF/DOCX/image export, sharing, copy, preset and custom accent colors, and all language features.

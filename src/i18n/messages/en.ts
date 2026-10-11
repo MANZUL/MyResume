@@ -320,6 +320,12 @@ export const en = {
       docx: 'Word',
       image: 'Image',
     },
+    paper: {
+      label: 'Paper size',
+      letter: 'Letter',
+      a4: 'A4',
+      hint: 'Used for PDF, Word and image export.',
+    },
     export: 'Export {format}',
     exportFailed: 'Export failed',
     tryAgain: 'Please try again.',

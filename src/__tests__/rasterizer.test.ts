@@ -394,6 +394,25 @@ describe.skipIf(!existsSync(CHROMIUM))('image export end to end (Chromium stands
     }
   }, 60_000);
 
+  it('Letter and A4 (phase 16): the print intermediate has the selected page size and every image has its ratio', async () => {
+    const mediaBox = (pdf: Buffer) => /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf.toString('latin1'))!.slice(1).map(Number);
+    for (const [paper, box, ratio] of [['letter', [612, 792], 612 / 792], ['a4', [595, 842], 595 / 842]] as const) {
+      const from = shared.length;
+      await service.exportImage(stored(), paper);
+      const [width, height] = mediaBox(printed.at(-1)!);
+      expect(Math.abs(width - box[0]), `${paper} intermediate width`).toBeLessThan(0.5);
+      expect(Math.abs(height - box[1]), `${paper} intermediate height`).toBeLessThan(0.5);
+      const pngs = pngsOf(from);
+      expect(pngs.length).toBeGreaterThanOrEqual(2);
+      for (const png of pngs) {
+        const size = pngSize(png);
+        expect(Math.abs(size.width / size.height - ratio), `${paper} image ratio`).toBeLessThan(0.002);
+        // Same safeguards as before: 216 dpi for Letter, the 2400 px cap for A4.
+        expect(size.height).toBe(paper === 'letter' ? 792 * 3 : RASTER_LIMITS.maxSidePx);
+      }
+    }
+  }, 120_000);
+
   it('refuses a PDF over the page cap', async () => {
     const { uri } = await printToFile({ html: pdfHtml(stored(), 'letter'), width: 612, height: 792, marginPt: 54 });
     await expect(bridge.rasterize(await fs.readBase64(uri), { maxPages: 1 })).rejects.toEqual(new RasterizerError('page_limit:2'));

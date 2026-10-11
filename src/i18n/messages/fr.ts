@@ -328,6 +328,12 @@ export const fr: Messages = {
       docx: 'Word',
       image: 'Image',
     },
+    paper: {
+      label: 'Format du papier',
+      letter: 'Lettre US',
+      a4: 'A4',
+      hint: 'S’applique aux exports PDF, Word et image.',
+    },
     export: 'Export {format}',
     exportFailed: 'Échec de l’export',
     tryAgain: 'Veuillez réessayer.',

@@ -101,8 +101,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('Spanish catalog', () => {
   it('has a Spanish value for every English key, and no other keys', () => {
     expect([...ES.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(ES.size).toBe(453); // 445 + the 8 keys of phase 15
-    expect(EN.size).toBe(453);
+    expect(ES.size).toBe(457); // 445 + the 12 keys of phases 15 and 16
+    expect(EN.size).toBe(457);
     for (const [key, value] of ES) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.es).toBe(es);
@@ -114,7 +114,7 @@ describe('Spanish catalog', () => {
       // Product and brand names (My Resume, Writing Coach's short name "Coach", LinkedIn).
       'analysis.location.linkedin', 'coach.open', 'editor.fields.personal.linkedin', 'nav.home',
       // Technical names.
-      'preview.formats.docx', 'preview.formats.pdf', 'tools.tabs.ats',
+      'preview.formats.docx', 'preview.formats.pdf', 'preview.paper.a4', 'tools.tabs.ats',
       // Pure formats and separators: parameters and punctuation only.
       'analysis.location.inEntry', 'ats.separator', 'ats.statusPrefix', 'check.improveA11y', 'check.outOf', 'editor.listCount',
       'editor.listItem', 'home.templateAndDate', 'match.charCount', 'match.listSeparator', 'match.separator',

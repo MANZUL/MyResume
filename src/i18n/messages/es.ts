@@ -330,6 +330,12 @@ export const es: Messages = {
       docx: 'Word',
       image: 'Imagen',
     },
+    paper: {
+      label: 'Tamaño de papel',
+      letter: 'Carta',
+      a4: 'A4',
+      hint: 'Se usa para exportar a PDF, Word e imagen.',
+    },
     // "Exportar {format}" is wider than the three export buttons can show, so the
     // buttons carry just the format (the screen is the export screen).
     export: '{format}',

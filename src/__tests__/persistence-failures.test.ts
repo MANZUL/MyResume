@@ -376,19 +376,21 @@ describe('the screens and the store report storage failures', () => {
 
 describe('phase 15 messages exist in all five languages', () => {
   const catalogs = { en, de, fr, es, ar } as const;
+  // The paper-size keys (phase 16) are checked in paper-size.test.ts.
+  const KEYS = [...PHASE15_KEYS].filter((key) => !key.startsWith('preview.paper.'));
   const get = (catalog: unknown, key: string) => key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)[part], catalog) as string;
 
   it('every new key has a non-empty value with the same parameters as English, and none repeats an existing English text', () => {
     const params = (value: string) => [...value.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
     for (const [language, catalog] of Object.entries(catalogs)) {
-      for (const key of PHASE15_KEYS) {
+      for (const key of KEYS) {
         const value = get(catalog, key);
         expect(value, `${language} ${key}`).toBeTruthy();
         expect(params(value), `${language} ${key}`).toEqual(params(get(en, key)));
       }
     }
     for (const language of ['de', 'fr', 'es', 'ar'] as const) {
-      for (const key of PHASE15_KEYS) expect(get(catalogs[language], key), `${language} ${key} is translated`).not.toBe(get(en, key));
+      for (const key of KEYS) expect(get(catalogs[language], key), `${language} ${key} is translated`).not.toBe(get(en, key));
     }
   });
 

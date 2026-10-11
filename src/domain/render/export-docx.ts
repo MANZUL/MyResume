@@ -2,6 +2,7 @@ import {
   AlignmentType,
   Document,
   HeadingLevel,
+  PageOrientation,
   Packer,
   Paragraph,
   ShadingType,
@@ -13,6 +14,7 @@ import { FIRST_LETTER_LTR, mapLatinRuns } from '../i18n/bidi';
 import type { Language } from '../i18n/languages';
 import { resumeLabels } from '../i18n/resume-labels';
 import { typographyFor, type Typography } from '../i18n/typography';
+import type { PaperSize } from './render-html';
 import type { ResumeData } from '../resume/types';
 
 type ExportOptions = {
@@ -21,6 +23,14 @@ type ExportOptions = {
   templateName: string;
   /** The resume's own language: labels and typography come from the same source as the PDF. */
   language: Language;
+  /** The same size the PDF and image exports use; Letter when not given. */
+  paper?: PaperSize;
+};
+
+/** Page sizes in twentieths of a point, as OOXML (w:pgSz) writes them. */
+export const DOCX_PAGE_TWIPS: Record<PaperSize, { width: number; height: number }> = {
+  letter: { width: 12240, height: 15840 }, // 8.5 × 11 in
+  a4: { width: 11906, height: 16838 }, // 210 × 297 mm
 };
 
 type ParagraphOptions = ConstructorParameters<typeof Paragraph>[0] & object;
@@ -120,6 +130,7 @@ export async function buildResumeDocxBase64({
   accent,
   templateName,
   language,
+  paper = 'letter',
 }: ExportOptions) {
   const labels = resumeLabels(language);
   const typography = typographyFor(language);
@@ -301,6 +312,8 @@ export async function buildResumeDocxBase64({
       {
         properties: {
           page: {
+            // Written explicitly: without it the docx library silently falls back to A4.
+            size: { width: DOCX_PAGE_TWIPS[paper].width, height: DOCX_PAGE_TWIPS[paper].height, orientation: PageOrientation.PORTRAIT },
             margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
           },
         },

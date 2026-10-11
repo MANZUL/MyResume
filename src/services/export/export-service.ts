@@ -31,7 +31,8 @@ export type ShareResult = 'completed' | 'dismissed' | 'unknown';
 /** Platform side effects (rendering to files, file system, share sheet). Only this service calls it. */
 export interface ExportPlatform {
   generatePdf(resume: StoredResume, paper?: PaperSize): Promise<ExportArtifact>;
-  generateDocx(resume: StoredResume): Promise<ExportArtifact>;
+  /** Word document; `paper` is the same size the PDF and image exports use. */
+  generateDocx(resume: StoredResume, paper?: PaperSize): Promise<ExportArtifact>;
   /** One PNG per page, rasterized from the export PDF. */
   generatePng(resume: StoredResume, paper?: PaperSize): Promise<ExportArtifact>;
   share(artifact: ExportArtifact): Promise<ShareResult | void>;
@@ -129,8 +130,8 @@ export class ExportService {
     return this.exportOnce(resume, { format: 'pdf', paper });
   }
 
-  exportDocx(resume: StoredResume): Promise<void> {
-    return this.exportOnce(resume, { format: 'docx' });
+  exportDocx(resume: StoredResume, paper: PaperSize = 'letter'): Promise<void> {
+    return this.exportOnce(resume, { format: 'docx', paper });
   }
 
   /** PNG image(s) of the resume, one per page, identical to the PDF pages. */
@@ -193,7 +194,7 @@ export class ExportService {
           ? await this.platform.generatePdf(resume, options.paper ?? 'letter')
           : format === 'png'
             ? await this.platform.generatePng(resume, options.paper ?? 'letter')
-            : await this.platform.generateDocx(resume);
+            : await this.platform.generateDocx(resume, options.paper ?? 'letter');
     } catch (error) {
       await this.record(resume, format, 'failed', error);
       throw error;

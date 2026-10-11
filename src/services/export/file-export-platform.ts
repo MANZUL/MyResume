@@ -89,8 +89,9 @@ export function pdfHtml(resume: StoredResume, paper: PaperSize): string {
 }
 
 /** DOCX from the same label source as the PDF, in the resume's language. */
-export function docxBase64(resume: StoredResume): Promise<string> {
+export function docxBase64(resume: StoredResume, paper: PaperSize = 'letter'): Promise<string> {
   return buildResumeDocxBase64({
+    paper,
     data: resume.data,
     accent: resume.accent,
     templateName: templateText(createTranslator(resume.language).t, resume.templateId).name,
@@ -168,10 +169,10 @@ export function createFileExportPlatform(deps: FileExportPlatformDeps): ExportPl
       }
     },
 
-    async generateDocx(resume) {
+    async generateDocx(resume, paper = 'letter') {
       const id = makeId();
       try {
-        const base64 = await docxBase64(resume);
+        const base64 = await docxBase64(resume, paper);
         const file = fs.prepareFile(id, exportFileName(resume, 'docx'));
         fs.writeBase64(file, base64);
         artifacts.set(id, { files: [file], mimeType: DOCX_MIME, dialogTitle: ui()('share.docx'), uti: 'org.openxmlformats.wordprocessingml.document' });

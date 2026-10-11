@@ -13,9 +13,12 @@ import {
   ExportInProgressError,
   ExportInterruptedError,
 } from '../../services/export/export-service';
+import { getPaperSize, setPaperSize, type PaperSize } from '../../services/export/paper-size';
 import { useExportService } from '../../services/export/use-export-service';
 import { renderPreview } from '../../services/preview/preview-service';
 import { useResume } from '../../services/storage/resume-store';
+
+const PAPER_SIZES = ['letter', 'a4'] as const;
 
 const EXPORT_BUTTONS = [
   { kind: 'pdf', variant: 'primary' },
@@ -41,7 +44,9 @@ export default function PreviewScreen() {
   );
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState<'pdf' | 'docx' | 'image' | null>(null);
-  const html = useMemo(() => (resume ? renderPreview(resume) : ''), [resume]);
+  // One paper size for the page shown and for every export (PDF, Word, image) from this screen.
+  const [paper, setPaper] = useState<PaperSize>(getPaperSize);
+  const html = useMemo(() => (resume ? renderPreview(resume, paper) : ''), [resume, paper]);
 
   if (!resume) return null;
   const current = templateText(t, resume.templateId);
@@ -50,9 +55,9 @@ export default function PreviewScreen() {
   const runExport = async (kind: 'pdf' | 'docx' | 'image'): Promise<void> => {
     setBusy(kind);
     try {
-      if (kind === 'pdf') await exporter.exportPdf(resume);
-      else if (kind === 'docx') await exporter.exportDocx(resume);
-      else await exporter.exportImage(resume);
+      if (kind === 'pdf') await exporter.exportPdf(resume, paper);
+      else if (kind === 'docx') await exporter.exportDocx(resume, paper);
+      else await exporter.exportImage(resume, paper);
     } catch (error) {
       if (error instanceof ExportInProgressError || error instanceof ExportInterruptedError || error instanceof ExportCancelledError) {
         // Expected outcomes: another export is running, the app left the foreground, or the user cancelled.
@@ -135,6 +140,42 @@ export default function PreviewScreen() {
             />
           ))}
         </ScrollView>
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel={t('preview.paper.label')}
+          accessibilityHint={t('preview.paper.hint')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 }}
+        >
+          <Text style={{ color: colors.muted, fontSize: 13 }}>{t('preview.paper.label')}</Text>
+          {PAPER_SIZES.map((size) => {
+            const selected = size === paper;
+            const name = t(`preview.paper.${size}`);
+            return (
+              <Pressable
+                key={size}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled: busy !== null }}
+                accessibilityLabel={name}
+                disabled={busy !== null}
+                hitSlop={{ top: 8, bottom: 8 }}
+                onPress={() => {
+                  setPaper(size);
+                  setPaperSize(size);
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: selected ? colors.text : colors.border,
+                  backgroundColor: selected ? colors.text : colors.card,
+                }}
+              >
+                <Text style={{ color: selected ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>{name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16 }}>
           {EXPORT_BUTTONS.map(({ kind, variant }) => {
             const format = t(`preview.formats.${kind}`);

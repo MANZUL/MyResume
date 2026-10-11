@@ -123,7 +123,7 @@ const SHARED = ['editor.startPlaceholder'];
 describe('Arabic catalog', () => {
   it('has an Arabic value for every English key, and no other keys', () => {
     expect([...AR.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(AR.size).toBe(453); // 445 + the 8 keys of phase 15
+    expect(AR.size).toBe(457); // 445 + the 12 keys of phases 15 and 16
     for (const [key, value] of AR) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.ar).toBe(ar);
@@ -134,7 +134,7 @@ describe('Arabic catalog', () => {
     expect(identical).toEqual(
       [
         // Brand and technical names (LinkedIn, PDF, Word, ATS).
-        'analysis.location.linkedin', 'editor.fields.personal.linkedin', 'preview.formats.docx', 'preview.formats.pdf', 'tools.tabs.ats',
+        'analysis.location.linkedin', 'editor.fields.personal.linkedin', 'preview.formats.docx', 'preview.formats.pdf', 'preview.paper.a4', 'tools.tabs.ats',
         // Pure formats and separators: parameters and punctuation only.
         'analysis.location.inEntry', 'ats.separator', 'ats.statusPrefix', 'check.improveA11y', 'check.outOf', 'editor.listCount',
         'editor.listItem', 'home.templateAndDate', 'match.charCount', 'match.separator',
