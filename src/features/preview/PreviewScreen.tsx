@@ -1,10 +1,11 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Button, colors } from '../../ui/components';
-import { accentsFor } from '../../domain/templates/accents';
+import { contentTextStyle } from '../../ui/direction';
+import { accentsFor, CUSTOM_COLOR_EXAMPLE, customAccent } from '../../domain/templates/accents';
 import { TEMPLATES } from '../../domain/templates/templates';
 import { templateText } from '../../i18n/templates';
 import { useT } from '../../services/i18n/localization';
@@ -46,10 +47,27 @@ export default function PreviewScreen() {
   const [busy, setBusy] = useState<'pdf' | 'docx' | 'image' | null>(null);
   // One paper size for the page shown and for every export (PDF, Word, image) from this screen.
   const [paper, setPaper] = useState<PaperSize>(getPaperSize);
+  // A color typed by the user: applied only when it is exactly six hex digits.
+  const [customColor, setCustomColor] = useState('');
+  const [customColorInvalid, setCustomColorInvalid] = useState(false);
   const html = useMemo(() => (resume ? renderPreview(resume, paper) : ''), [resume, paper]);
 
   if (!resume) return null;
   const current = templateText(t, resume.templateId);
+  const sameColor = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+  // The presets, plus the resume's own color when it is a custom one, so the selection is always visible.
+  const presets = accentsFor(resume.templateId);
+  const swatches = presets.some((color) => sameColor(color, resume.accent)) ? presets : [...presets, resume.accent];
+  const applyCustomColor = () => {
+    const result = customAccent(customColor, resume.accent);
+    if (!result.valid) {
+      setCustomColorInvalid(true); // the current color is left as it is
+      return;
+    }
+    setCustomColorInvalid(false);
+    setCustomColor(result.accent);
+    setAccent(resume.id, result.accent);
+  };
 
   // Every export goes to the ExportService (prepare → opaque handle → share). All formats are free.
   const runExport = async (kind: 'pdf' | 'docx' | 'image'): Promise<void> => {
@@ -68,7 +86,7 @@ export default function PreviewScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <WebView
         originWhitelist={['about:blank']}
         source={{ html }}
@@ -118,28 +136,48 @@ export default function PreviewScreen() {
         </ScrollView>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4, gap: 10, alignItems: 'center' }}>
           <Text style={{ color: colors.muted, fontSize: 13 }}>{t('preview.accent', { category: current.category })}</Text>
-          {accentsFor(resume.templateId).map((color) => (
-            <Pressable
-              key={color}
-              accessibilityRole="button"
-              accessibilityLabel={t('preview.accentA11y', { color })}
-              accessibilityState={{ selected: resume.accent === color }}
-              onPress={() => setAccent(resume.id, color)}
-              hitSlop={6}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: color,
-                borderWidth: resume.accent === color ? 3 : 0,
-                borderColor: '#fff',
-                outlineColor: color,
-                outlineWidth: resume.accent === color ? 2 : 0,
-                outlineStyle: 'solid',
-              }}
-            />
-          ))}
+          {swatches.map((color) => {
+            const selected = sameColor(color, resume.accent);
+            return (
+              <Pressable
+                key={color}
+                accessibilityRole="button"
+                accessibilityLabel={t('preview.accentA11y', { color })}
+                accessibilityState={{ selected }}
+                onPress={() => setAccent(resume.id, color)}
+                hitSlop={6}
+                // A dark ring with a gap marks the selection whatever the color is; the thin
+                // border keeps white and very light colors visible on the white bar.
+                style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: selected ? colors.text : 'transparent', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: color, borderWidth: 1, borderColor: colors.border }} />
+              </Pressable>
+            );
+          })}
+          <TextInput
+            value={customColor}
+            onChangeText={(text) => {
+              setCustomColor(text);
+              setCustomColorInvalid(false);
+            }}
+            onSubmitEditing={applyCustomColor}
+            placeholder={t('preview.customColor.placeholder')}
+            placeholderTextColor="#A3A6AC"
+            accessibilityLabel={t('preview.customColor.label')}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={12}
+            returnKeyType="done"
+            // A color code is always left-to-right, in an Arabic app too.
+            style={[{ width: 104, height: 36, borderWidth: 1, borderColor: customColorInvalid ? colors.danger : colors.border, borderRadius: 8, paddingHorizontal: 8, fontSize: 14, color: colors.text }, contentTextStyle('en')]}
+          />
+          <Button title={t('preview.customColor.apply')} variant="secondary" fit onPress={applyCustomColor} style={{ minHeight: 36, paddingHorizontal: 12 }} />
         </ScrollView>
+        {customColorInvalid ? (
+          <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 13, paddingHorizontal: 16 }}>
+            {t('preview.customColor.invalid', { example: CUSTOM_COLOR_EXAMPLE })}
+          </Text>
+        ) : null}
         <View
           accessibilityRole="radiogroup"
           accessibilityLabel={t('preview.paper.label')}
@@ -193,6 +231,6 @@ export default function PreviewScreen() {
           })}
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../ui/components';
+import { RestartNotice } from '../ui/RestartNotice';
 import { RootErrorBoundary } from '../ui/RootErrorBoundary';
 import { StorageBanner } from '../ui/StorageStatus';
 import { purgeExportArtifacts } from '../services/export/expo-export-platform';
@@ -32,6 +33,8 @@ export default function RootLayout() {
                 </View>
                 {/* Failed saves and deletes stay visible on every screen until storage confirms. */}
                 <StorageBanner />
+                {/* Layout direction changes (first launch in Arabic) need the app to be reopened. */}
+                <RestartNotice />
               </View>
               {/* Hidden, offline pdf.js page for image export; renders nothing until an image export runs. */}
               <RasterizerHost />

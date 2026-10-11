@@ -334,6 +334,12 @@ export const fr: Messages = {
       a4: 'A4',
       hint: 'S’applique aux exports PDF, Word et image.',
     },
+    customColor: {
+      label: 'Couleur personnalisée',
+      placeholder: '#RRGGBB',
+      apply: 'Utiliser la couleur',
+      invalid: 'Saisissez une couleur hexadécimale à 6 chiffres, par exemple {example}.',
+    },
     export: 'Export {format}',
     exportFailed: 'Échec de l’export',
     tryAgain: 'Veuillez réessayer.',

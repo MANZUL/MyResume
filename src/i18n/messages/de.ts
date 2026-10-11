@@ -331,6 +331,12 @@ export const de: Messages = {
       a4: 'A4',
       hint: 'Gilt für PDF-, Word- und Bild-Export.',
     },
+    customColor: {
+      label: 'Eigene Farbe',
+      placeholder: '#RRGGBB',
+      apply: 'Farbe verwenden',
+      invalid: 'Geben Sie eine sechsstellige Hex-Farbe ein, zum Beispiel {example}.',
+    },
     // A compound keeps the three export buttons as narrow as the English ones.
     export: '{format}-Export',
     exportFailed: 'Export fehlgeschlagen',

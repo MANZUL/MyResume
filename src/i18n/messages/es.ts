@@ -336,6 +336,12 @@ export const es: Messages = {
       a4: 'A4',
       hint: 'Se usa para exportar a PDF, Word e imagen.',
     },
+    customColor: {
+      label: 'Color personalizado',
+      placeholder: '#RRGGBB',
+      apply: 'Usar color',
+      invalid: 'Introduce un color hexadecimal de 6 dígitos, por ejemplo {example}.',
+    },
     // "Exportar {format}" is wider than the three export buttons can show, so the
     // buttons carry just the format (the screen is the export screen).
     export: '{format}',

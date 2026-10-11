@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "My Resume"
+  },
+  "android": {
+    "app_name": "My Resume"
+  }
+}

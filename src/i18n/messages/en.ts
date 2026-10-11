@@ -326,6 +326,12 @@ export const en = {
       a4: 'A4',
       hint: 'Used for PDF, Word and image export.',
     },
+    customColor: {
+      label: 'Custom color',
+      placeholder: '#RRGGBB',
+      apply: 'Use color',
+      invalid: 'Enter a 6-digit hex color, for example {example}.',
+    },
     export: 'Export {format}',
     exportFailed: 'Export failed',
     tryAgain: 'Please try again.',

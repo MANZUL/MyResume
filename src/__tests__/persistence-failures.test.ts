@@ -376,8 +376,8 @@ describe('the screens and the store report storage failures', () => {
 
 describe('phase 15 messages exist in all five languages', () => {
   const catalogs = { en, de, fr, es, ar } as const;
-  // The paper-size keys (phase 16) are checked in paper-size.test.ts.
-  const KEYS = [...PHASE15_KEYS].filter((key) => !key.startsWith('preview.paper.'));
+  // The preview keys (phases 16 and 17) are checked in paper-size.test.ts and accent-color.test.ts.
+  const KEYS = [...PHASE15_KEYS].filter((key) => !key.startsWith('preview.'));
   const get = (catalog: unknown, key: string) => key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)[part], catalog) as string;
 
   it('every new key has a non-empty value with the same parameters as English, and none repeats an existing English text', () => {

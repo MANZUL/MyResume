@@ -21,6 +21,16 @@ export function isHexColor(value: string): boolean {
   return /^#[0-9a-f]{6}$/i.test(value);
 }
 
+/**
+ * A color typed by a user: six hex digits with or without a leading "#", surrounding spaces
+ * ignored. Returns it as "#RRGGBB" (upper case), or null when it is not exactly that
+ * (three-digit shorthand, names, rgb() and anything else are refused, never guessed at).
+ */
+export function normalizeHexColor(input: string): string | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(input.trim());
+  return match ? `#${match[1].toUpperCase()}` : null;
+}
+
 // Letters and digits kept in file names. Explicit ranges, not \p{L}, so the result is
 // the same on every JavaScript engine (Hermes on iOS/Android, Node in tests):
 // ASCII, Latin-1 and Latin Extended letters, combining marks, Greek, Cyrillic, Hebrew,

@@ -368,6 +368,12 @@ export const ar: Messages = {
       a4: 'A4',
       hint: 'يُستخدم عند تصدير PDF وWord والصورة.',
     },
+    customColor: {
+      label: 'لون مخصص',
+      placeholder: '#RRGGBB',
+      apply: 'استخدام اللون',
+      invalid: 'أدخل لونًا بصيغة سداسية عشرية من 6 خانات، مثل {example}.',
+    },
     export: 'تصدير {format}',
     exportFailed: 'فشل التصدير',
     tryAgain: 'يرجى المحاولة مرة أخرى.',

@@ -97,8 +97,8 @@ const stored = (language: Language, overrides: Partial<StoredResume> = {}): Stor
 describe('French catalog', () => {
   it('has a French value for every English key, and no other keys', () => {
     expect([...FR.keys()].sort()).toEqual([...EN.keys()].sort());
-    expect(FR.size).toBe(457); // 445 + the 12 keys of phases 15 and 16
-    expect(EN.size).toBe(457);
+    expect(FR.size).toBe(461); // 445 + the 16 keys of phases 15 to 17
+    expect(EN.size).toBe(461);
     for (const [key, value] of FR) for (const form of forms(value)) expect(form.trim(), key).not.toBe('');
     // The runtime catalog is the complete file.
     expect(CATALOGS.fr).toBe(fr);
@@ -114,7 +114,7 @@ describe('French catalog', () => {
       'editor.fields.certifications.date', 'editor.sections.certifications', 'preview.export', 'preview.formats.image', 'resume.labels.certifications',
       'templates.categories.Tech',
       // Technical names.
-      'preview.formats.docx', 'preview.formats.pdf', 'preview.paper.a4', 'tools.tabs.ats',
+      'preview.formats.docx', 'preview.formats.pdf', 'preview.paper.a4', 'preview.customColor.placeholder', 'tools.tabs.ats',
       // Pure formats and separators: parameters and punctuation only.
       'analysis.location.inEntry', 'ats.separator', 'check.outOf', 'editor.listCount', 'editor.listItem', 'home.templateAndDate', 'match.charCount',
       'match.listSeparator', 'match.separator',

@@ -8,10 +8,17 @@
     "scheme": "myresume",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.manzul.myresume",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleLocalizations": [
+          "en",
+          "de",
+          "fr",
+          "es",
+          "ar"
+        ]
       }
     },
     "android": {
@@ -49,6 +56,13 @@
       "eas": {
         "projectId": "b6228382-fccd-4ffb-a501-0d1da73af85f"
       }
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "de": "./locales/de.json",
+      "fr": "./locales/fr.json",
+      "es": "./locales/es.json",
+      "ar": "./locales/ar.json"
     }
   }
 }
