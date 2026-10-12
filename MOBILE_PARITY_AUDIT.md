@@ -1,5 +1,7 @@
 # Mobile parity audit: MANZUL/Resume (web) vs `resume-mobile/` (Expo)
 
+> **HISTORICAL (phase 19).** This audit compares an early prototype at commit `58d35f7` with the web product. It is not a description of the current app: the prototype was replaced, monetization was removed (phase 13C) and many gaps it lists were closed or dropped. Current facts: `README.md` and `MOBILE_ONLY_ARCHITECTURE_PLAN.md` ("Current state").
+
 **Scope.** I read every source file in `MANZUL/Resume` at commit `8e04af0`: all of `artifacts/`, `lib/`,
 `scripts/`, `.agents/memory/`, the workspace config, and the product briefs in `attached_assets/`.
 I did not re-read the ~50 generic shadcn `components/ui/*` files. I compared against `resume-mobile/`

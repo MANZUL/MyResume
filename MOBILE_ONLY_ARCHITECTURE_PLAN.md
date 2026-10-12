@@ -1,10 +1,38 @@
 # My Resume — mobile-only architecture plan
 
-**Status:** revision 3 approved; open decisions resolved (see the end of the document). **Steps 0–9a and 10 (Job Match only) are done in code** (§19, §19.1–§19.10); device validation of steps 4–10 is still open. Step 9 is the owner-approved ATS Readability Checker (scope amendment in §19.9); Import moved to step 9b. No billing SDK, no AI, no EAS builds.
+**Status (phase 19, base `e55dd2c`):** this document is a design record that grew over phases 0–18. **Read "Current state" below first.** Sections marked SUPERSEDED describe plans that were replaced and are not current behavior. Nothing has been run on a device or emulator, no EAS build was made and nothing was submitted to a store.
+
+## Current state (read this first)
+
+**Product.** Free, offline-first, no AI, no account, no server. Five languages (en, de, fr, es, ar); app language and resume language are separate. Local SQLite (schema v4, four migrations) plus a local, unencrypted JSON backup. Identity: `com.manzul.myresume`.
+
+| Phase | What it settled | Record |
+|---|---|---|
+| 13A–13F | Localization: five catalogs, translator, RTL and Arabic document typography | §19.11, §19.11a–e |
+| 13C | Completely free product; all monetization removed | §19.12 |
+| 15 | Visible save/load/delete failures with Retry, import limit, root error boundary, cover-letter tense | §19.13 |
+| 16 | Letter/A4 for PDF, Word, image and preview | §19.14 |
+| 17 | Native localization declarations, restart notice, custom accent color, iPad off | §19.15 |
+| 18 | Local backup and restore (replace all) | §19.16 |
+| 19 | Documentation and release preparation | this section, `README.md`, `docs/` |
+
+**Where the current facts live.** `README.md` (features, commands, architecture, limits); `docs/PRIVACY_POLICY_DRAFT.md` (DRAFT, not legal advice); `docs/STORE_READINESS.md`; `docs/EAS_AND_SIGNING.md` (including the unobserved CI workflow `.github/workflows/ci.yml`). `MOBILE_PARITY_AUDIT.md` is a historical audit of an earlier prototype.
+
+**Remaining risks (none of them fixed by phase 19).**
+1. **No device validation at all.** Every "done" in this document means code, tests and a bundle export. Device Validation (a later phase) is still open.
+2. **Bundle exports prove only that the JavaScript bundles**, not that the app launches, renders, prints or shares correctly.
+3. **Backups are unencrypted** and a restore replaces all data; a lost device without a backup loses everything.
+4. **Export correctness on real devices is unmeasured**: `expo-print` page size, Word/Google Docs opening, pdf.js rasterization memory on low-end Android.
+5. **Release configuration is unreviewed**: the `INTERNET` permission, `expo-dev-client` in production, Android `allowBackup`, `npm audit` advisories (see `docs/EAS_AND_SIGNING.md`).
+6. **Store material does not exist**: privacy policy URL, publisher identity, screenshots, store forms (see `docs/STORE_READINESS.md`).
+7. **CI has never been observed running.**
+8. Smaller: the paper size is not persisted; the cover letter is English-only; iPad and Android tablet layouts were never designed; a process kill during a failing write loses the unsaved edit.
 
 > **Superseded by the owner's final product decision (phase 13C, §19.12): My Resume is completely free.**
 > There is no Premium, subscription, purchase, paywall, entitlement or price anywhere in the app. The
 > revision 3 pricing and entitlement sections below are kept as project history only.
+
+> **SUPERSEDED** (revision 3 pricing and the original decisions table). The table below is historical: the language is now five languages, the product model is completely free, and there is no entitlement or payment provider. Current facts are in "Current state" above.
 
 **Revision 3: "Free to build, paid to export."**
 - FREE users can build, edit, save and preview resumes.
@@ -154,6 +182,8 @@ src/
 - Wordy-phrase table, shown as a preview.
 
 ---
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. Section 4 (commercial model, FREE vs PREMIUM, entitlement, trust and offline policy) is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ## 4. Payment / product architecture
 
@@ -378,6 +408,8 @@ ExportRecord  { id, resumeId, format: 'pdf'|'docx'|'png', paper, templateId, cre
 
 ---
 
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. The PREMIUM label on Job Match. The engine design is current; Job Match is free is kept as project history only and does not describe current behavior; no such code exists in the app.
+
 ## 9. Job Match architecture (PREMIUM)
 
 ```
@@ -443,6 +475,8 @@ JD → segment → extract → normalize → weight → evidence → score + gap
 - There is no letter PDF/DOCX/image in V1. If one is added later, it goes through `ExportService` like any other export.
 
 ---
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. The PREMIUM label and the entitlement gate on export. The secure export design is current; export is free is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ## 11. Export architecture (PREMIUM): PDF, DOCX, image, share
 
@@ -526,7 +560,9 @@ The schema version is kept in SQLite's `PRAGMA user_version`. There is no `meta`
 
 ## 13. Security model
 
-**Assets:** the user's resume data, and the `premium` entitlement (export + tools).
+**Assets:** the user's resume data. (The `premium` entitlement named in revision 3 no longer exists.)
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. Section 13.1 (verifying a subscription) is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ### 13.1 How "verified" is established (decided when the provider is chosen)
 
@@ -568,6 +604,8 @@ The `StoreProvider` interface fits all three options.
 
 ---
 
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. The subscription parts of this section (item 2) is kept as project history only and does not describe current behavior; no such code exists in the app.
+
 ## 15. What happens after reinstall
 
 1. **User data**
@@ -582,6 +620,8 @@ The `StoreProvider` interface fits all three options.
 3. **Messaging.** The empty state explains the backup option. The app shows a backup reminder after the third resume or the first export.
 
 ---
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. Section 16 is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ## 16. What happens after a purchase (subscribe)
 
@@ -609,6 +649,8 @@ The `StoreProvider` interface fits all three options.
    - Expiry or refund returns the user to FREE. Their data stays intact, and the preview becomes watermarked again.
 
 ---
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. Section 17 is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ## 17. What happens when a purchase is restored
 
@@ -667,6 +709,8 @@ The `StoreProvider` interface fits all three options.
 ---
 
 ## 19. Migration order
+
+> Steps 3, 8 and 10 below were written for the paid design (entitlement, PREMIUM tools); their premium parts are SUPERSEDED by §19.12. Step 11 (store billing providers, subscription products) is SUPERSEDED and will not be done. Step 12 was partly done in phases 15–18 (backup, error boundary, paper picker, custom-color UI); accessibility review and low-end Android performance remain open.
 
 Every step ends green: typecheck, lint, tests, and the no-AI/no-network guard. Steps marked ◆ also need a device QA gate.
 
@@ -860,6 +904,8 @@ The window that can be lost if the OS kills the app mid-typing is bounded by the
 | Crash durability approximated by opening a second connection without closing the first | A real OS kill of the app process |
 | The Step 1 legacy import, from fixture JSON | Reading a real Step 1 key-value file on a device |
 | Typecheck, lint, iOS and Android bundles (the storage modules are present in both, per source maps) | The database error screen and retry on a device |
+
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. Its entitlement and gating design is kept as project history only and does not describe current behavior; no such code exists in the app.
 
 ### 19.3 Step 3 record: entitlement architecture and premium gating
 
@@ -1349,6 +1395,8 @@ The null-safety mutant has no observable behavior: `String.split` always returns
 | | Keyboard, focus and input state after delete or reorder with stable keys |
 | | `dismissTo` behavior when the editor is not in the stack (deep link into Tools) |
 
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. The PREMIUM label. The Coach rules are current; the Coach is free is kept as project history only and does not describe current behavior; no such code exists in the app.
+
 ### 19.8 Step 8 record: Writing Coach (PREMIUM)
 
 **Scope (plan §3, §1 #22; owner decisions).**
@@ -1633,6 +1681,8 @@ A PDF text layer splits both into single letters. The checker reported this hone
   - iOS prints through WebKit and CoreGraphics, so it needs confirmation.
 - To check without EAS: a local `npx expo run:ios|android` build (or an Expo Go probe that calls `Print.printToFileAsync`), then the same pdf.js + pdfminer.six extraction on the exported files.
 
+> **SUPERSEDED (phase 13C, §19.12).** My Resume is completely free. The PREMIUM label and the gating. The Job Match rules are current; Job Match is free is kept as project history only and does not describe current behavior; no such code exists in the app.
+
 ### 19.10 Step 10 record: Job Match (PREMIUM)
 
 **Scope (owner, narrower than §9).** Job description → resume match only. Not built: a match percentage or any score (§9's weighted percentage is withdrawn), free 2–3 word phrase extraction, tailoring, resume rewriting, Keyword Gap as a separate feature, Cover Letter changes, job-board integration, application tracking, AI. The Step 7 Resume Score is unchanged.
@@ -1688,7 +1738,7 @@ A PDF text layer splits both into single letters. The checker reported this hone
 
 ### 19.11 Localization architecture (owner decision: 5 launch languages)
 
-**Languages:** English (en), German (de), French (fr), Spanish (es), Arabic (ar, right-to-left). No translations yet: every non-English catalog is empty and falls back to English key by key.
+**Languages:** English (en), German (de), French (fr), Spanish (es), Arabic (ar, right-to-left). This section was written before the translations. All five catalogs are now populated (§19.11b–e); a missing key still falls back to English key by key.
 
 **Two separate languages.**
 - **App language** (buttons, menus, messages): the saved choice (`app_settings`), else the device language on first launch (`Intl` locale, primary subtag), else English. Chosen on the new Language screen (Home, header).
@@ -2280,6 +2330,8 @@ Fixes the data-loss gap from the audit (plan risk 11: no server, so no recovery 
 
 **Note.** Devices that ran an earlier development build may still hold an orphaned `my-resume-entitlement.db` file. The app no longer opens or reads it.
 
+> Rows 1–3, 5–8 and 15 were written for the paid design and are SUPERSEDED (no subscription, entitlement or paywall exists). Rows 4, 9–14 and 16 still apply in spirit. The current risk list is in "Current state" at the top of this document; phase 19 fixed none of these risks.
+
 ## 20. Major risks and failure modes
 
 | # | Risk | Impact | Mitigation |
@@ -2302,6 +2354,8 @@ Fixes the data-loss gap from the audit (plan risk 11: no server, so no recovery 
 | 16 | Keeping prototype code because tests pass | Drift from the spec | §18 classification plus a parity checklist |
 
 ---
+
+> **SUPERSEDED in part.** The "Free to build, paid to export" model, the $7.99 subscription, the premium entitlement and its offline deadline, the premium custom accent color, the no-trial and Family Sharing items, and the verification/product-ID/Terms deferrals are all withdrawn by §19.12. Still current: mobile-only, no AI, offline-first, no backend, Local Profile, Cover Letter free, no screenshot-prevention claim. Languages: five, not English-only. Privacy and Terms URLs are still undecided (`docs/STORE_READINESS.md`).
 
 ## Decisions
 

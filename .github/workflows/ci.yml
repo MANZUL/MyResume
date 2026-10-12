@@ -1,0 +1,97 @@
+# Continuous integration for My Resume.
+#
+# Runs only checks that need no credentials and no secrets: install, typecheck, lint, the test
+# suite (with the localization, free-product, architecture and config guards listed as their own
+# step) and the two JavaScript bundle exports. It does not build native apps, sign anything, run
+# EAS, or submit to a store. A green run does NOT mean the app works on a device: bundle exports
+# prove only that the JavaScript compiles and bundles.
+#
+# Status: written in phase 19 and NOT yet observed running on GitHub.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, lint, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Chromium for the layout, PDF, image-export and error-boundary tests. Without it those tests
+      # are skipped silently, so the "Check Chromium" step fails the job instead.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
+      CHROMIUM_PATH: ${{ github.workspace }}/.pw-browsers/chromium-1194/chrome-linux/chrome
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # the tests use node:sqlite
+          cache: npm
+
+      # The layout budgets were measured with Liberation Sans, and Arabic text needs an Arabic-capable font.
+      - name: Install fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-liberation fonts-dejavu-core
+
+      # Runs the postinstall step that generates the git-ignored pdf.js source file.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Check Chromium
+        run: test -x "$CHROMIUM_PATH"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Localization, free-product, architecture and config guards
+        run: >-
+          npx vitest run
+          src/__tests__/localization.test.ts
+          src/__tests__/free-product.test.ts
+          src/__tests__/architecture.test.ts
+          src/__tests__/platform-config.test.ts
+
+      - name: Test suite
+        run: npm test
+
+  bundles:
+    name: Bundle export (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, android]
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export ${{ matrix.platform }} bundle
+        run: npx expo export --platform ${{ matrix.platform }} --output-dir dist --clear
