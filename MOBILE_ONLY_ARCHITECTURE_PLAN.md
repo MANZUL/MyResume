@@ -15,6 +15,7 @@
 | 17 | Native localization declarations, restart notice, custom accent color, iPad off | §19.15 |
 | 18 | Local backup and restore (replace all) | §19.16 |
 | 19 | Documentation and release preparation | this section, `README.md`, `docs/` |
+| 20 | Release hardening: Android OS backup off, unused permissions blocked, lockfile advisory fixes, CI observed | §19.17, `docs/RELEASE_CONFIG_REVIEW.md` |
 
 **Where the current facts live.** `README.md` (features, commands, architecture, limits); `docs/PRIVACY_POLICY_DRAFT.md` (DRAFT, not legal advice); `docs/STORE_READINESS.md`; `docs/EAS_AND_SIGNING.md` (including the unobserved CI workflow `.github/workflows/ci.yml`). `MOBILE_PARITY_AUDIT.md` is a historical audit of an earlier prototype.
 
@@ -23,9 +24,9 @@
 2. **Bundle exports prove only that the JavaScript bundles**, not that the app launches, renders, prints or shares correctly.
 3. **Backups are unencrypted** and a restore replaces all data; a lost device without a backup loses everything.
 4. **Export correctness on real devices is unmeasured**: `expo-print` page size, Word/Google Docs opening, pdf.js rasterization memory on low-end Android.
-5. **Release configuration is unreviewed**: the `INTERNET` permission, `expo-dev-client` in production, Android `allowBackup`, `npm audit` advisories (see `docs/EAS_AND_SIGNING.md`).
+5. **Release configuration is partly reviewed (phase 20), not verified on a build**: Android `allowBackup` is off and three permissions are blocked, but the merged manifest was never built; `INTERNET` and `VIBRATE` remain; the Android release footprint of `expo-dev-client` is unverified; 31 `npm audit` advisories remain (none critical; they need an Expo SDK change). iOS device backups may include app data.
 6. **Store material does not exist**: privacy policy URL, publisher identity, screenshots, store forms (see `docs/STORE_READINESS.md`).
-7. **CI has never been observed running.**
+7. **CI**: run 38245010810 for `2640844` passed on GitHub; it proves JavaScript checks and bundling only.
 8. Smaller: the paper size is not persisted; the cover letter is English-only; iPad and Android tablet layouts were never designed; a process kill during a failing write loses the unsaved edit.
 
 > **Superseded by the owner's final product decision (phase 13C, §19.12): My Resume is completely free.**
@@ -2296,6 +2297,10 @@ Fixes the data-loss gap from the audit (plan risk 11: no server, so no recovery 
 - **Catalog keys (25, all five languages):** `nav.backup` and `backup.*` (intro, privacy, export/restore labels and hints, three progress states, confirmation title/body/counts/button, restored, skipped, eight errors). The German, French and Spanish texts avoid the words the free-product text guards reject (for example "wiederherstellen", "restaurer").
 
 **Device validation: NOT RUN.** Add to the checklist: the system share sheet and picker on iOS and Android (Files, Drive, iCloud, e-mail); a backup of Arabic/mixed resumes opened in another app and restored; restoring on a second device; a very large backup; cancelling at each step; the overlay and the confirmation dialog in Arabic; picker file-type filtering for `.json` from different providers; a restore interrupted by backgrounding.
+
+### 19.17 Phase 20: release hardening and final source review
+
+Full evidence, impact and regression notes are in `docs/RELEASE_CONFIG_REVIEW.md`. Changes: `app.json` `android.allowBackup: false`; `blockedPermissions` extended with `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW`; a lockfile-only update of `shell-quote` and `source-map-js`; new config tests. Not changed: `expo-dev-client` (kept; debug-only on iOS), `INTERNET`, `VIBRATE`, versions, `eas.json`, ids, schema and migrations, `src/` application code. The source review found no monetization runtime code (three comment/AppState matches), no network calls in `src/`, all WebViews restricted to `about:blank` or `data:` with file access off (JavaScript on only in the offline rasterizer), and no secrets or credential files tracked. **Device validation: NOT RUN.**
 
 ### 19.12 Phase 13C: My Resume is completely free (owner's final product decision)
 

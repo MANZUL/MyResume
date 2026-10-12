@@ -75,12 +75,42 @@ describe('identity and linkage are unchanged', () => {
     expect(app.android.package).toBe('com.manzul.myresume');
     expect(app.owner).toBe('snln');
     expect(app.extra.eas.projectId).toBe('b6228382-fccd-4ffb-a501-0d1da73af85f');
-    expect(app.android.blockedPermissions).toEqual(['android.permission.RECORD_AUDIO']);
+    expect(app.android.blockedPermissions).toEqual([
+      'android.permission.RECORD_AUDIO',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+    ]);
   });
 
   it('eas.json is unchanged', () => {
     const eas = JSON.parse(readFileSync(join(ROOT, 'eas.json'), 'utf8'));
     expect(eas.cli.appVersionSource).toBe('remote');
     expect(eas.build.production).toEqual({ autoIncrement: true });
+  });
+});
+
+describe('release hardening (phase 20)', () => {
+  it('Android OS backup is off: resume data is only copied by the explicit JSON backup', () => {
+    expect(app.android.allowBackup).toBe(false);
+  });
+
+  it('the app declares no network-capable or media permissions beyond what the SDK adds, and blocks the unused ones', () => {
+    const blocked: string[] = app.android.blockedPermissions;
+    // File access goes through the system picker/share sheet and the app cache; no legacy storage permission is needed.
+    expect(blocked).toContain('android.permission.READ_EXTERNAL_STORAGE');
+    expect(blocked).toContain('android.permission.WRITE_EXTERNAL_STORAGE');
+    expect(app.android.permissions).toBeUndefined();
+  });
+
+  it('expo-dev-client is not a config plugin (the SDK applies its plugin only through autolinking, debug-only)', () => {
+    expect(JSON.stringify(app.plugins)).not.toContain('expo-dev-client');
+  });
+
+  it('no over-the-air update service is configured (expo-updates is not installed)', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    expect(pkg.dependencies['expo-updates']).toBeUndefined();
+    expect(app.updates).toBeUndefined();
+    expect(app.runtimeVersion).toBeUndefined();
   });
 });

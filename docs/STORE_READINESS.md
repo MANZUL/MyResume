@@ -56,8 +56,8 @@ Legend: ✅ ready in the repository · ⚠️ partly ready or needs a decision �
 | Play Console developer account, app entry for `com.manzul.myresume` | ⬜ | TBD. |
 | App signing (Play App Signing, upload key) | ⬜ | EAS can manage the upload keystore; back it up outside the repository. See `docs/EAS_AND_SIGNING.md`. |
 | Release artifact | ⬜ | Production build with EAS; confirm an app bundle. **Not built.** |
-| Data safety form | ⬜ | Depends on the privacy REVIEW items (permissions in the generated manifest, `allowBackup`, release-build network behavior). **Do not declare "no data collected or shared" until reviewed.** |
-| Permissions declarations | ⚠️ | Review `INTERNET`, storage (≤ Android 12L), `SYSTEM_ALERT_WINDOW`, `VIBRATE` in a release build. |
+| Data safety form | ⬜ | Depends on the privacy REVIEW items (permissions in the generated manifest, release-build network behavior; `allowBackup` is now `false`, untested). **Do not declare "no data collected or shared" until reviewed.** |
+| Permissions declarations | ⚠️ | Phase 20 blocks storage and `SYSTEM_ALERT_WINDOW`; `INTERNET` and `VIBRATE` remain. Confirm in the merged manifest of a real build (`docs/RELEASE_CONFIG_REVIEW.md`). |
 | Content rating (IARC) questionnaire | ⬜ | TBD. |
 | Target audience and content / ads declaration | ⬜ | The app has no ads. Target audience: TBD (REVIEW). |
 | Testing track (internal / closed) | ⬜ | Requirements for new personal accounts (testers, duration) must be checked in Play Console at the time: TBD. |

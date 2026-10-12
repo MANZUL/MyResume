@@ -1,6 +1,6 @@
 # EAS configuration, signing and release checklist
 
-This document records what `app.json` and `eas.json` contain **today** (commit `e55dd2c`) and the steps that
+This document records what `app.json` and `eas.json` contain **today** (phase 20; evidence and decisions are in [`RELEASE_CONFIG_REVIEW.md`](RELEASE_CONFIG_REVIEW.md)) and the steps that
 are still needed before a release. **Nothing here has been executed:** no EAS build, no credential
 creation, no store submission and no device run happened in phase 19. No credentials or secrets are
 stored in this repository and none should ever be added to it. Unknown values are **TBD**.
@@ -19,7 +19,8 @@ stored in this repository and none should ever be added to it. Unknown values ar
 | iPad | `ios.supportsTablet: false` (iPhone-only build; no tablet layout exists) |
 | iOS localizations | `CFBundleLocalizations`: en, de, fr, es, ar; plus Expo `locales` files in `locales/` |
 | iOS export compliance | `ITSAppUsesNonExemptEncryption: false` (**REVIEW**: a human must confirm this answer) |
-| Android blocked permission | `android.permission.RECORD_AUDIO` |
+| Android blocked permissions | `RECORD_AUDIO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` (phase 20) |
+| Android OS backup | `android.allowBackup: false` (phase 20) |
 | Orientation / UI style | portrait / light |
 | Assets | `assets/icon.png`, Android adaptive icon layers (foreground, background, monochrome) and `assets/splash-icon.png`, all 1024 × 1024 PNGs |
 | Plugins | `expo-router`, `expo-sharing`, `expo-splash-screen`, `expo-sqlite` |
@@ -81,28 +82,21 @@ Everything below needs a human with the right accounts. TBD means the value is u
 4. **Internal testing:** `eas build --profile preview` produces an APK for sideloading; it was **not built**.
 5. **Submit:** create a Google service account with Play Console access for `eas submit`, configure
    `submit.production.android`, and keep the key file out of git. TBD.
-6. **Permissions review.** The generated manifest (from `app.json`) includes `INTERNET`, `READ_EXTERNAL_STORAGE`
-   and `WRITE_EXTERNAL_STORAGE` (both limited to Android 12L and lower), `SYSTEM_ALERT_WINDOW` and `VIBRATE`;
-   `RECORD_AUDIO` is removed. Whether each is needed in a **release** build (several come from the
-   development client) must be reviewed before the Data safety form is filled in. **REVIEW**
-7. **`android:allowBackup="true"`** is set in the generated manifest. Decide whether to keep it (see the
-   privacy draft). **REVIEW**
+6. **Permissions.** After phase 20 the generated manifest declares `INTERNET` and `VIBRATE`; `RECORD_AUDIO`,
+   `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` and `SYSTEM_ALERT_WINDOW` are removed. The merged manifest of a
+   real build has not been inspected (no Gradle build): inspect it on the first build. **REVIEW**
+7. **`android:allowBackup="false"`** since phase 20: Android will not back up or restore app data. Users
+   recover only through the in-app JSON backup. Not device-tested.
 
 ## Things to decide before the first release build (REVIEW)
 
-- `expo-dev-client` is a production dependency. Decide whether production builds should include it (it
-  contributes the iOS ATS and local-network entries and Android overlay/vibrate permissions noted above).
+- `expo-dev-client` stays a dependency (needed by the `development` profile). It is debug-only on iOS by
+  autolinking and its Info.plist keys are stripped from non-Debug iOS builds; its Android release footprint is
+  unverified. See `RELEASE_CONFIG_REVIEW.md`, decision 1.
+- `INTERNET` and `VIBRATE` remain; confirm in the first real build's manifest.
 - Whether to bundle an Arabic-capable font (documents currently use platform fonts).
-- The `npm audit --omit=dev` advisories (below).
-
-### `npm audit --omit=dev` at this commit
-
-`braces` (high) and `node-forge` (high) via `@expo/cli`; `shell-quote` (critical) via
-`react-native` → `react-devtools-core`; `decode-uri-component` (moderate) via `expo-router` →
-`query-string`. These are transitive dependencies of the Expo and React Native toolchain. This phase did not
-analyze whether any of them is exploitable in the app or ships in a release bundle (`decode-uri-component` is
-reached through a runtime dependency, `expo-router`). `npm audit fix` suggests changes that are not usable
-(it proposes a downgrade). Track the Expo SDK patch releases and re-check before release. TBD.
+- The remaining `npm audit` advisories: classified in `RELEASE_CONFIG_REVIEW.md`. Phase 20 fixed `shell-quote`
+  and `source-map-js` in the lockfile (31 advisories remain, none critical); the rest need an Expo SDK change.
 
 ## Release procedure outline (all steps TBD until a human runs them)
 
@@ -115,8 +109,9 @@ reached through a runtime dependency, `expo-router`). `npm audit fix` suggests c
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` (added in phase 19) defines two jobs. **It has not been observed running on GitHub;**
-it was written from commands that were run locally and parsed as valid YAML.
+`.github/workflows/ci.yml` (added in phase 19) defines two jobs. **Observed on GitHub:** run id `38245010810`
+for commit `2640844` succeeded (https://github.com/MANZUL/MyResume/actions/runs/38245010810); details in
+`RELEASE_CONFIG_REVIEW.md`.
 
 | Job | What it runs |
 |---|---|
@@ -127,7 +122,5 @@ Notes and limits:
 
 - It uses no secrets, no credentials, no EAS and no store access, and has read-only repository permissions.
   Actions are pinned to major tags (`actions/checkout@v4`, `actions/setup-node@v4`), not commit SHAs.
-- The Chromium tests may behave differently on a GitHub runner than in the environment used so far
-  (fonts and rendering). If they fail only in CI, investigate the fonts before changing the tests.
 - **A green CI run does not prove the app works on a device.** Bundle exports prove only that the JavaScript
   compiles and bundles. There is no native build, no emulator and no device test in CI.

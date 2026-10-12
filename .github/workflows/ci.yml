@@ -6,7 +6,7 @@
 # EAS, or submit to a store. A green run does NOT mean the app works on a device: bundle exports
 # prove only that the JavaScript compiles and bundles.
 #
-# Status: written in phase 19 and NOT yet observed running on GitHub.
+# Status: written in phase 19. First observed run: 2640844 passed on GitHub (see docs/RELEASE_CONFIG_REVIEW.md).
 
 name: CI
 

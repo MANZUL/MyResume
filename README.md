@@ -89,11 +89,12 @@ fail. Use `npm install` or `npm ci` without `--ignore-scripts`.
 Chromium through `playwright-core`. They look for Chromium at
 `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` or at the path in the `CHROMIUM_PATH` environment variable,
 and they are **skipped** (not failed) when it is missing, so a green run without Chromium covers less. At the
-time of writing the suite is 30 files, 768 passed and 1 skipped; the skipped test regenerates thumbnails and is
+time of writing the suite is 30 files, 772 passed and 1 skipped; the skipped test regenerates thumbnails and is
 skipped by design.
 
 **CI.** `.github/workflows/ci.yml` runs the same checks on GitHub; see
-[`docs/EAS_AND_SIGNING.md`](docs/EAS_AND_SIGNING.md#continuous-integration) for what it does and what has not been observed.
+[`docs/EAS_AND_SIGNING.md`](docs/EAS_AND_SIGNING.md#continuous-integration) for what it does. The first run (commit `2640844`) passed on GitHub; see
+[`docs/RELEASE_CONFIG_REVIEW.md`](docs/RELEASE_CONFIG_REVIEW.md).
 
 ## Architecture
 
@@ -192,8 +193,9 @@ Verified from the current repository:
 - **There is no in-app "delete all data"** and no way to clear the export history; uninstalling removes app data.
 - **No cloud, sync, account, encryption or password protection.** Backup files are plain JSON.
 - **Tailoring a resume to a job** and a cover-letter engine beyond the fill-in draft are not implemented.
-- **Android `allowBackup` is enabled** in the generated manifest, so Android's own backup may include app
-  data (see the privacy draft).
+- **Android OS backup is off** (`allowBackup: false`), so the system will not restore your data on a new phone
+  or after a reinstall: use the Backup screen. iOS device backups may still include app data. Neither was
+  tested on a device.
 
 The full risk register is in `MOBILE_ONLY_ARCHITECTURE_PLAN.md` ("Current state") and
 [`docs/PRIVACY_POLICY_DRAFT.md`](docs/PRIVACY_POLICY_DRAFT.md).
@@ -205,6 +207,7 @@ The full risk register is in `MOBILE_ONLY_ARCHITECTURE_PLAN.md` ("Current state"
 | [`MOBILE_ONLY_ARCHITECTURE_PLAN.md`](MOBILE_ONLY_ARCHITECTURE_PLAN.md) | Architecture, decisions and per-phase records. Start at "Current state". Sections about subscriptions and premium are marked superseded. |
 | [`docs/PRIVACY_POLICY_DRAFT.md`](docs/PRIVACY_POLICY_DRAFT.md) | **Draft** privacy policy from verified code behavior, with items needing human/legal review. |
 | [`docs/STORE_READINESS.md`](docs/STORE_READINESS.md) | App Store and Google Play checklist; unknown values are TBD. |
+| [`docs/RELEASE_CONFIG_REVIEW.md`](docs/RELEASE_CONFIG_REVIEW.md) | Phase 20 release-configuration decisions, evidence, versioning policy and `npm audit` classification. |
 | [`docs/EAS_AND_SIGNING.md`](docs/EAS_AND_SIGNING.md) | Current EAS configuration, signing and release steps, and CI. |
 | [`MOBILE_PARITY_AUDIT.md`](MOBILE_PARITY_AUDIT.md) | Historical audit of an earlier prototype against the web product. Not current. |
 | `AGENTS.md`, `CLAUDE.md` | Guidance for coding agents working in the repository. |
